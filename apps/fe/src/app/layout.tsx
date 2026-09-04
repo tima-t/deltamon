@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import { Bricolage_Grotesque } from "next/font/google";
 import "@rainbow-me/rainbowkit/styles.css";
 import "./globals.css";
@@ -16,7 +17,7 @@ export const metadata: Metadata = {
     "Automated, non-custodial delta-neutral vaults on Monad. Staked MON hedged with an equal short; yield paid in USDC.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${bricolage.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
