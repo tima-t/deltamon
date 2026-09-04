@@ -1,0 +1,14 @@
+node_modules
+dist
+.next
+.turbo
+out
+cache
+broadcast
+lib
+pnpm-lock.yaml
+CHANGELOG.md
+# generated / externally managed
+packages/shared/src/abis/
+apps/fe/AGENTS.md
+apps/fe/next-env.d.ts

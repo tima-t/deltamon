@@ -1,0 +1,17 @@
+{
+  "name": "@deltamon/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "DeltaMon Solidity contracts (Foundry): ERC-4626 vault, delta-neutral strategy, venue adapters",
+  "scripts": {
+    "forge:build": "forge build",
+    "forge:test": "forge test -vvv",
+    "forge:fmt": "forge fmt",
+    "forge:fmt:check": "forge fmt --check",
+    "forge:coverage": "forge coverage --report lcov",
+    "forge:deploy:testnet": "forge script script/Deploy.s.sol:Deploy --rpc-url monad_testnet --broadcast -vvvv",
+    "forge:deploy:mainnet": "forge script script/Deploy.s.sol:Deploy --rpc-url monad --broadcast -vvvv",
+    "clean": "rm -rf out cache"
+  }
+}

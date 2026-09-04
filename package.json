@@ -1,0 +1,29 @@
+{
+  "name": "deltamon",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Automated, non-custodial delta-neutral yield vaults on Monad",
+  "license": "MIT",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "contracts:build": "turbo run forge:build",
+    "contracts:test": "turbo run forge:test",
+    "abi:sync": "pnpm --filter @deltamon/shared abi:sync",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.6",
+    "turbo": "^2.10.12",
+    "typescript": "^5.9.3"
+  }
+}

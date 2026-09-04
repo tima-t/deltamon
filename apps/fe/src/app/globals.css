@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f3f2f7;
+  --surface: #ffffff;
+  --ink: #1a1433;
+  --ink-muted: #6e6a85;
+  --line: #d9d6e6;
+  --monad: #836ef9;
+  --monad-deep: #5b47d9;
+  --long: #1f9d6e;
+  --short: #d9534f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #14102a;
+    --surface: #1c1738;
+    --ink: #eceaf6;
+    --ink-muted: #9a96b4;
+    --line: #2c2650;
+    --monad: #a594ff;
+    --monad-deep: #836ef9;
+    --long: #3fc08f;
+    --short: #ef6b66;
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--ink-muted);
+  --color-line: var(--line);
+  --color-monad: var(--monad);
+  --color-monad-deep: var(--monad-deep);
+  --color-long: var(--long);
+  --color-short: var(--short);
+  --font-sans: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--monad);
+  outline-offset: 3px;
+}
+
+/* The balance beam: the one deliberate motion on the page. */
+.beam-needle {
+  transition: left 900ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.beam-fill {
+  transition: width 900ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .beam-needle,
+  .beam-fill {
+    transition: none;
+  }
+}

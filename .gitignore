@@ -1,0 +1,40 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# build output
+dist/
+.next/
+out/
+build/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+
+# foundry
+packages/contracts/out/
+packages/contracts/cache/
+packages/contracts/broadcast/**/dry-run/
+packages/contracts/.env
+
+# env files (commit only the examples)
+.env
+.env.*
+!.env.example
+
+# logs / coverage
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+coverage/
+lcov.info
+
+# editors / os
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.pem
+.vercel

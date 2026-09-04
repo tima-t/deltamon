@@ -1,0 +1,17 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# pnpm blocks postinstall scripts by default; only esbuild's is needed.
+# bufferutil / utf-8-validate / keccak are optional native speedups with pure-JS fallbacks.
+allowBuilds:
+  esbuild: true
+  sharp: false
+  unrs-resolver: false
+  bufferutil: false
+  utf-8-validate: false
+  keccak: false
+
+# pnpm 11 delays brand-new releases by default; fastify 5.12.3 was published inside that window.
+minimumReleaseAgeExclude:
+  - fastify@5.12.3
