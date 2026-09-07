@@ -72,7 +72,7 @@ contract Deploy is Script {
         d.vault =
             new DeltaVault(IERC20(p.usdc), "DeltaMon USDC Vault", "dmUSDC", p.admin, p.feeRecipient, p.cap, p.feeBps);
         d.strategy = new DeltaNeutralStrategy(address(d.vault), p.usdc, p.wmon, p.lst, p.admin);
-        d.spot = new KuruSpotAdapter(p.kuruRouter, p.admin);
+        d.spot = new KuruSpotAdapter(p.kuruRouter, p.wmon, p.admin);
         d.staking = new AprioriStakingAdapter(p.wmon, p.lst);
         d.hedge = new PerplHedgeAdapter(p.perplCollateral, p.perplExchange, p.admin);
         d.oracle = new PythOracle(p.pyth, p.admin, 60);
@@ -86,11 +86,8 @@ contract Deploy is Script {
 
         address[] memory markets = new address[](1);
         markets[0] = p.kuruMarket;
-        bool[] memory buy = new bool[](1);
-        buy[0] = true;
-        bool[] memory sell = new bool[](1);
-        d.spot.setRoute(p.usdc, p.wmon, markets, buy);
-        d.spot.setRoute(p.wmon, p.usdc, markets, sell);
+        d.spot.setRoute(p.usdc, p.wmon, markets);
+        d.spot.setRoute(p.wmon, p.usdc, markets);
 
         d.hedge.grantRole(d.hedge.STRATEGY_ROLE(), address(d.strategy));
         d.hedge.grantRole(d.hedge.KEEPER_ROLE(), p.keeper);

@@ -1,4 +1,26 @@
-# Strategy: delta-neutral staked MON
+# Strategy
+
+## v1 — sdMON allocation vault (implemented)
+
+`SdMonVault` is an ERC-4626 vault with USDC as the asset and **sdMON** as the share token (18 decimals, ~1 sdMON per USDC at inception).
+
+Deposit `A` USDC:
+
+1. `0.6 × A` is swapped to MON on Kuru (`KuruSpotAdapter` → `Router.anyToAnySwap` on the MON/USDC market). The router pays native MON; the adapter wraps it to WMON. The swap reverts if it fills > `maxSlippageBps` (0.5 %) worse than the Chainlink MON/USD price.
+2. Value added = `0.4 × A + MON received × oracle price`.
+3. Shares = `valueAdded × (supply + 10¹²) / (totalAssets_before + 1)`, capped at `previewDeposit(A)`. Slippage is paid by the depositor, never socialised.
+
+`totalAssets = USDC + MON × price`. Redemption:
+
+- `redeem(shares)` — burns shares, sells the MON slice on Kuru, pays USDC.
+- `redeemInKind(shares)` — burns shares, pays USDC + WMON, no swap.
+- `withdraw` / `mint` are disabled (exact-output semantics cannot survive a swap).
+
+Keeper: `rebalance()` when `|monShare − 60 %| > 5 points`, buying or selling MON back to target.
+
+Guard rails: deposit cap, `minDeposit` (10 USDC), `minSwapMon` (Kuru minimum order, 200 MON on mainnet), pause (blocks deposits and rebalances, never redemptions), oracle staleness (1 day).
+
+## v2 — delta-neutral staked MON (designed, not wired)
 
 ## Position
 

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { VaultStatsSchema } from "@deltamon/shared";
 
 process.env.NODE_ENV = "test";
 process.env.VAULT_ADDRESS = "";
@@ -25,13 +26,16 @@ describe("api", () => {
     expect(body.keeper.enabled).toBe(false);
   });
 
-  it("serves demo vault stats when no vault is deployed", async () => {
+  it("serves demo vault stats that match the shared schema", async () => {
     const res = await app.inject({ method: "GET", url: "/api/vault" });
     expect(res.statusCode).toBe(200);
-    const body = res.json();
+    const body = VaultStatsSchema.parse(res.json());
     expect(body.source).toBe("demo");
-    expect(body.apy.net).toBeCloseTo(15.2, 1);
-    expect(Math.abs(body.netDeltaBps)).toBeLessThan(200);
+    expect(body.shareToken.symbol).toBe("sdMON");
+    expect(body.allocation.targetMonBps).toBe(6000);
+    expect(Math.abs(body.allocation.driftBps)).toBeLessThanOrEqual(
+      body.allocation.rebalanceThresholdBps,
+    );
   });
 
   it("rejects unknown price symbols", async () => {

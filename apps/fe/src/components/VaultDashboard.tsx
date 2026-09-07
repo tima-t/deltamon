@@ -1,8 +1,8 @@
 "use client";
 
-import { BalanceBeam } from "./BalanceBeam";
+import { AllocationBar } from "./AllocationBar";
 import { StatsRow } from "./StatsRow";
-import { YieldBreakdown } from "./YieldBreakdown";
+import { HoldingsPanel } from "./HoldingsPanel";
 import { DepositPanel } from "./DepositPanel";
 import { useVaultStats } from "@/hooks/useVaultStats";
 
@@ -12,11 +12,7 @@ export function VaultDashboard() {
   return (
     <section className="mx-auto w-full max-w-6xl px-5 sm:px-8">
       <div className="border-line bg-surface rounded-2xl border p-5 sm:p-8">
-        <BalanceBeam
-          long={stats.legs.long}
-          short={stats.legs.short}
-          netDeltaBps={stats.netDeltaBps}
-        />
+        <AllocationBar allocation={stats.allocation} />
         {!isLive ? (
           <p className="text-muted mt-4 text-center text-xs">
             {isOffline
@@ -32,7 +28,7 @@ export function VaultDashboard() {
 
       <div className="mt-12 grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
         <DepositPanel />
-        <YieldBreakdown apy={stats.apy} />
+        <HoldingsPanel stats={stats} />
       </div>
     </section>
   );

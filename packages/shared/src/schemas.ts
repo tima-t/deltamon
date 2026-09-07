@@ -2,23 +2,27 @@ import { z } from "zod";
 
 const hexAddress = z.string().regex(/^0x[0-9a-fA-F]{40}$/, "expected a 20-byte hex address");
 
-export const ApyBreakdownSchema = z.object({
-  /** All values are percentages, e.g. 15.2 means 15.2 % APY. */
-  net: z.number(),
-  staking: z.number(),
-  funding: z.number(),
-  lending: z.number(),
-  costs: z.number(),
-  source: z.enum(["estimate", "realized"]),
+export const AllocationSchema = z.object({
+  usdc: z.object({ balance: z.string(), valueUsd: z.number() }),
+  mon: z.object({ balance: z.string(), valueUsd: z.number(), priceUsd: z.number() }),
+  /** Share of vault value held as MON, bps. */
+  monShareBps: z.number().int(),
+  targetMonBps: z.number().int(),
+  /** monShareBps − targetMonBps. Positive = too much MON. */
+  driftBps: z.number().int(),
+  rebalanceThresholdBps: z.number().int(),
 });
-export type ApyBreakdown = z.infer<typeof ApyBreakdownSchema>;
+export type Allocation = z.infer<typeof AllocationSchema>;
 
-export const LegSchema = z.object({
-  venue: z.string(),
-  asset: z.string(),
-  valueUsd: z.number(),
+export const ShareTokenSchema = z.object({
+  symbol: z.string(),
+  decimals: z.number().int(),
+  /** Raw integer as decimal string. */
+  totalSupply: z.string(),
+  /** USDC per whole share. */
+  pricePerShare: z.number(),
 });
-export type Leg = z.infer<typeof LegSchema>;
+export type ShareToken = z.infer<typeof ShareTokenSchema>;
 
 export const VaultStatsSchema = z.object({
   source: z.enum(["demo", "onchain"]),
@@ -27,16 +31,13 @@ export const VaultStatsSchema = z.object({
   asset: z.string(),
   assetDecimals: z.number().int(),
   tvlUsd: z.number(),
-  /** Raw integers as decimal strings to avoid float loss. */
+  /** Raw integer as decimal string. */
   totalAssets: z.string(),
-  totalSupply: z.string(),
-  pricePerShare: z.number(),
   depositCapUsd: z.number().nullable(),
+  minDepositUsd: z.number(),
   paused: z.boolean(),
-  apy: ApyBreakdownSchema,
-  netDeltaBps: z.number().int(),
-  hedgeRatioBps: z.number().int(),
-  legs: z.object({ long: LegSchema, short: LegSchema }),
+  shareToken: ShareTokenSchema,
+  allocation: AllocationSchema,
   lastRebalanceAt: z.string().nullable(),
   updatedAt: z.string(),
 });

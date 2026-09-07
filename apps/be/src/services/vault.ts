@@ -1,88 +1,129 @@
-import { type Address, formatUnits } from "viem";
-import { deltaVaultAbi, type VaultStats } from "@deltamon/shared";
+import { type Address, erc20Abi, formatUnits } from "viem";
+import { sdMonVaultAbi, type VaultStats } from "@deltamon/shared";
 import { env } from "../config.js";
 import { publicClient } from "../chain.js";
 
-/**
- * APY inputs the keeper cannot yet read on-chain. Replace with realized numbers
- * once the strategy has enough history (see docs/STRATEGY.md).
- */
-const APY_ESTIMATE = { staking: 9.1, funding: 6.8, lending: 0, costs: -0.7 } as const;
-
-function netApy(a: { staking: number; funding: number; lending: number; costs: number }) {
-  return Number((a.staking + a.funding + a.lending + a.costs).toFixed(2));
-}
+const DEMO_MON_PRICE = 0.02643;
 
 export function demoVaultStats(): VaultStats {
   const now = new Date();
+  const usdc = 51_380;
+  const mon = 2_915_530;
+  const monValue = mon * DEMO_MON_PRICE;
+  const tvl = usdc + monValue;
+  const supply = 126_800;
   return {
     source: "demo",
     chainId: env.CHAIN_ID,
     vault: null,
     asset: "USDC",
     assetDecimals: 6,
-    tvlUsd: 2_418_300,
-    totalAssets: "2418300000000",
-    totalSupply: "2301400000000",
-    pricePerShare: 1.0508,
-    depositCapUsd: 5_000_000,
+    tvlUsd: tvl,
+    totalAssets: String(Math.round(tvl * 1e6)),
+    depositCapUsd: 250_000,
+    minDepositUsd: 10,
     paused: false,
-    apy: { ...APY_ESTIMATE, net: netApy(APY_ESTIMATE), source: "estimate" },
-    netDeltaBps: 40,
-    hedgeRatioBps: 9_960,
-    legs: {
-      long: { venue: "aPriori", asset: "aprMON", valueUsd: 1_204_300 },
-      short: { venue: "Perpl", asset: "MON-PERP", valueUsd: 1_199_500 },
+    shareToken: {
+      symbol: "sdMON",
+      decimals: 18,
+      totalSupply: `${supply}000000000000000000`,
+      pricePerShare: tvl / supply,
     },
-    lastRebalanceAt: new Date(now.getTime() - 12 * 60_000).toISOString(),
+    allocation: {
+      usdc: { balance: String(usdc * 1e6), valueUsd: usdc },
+      mon: { balance: `${mon}000000000000000000`, valueUsd: monValue, priceUsd: DEMO_MON_PRICE },
+      monShareBps: Math.round((monValue / tvl) * 10_000),
+      targetMonBps: 6_000,
+      driftBps: Math.round((monValue / tvl) * 10_000) - 6_000,
+      rebalanceThresholdBps: 500,
+    },
+    lastRebalanceAt: new Date(now.getTime() - 37 * 60_000).toISOString(),
     updatedAt: now.toISOString(),
   };
 }
 
 export async function readVaultStats(vault: Address): Promise<VaultStats> {
-  const contract = { address: vault, abi: deltaVaultAbi } as const;
-  const [totalAssets, totalSupply, decimals, netDeltaBps, pricePerShare, paused, depositCap] =
-    await publicClient.multicall({
-      allowFailure: false,
-      contracts: [
-        { ...contract, functionName: "totalAssets" },
-        { ...contract, functionName: "totalSupply" },
-        { ...contract, functionName: "decimals" },
-        { ...contract, functionName: "netDeltaBps" },
-        { ...contract, functionName: "pricePerShare" },
-        { ...contract, functionName: "paused" },
-        { ...contract, functionName: "depositCap" },
-      ],
-    });
+  const c = { address: vault, abi: sdMonVaultAbi } as const;
+  const [
+    totalAssets,
+    totalSupply,
+    shareDecimals,
+    symbol,
+    asset,
+    usdcBalance,
+    monBalance,
+    monPrice,
+    monShareBps,
+    targetMonBps,
+    driftBps,
+    thresholdBps,
+    paused,
+    depositCap,
+    minDeposit,
+    lastRebalanceAt,
+    pricePerShare,
+  ] = await publicClient.multicall({
+    allowFailure: false,
+    contracts: [
+      { ...c, functionName: "totalAssets" },
+      { ...c, functionName: "totalSupply" },
+      { ...c, functionName: "decimals" },
+      { ...c, functionName: "symbol" },
+      { ...c, functionName: "asset" },
+      { ...c, functionName: "usdcBalance" },
+      { ...c, functionName: "monBalance" },
+      { ...c, functionName: "monPrice" },
+      { ...c, functionName: "monShareBps" },
+      { ...c, functionName: "targetMonBps" },
+      { ...c, functionName: "allocationDriftBps" },
+      { ...c, functionName: "rebalanceThresholdBps" },
+      { ...c, functionName: "paused" },
+      { ...c, functionName: "depositCap" },
+      { ...c, functionName: "minDeposit" },
+      { ...c, functionName: "lastRebalanceAt" },
+      { ...c, functionName: "pricePerShare" },
+    ],
+  });
 
-  const tvlUsd = Number(formatUnits(totalAssets, decimals));
-  const delta = Number(netDeltaBps);
-  const hedgeRatioBps = 10_000 - Math.abs(delta);
-  // Leg values are exposed by the strategy; until the strategy ABI is wired here we
-  // derive them from delta so the UI stays consistent with on-chain state.
-  const longUsd = tvlUsd / 2;
-  const shortUsd = longUsd * (hedgeRatioBps / 10_000);
+  const [assetSymbol, assetDecimals] = await publicClient.multicall({
+    allowFailure: false,
+    contracts: [
+      { address: asset, abi: erc20Abi, functionName: "symbol" },
+      { address: asset, abi: erc20Abi, functionName: "decimals" },
+    ],
+  });
+
+  const usdcValue = Number(formatUnits(usdcBalance, assetDecimals));
+  const priceUsd = Number(formatUnits(monPrice, 18));
+  const monValue = Number(formatUnits(monBalance, 18)) * priceUsd;
 
   return {
     source: "onchain",
     chainId: env.CHAIN_ID,
     vault,
-    asset: "USDC",
-    assetDecimals: decimals,
-    tvlUsd,
+    asset: assetSymbol,
+    assetDecimals,
+    tvlUsd: Number(formatUnits(totalAssets, assetDecimals)),
     totalAssets: totalAssets.toString(),
-    totalSupply: totalSupply.toString(),
-    pricePerShare: Number(pricePerShare) / 1e18,
-    depositCapUsd: Number(formatUnits(depositCap, decimals)),
+    depositCapUsd: Number(formatUnits(depositCap, assetDecimals)),
+    minDepositUsd: Number(formatUnits(minDeposit, assetDecimals)),
     paused,
-    apy: { ...APY_ESTIMATE, net: netApy(APY_ESTIMATE), source: "estimate" },
-    netDeltaBps: delta,
-    hedgeRatioBps,
-    legs: {
-      long: { venue: "aPriori", asset: "aprMON", valueUsd: longUsd },
-      short: { venue: "Perpl", asset: "MON-PERP", valueUsd: shortUsd },
+    shareToken: {
+      symbol,
+      decimals: shareDecimals,
+      totalSupply: totalSupply.toString(),
+      pricePerShare: Number(formatUnits(pricePerShare, assetDecimals)),
     },
-    lastRebalanceAt: null,
+    allocation: {
+      usdc: { balance: usdcBalance.toString(), valueUsd: usdcValue },
+      mon: { balance: monBalance.toString(), valueUsd: monValue, priceUsd },
+      monShareBps: Number(monShareBps),
+      targetMonBps: Number(targetMonBps),
+      driftBps: Number(driftBps),
+      rebalanceThresholdBps: Number(thresholdBps),
+    },
+    lastRebalanceAt:
+      lastRebalanceAt === 0n ? null : new Date(Number(lastRebalanceAt) * 1000).toISOString(),
     updatedAt: new Date().toISOString(),
   };
 }

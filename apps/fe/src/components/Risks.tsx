@@ -1,19 +1,19 @@
 const risks = [
   [
-    "Funding turns negative",
-    "Shorts pay longs when the perp trades below spot. The strategy tolerates short stretches; the keeper reduces the hedge if it persists.",
+    "MON price",
+    "Sixty percent of the vault is MON, so sdMON moves with the MON price today. The hedge leg that cancels this out is the next milestone.",
   ],
   [
-    "Liquid staking token depeg",
-    "aprMON can trade below its MON value. The oracle prices it directly, so the vault's reported value reflects it.",
+    "Kuru liquidity",
+    "Swaps go through Kuru's order book. If the fill would be worse than 0.5% off the oracle price, the deposit reverts rather than filling badly.",
   ],
   [
-    "Venue risk",
-    "Kuru, aPriori and Perpl are third-party contracts. The guardian can pull everything back to the vault at once.",
+    "Oracle",
+    "Vault value uses the Chainlink MON/USD feed. If it goes stale for a day, deposits and redemptions revert until it updates.",
   ],
   [
-    "Smart contract risk",
-    "DeltaMon contracts are new and unaudited. Deposit caps are in place while the code is reviewed.",
+    "Smart contract",
+    "DeltaMon contracts are new and unaudited. A deposit cap and a pause switch are in place while the code is reviewed.",
   ],
 ];
 

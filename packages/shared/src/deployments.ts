@@ -1,21 +1,18 @@
 import type { Address } from "viem";
 
 /**
- * DeltaMon's own deployed contracts. Filled in by `forge script` output
- * (packages/contracts/deployments/<chainId>.json) — update after each deploy.
+ * DeltaMon's own deployed contracts (v1 sdMON vault). Filled from
+ * packages/contracts/deployments/sdmon-<chainId>.json after each deploy.
  */
 export interface Deployment {
   vault: Address;
-  strategy: Address;
   spotVenue: Address;
-  hedgeVenue: Address;
-  stakingVenue: Address;
   oracle: Address;
   deployedAtBlock: number;
 }
 
 export const DEPLOYMENTS: Partial<Record<number, Deployment>> = {
-  // 10143: { vault: "0x...", strategy: "0x...", ... },
+  // 143: { vault: "0x...", spotVenue: "0x...", oracle: "0x...", deployedAtBlock: 0 },
 };
 
 export function getDeployment(chainId: number): Deployment | undefined {

@@ -3,7 +3,7 @@
 Node.js backend for DeltaMon. Two responsibilities:
 
 1. **API** (Fastify) — serves vault stats, APY breakdown, funding rates and oracle prices to the frontend.
-2. **Keeper** — watches the vault's net delta and calls `rebalance()` when it drifts past the threshold. It holds `KEEPER_ROLE` only and can never withdraw user funds.
+2. **Keeper** — watches the vault's MON allocation (target 60 %) and calls `rebalance()` when it drifts past the vault's threshold. It holds `KEEPER_ROLE` only and can never withdraw user funds.
 
 ```bash
 cp .env.example .env

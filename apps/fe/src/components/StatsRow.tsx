@@ -2,21 +2,24 @@ import { formatUsd, timeAgo } from "@/lib/format";
 import type { VaultStats } from "@deltamon/shared";
 
 export function StatsRow({ stats }: { stats: VaultStats }) {
+  const supply = Number(
+    BigInt(stats.shareToken.totalSupply) / 10n ** BigInt(stats.shareToken.decimals),
+  );
   const items = [
     {
-      label: "Net APY",
-      value: `${stats.apy.net.toFixed(1)}%`,
-      hint: stats.apy.source === "estimate" ? "estimated" : "realized, 30d",
-    },
-    {
-      label: "Deposits",
+      label: "Vault value",
       value: formatUsd(stats.tvlUsd, { compact: true }),
       hint: stats.depositCapUsd ? `cap ${formatUsd(stats.depositCapUsd, { compact: true })}` : "",
     },
     {
-      label: "Hedge ratio",
-      value: `${(stats.hedgeRatioBps / 100).toFixed(1)}%`,
-      hint: "short ÷ long",
+      label: "1 sdMON is worth",
+      value: `${stats.shareToken.pricePerShare.toFixed(4)} USDC`,
+      hint: `${supply.toLocaleString()} sdMON issued`,
+    },
+    {
+      label: "MON allocation",
+      value: `${(stats.allocation.monShareBps / 100).toFixed(1)}%`,
+      hint: `target ${stats.allocation.targetMonBps / 100}%`,
     },
     { label: "Last rebalance", value: timeAgo(stats.lastRebalanceAt), hint: "keeper" },
   ];

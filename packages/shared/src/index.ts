@@ -5,5 +5,6 @@ export * from "./constants.js";
 export * from "./schemas.js";
 export * from "./format.js";
 export * from "./abis/erc20.js";
+export * from "./abis/sdMonVault.js";
 export * from "./abis/deltaVault.js";
 export * from "./abis/deltaNeutralStrategy.js";

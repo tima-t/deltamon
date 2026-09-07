@@ -3,8 +3,14 @@ export const BPS = 10_000;
 /** Target net APY the product is designed around (basis points). */
 export const TARGET_APY_BPS = 1_500;
 
-/** Rebalance when |net delta| exceeds this many bps of total assets. */
-export const DEFAULT_REBALANCE_THRESHOLD_BPS = 200;
+/** v1 sdMON vault: share of every deposit swapped into MON on Kuru. */
+export const TARGET_MON_BPS = 6_000;
+
+/** v1: rebalance when |monShare − target| exceeds this many bps. */
+export const DEFAULT_REBALANCE_THRESHOLD_BPS = 500;
+
+/** Kuru MON/USDC market minimum order size (MON). */
+export const KURU_MIN_ORDER_MON = 200;
 
 /** Share of each deployment sent to the hedge venue as collateral. */
 export const DEFAULT_HEDGE_COLLATERAL_BPS = 5_000;

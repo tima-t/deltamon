@@ -5,26 +5,39 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 /** Local stand-in while the backend is offline. Mirrors the backend's demo payload. */
 export function fallbackVaultStats(): VaultStats {
   const now = new Date();
+  const monPrice = 0.02643;
+  const usdc = 51_380;
+  const mon = 2_915_530;
+  const monValue = mon * monPrice;
+  const tvl = usdc + monValue;
+  const supply = 126_800;
+  const monShareBps = Math.round((monValue / tvl) * 10_000);
   return {
     source: "demo",
-    chainId: 10143,
+    chainId: 143,
     vault: null,
     asset: "USDC",
     assetDecimals: 6,
-    tvlUsd: 2_418_300,
-    totalAssets: "2418300000000",
-    totalSupply: "2301400000000",
-    pricePerShare: 1.0508,
-    depositCapUsd: 5_000_000,
+    tvlUsd: tvl,
+    totalAssets: String(Math.round(tvl * 1e6)),
+    depositCapUsd: 250_000,
+    minDepositUsd: 10,
     paused: false,
-    apy: { net: 15.2, staking: 9.1, funding: 6.8, lending: 0, costs: -0.7, source: "estimate" },
-    netDeltaBps: 40,
-    hedgeRatioBps: 9_960,
-    legs: {
-      long: { venue: "aPriori", asset: "aprMON", valueUsd: 1_204_300 },
-      short: { venue: "Perpl", asset: "MON-PERP", valueUsd: 1_199_500 },
+    shareToken: {
+      symbol: "sdMON",
+      decimals: 18,
+      totalSupply: `${supply}000000000000000000`,
+      pricePerShare: tvl / supply,
     },
-    lastRebalanceAt: new Date(now.getTime() - 12 * 60_000).toISOString(),
+    allocation: {
+      usdc: { balance: String(usdc * 1e6), valueUsd: usdc },
+      mon: { balance: `${mon}000000000000000000`, valueUsd: monValue, priceUsd: monPrice },
+      monShareBps,
+      targetMonBps: 6_000,
+      driftBps: monShareBps - 6_000,
+      rebalanceThresholdBps: 500,
+    },
+    lastRebalanceAt: new Date(now.getTime() - 37 * 60_000).toISOString(),
     updatedAt: now.toISOString(),
   };
 }

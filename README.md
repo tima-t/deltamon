@@ -62,6 +62,8 @@ pnpm install
 # contracts
 pnpm contracts:build
 pnpm contracts:test
+# real Kuru swap on a Monad mainnet fork
+cd packages/contracts && RUN_FORK_TESTS=true forge test --match-contract KuruMainnetFork -vv
 
 # apps (frontend :3000, backend :4000)
 cp apps/be/.env.example apps/be/.env
@@ -75,29 +77,30 @@ Other commands: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm 
 
 ```bash
 cd packages/contracts
-cp .env.example .env            # ADMIN, PRIVATE_KEY, token/venue addresses
-forge script script/Deploy.s.sol:Deploy --rpc-url monad_testnet --broadcast --private-key $PRIVATE_KEY
+cp .env.example .env            # ADMIN, PRIVATE_KEY (mainnet addresses are pre-filled)
+forge script script/DeploySdMon.s.sol:DeploySdMon --rpc-url monad --broadcast --private-key $PRIVATE_KEY
 ```
 
-Then copy the addresses from `packages/contracts/deployments/<chainId>.json` into `packages/shared/src/deployments.ts`, run `pnpm abi:sync`, and set `VAULT_ADDRESS` (backend) / `NEXT_PUBLIC_VAULT_ADDRESS` (frontend).
+Then copy the addresses from `packages/contracts/deployments/sdmon-<chainId>.json` into `packages/shared/src/deployments.ts`, run `pnpm abi:sync`, and set `VAULT_ADDRESS` (backend) / `NEXT_PUBLIC_VAULT_ADDRESS` (frontend).
+
+The v1 vault targets **Monad mainnet** with a small deposit cap: the Monad testnet Kuru MON/USDC market has no liquidity and the testnet WMON address in the registry has no code, so a testnet deployment cannot swap.
 
 Monad networks: mainnet chain id 143, RPC `https://rpc.monad.xyz`, explorer [monadvision.com](https://monadvision.com). Testnet chain id 10143, RPC `https://testnet-rpc.monad.xyz`, explorer [testnet.monadexplorer.com](https://testnet.monadexplorer.com), faucet [faucet.monad.xyz](https://faucet.monad.xyz).
 
 ## Status
 
 - [x] Monorepo, CI, shared address book
-- [x] `DeltaVault` (ERC-4626, roles, fees, timelocked strategy swap) with tests
-- [x] `DeltaNeutralStrategy` allocation / hedge / unwind logic with mock venues and tests
-- [x] Kuru spot adapter, Pyth + Chainlink oracle adapters
-- [x] Backend API + keeper loop, frontend dashboard + deposit flow (demo data until deployed)
-- [ ] Perpl execution path (API-signed orders; confirm on-chain account flow with the Perpl team)
-- [ ] aprMON adapter ABI verification and async redeem claims
-- [ ] Testnet deployment, then capped mainnet deployment
+- [x] **v1 `SdMonVault`**: USDC in, 60 % swapped to MON on Kuru, sdMON shares, redeem / redeem-in-kind, keeper rebalance — unit tests + Monad mainnet fork tests
+- [x] `KuruSpotAdapter` (native-MON aware, direction derived from market params), Chainlink + Pyth oracle adapters
+- [x] Backend API + keeper loop, frontend dashboard + deposit / redeem flow (demo data until deployed)
+- [x] v2 `DeltaVault` + `DeltaNeutralStrategy` (hedged) with mock-venue tests, not wired yet
+- [ ] Capped mainnet deployment of v1, addresses into `packages/shared`
+- [ ] Perpl hedge leg (API-signed orders; confirm on-chain account flow with the Perpl team)
 - [ ] Demo video and project profile
 
 ## Risks
 
-Funding can turn negative. aprMON can trade below MON. Kuru, aPriori and Perpl are third-party contracts. DeltaMon contracts are new and unaudited; deposit caps apply. See [docs/STRATEGY.md](docs/STRATEGY.md#trust-model).
+v1 holds 60 % MON, so sdMON moves with the MON price until the hedge leg ships. Kuru is a third-party venue (slippage-guarded). The oracle is Chainlink MON/USD (staleness-guarded). DeltaMon contracts are new and unaudited; deposit caps apply. See [docs/STRATEGY.md](docs/STRATEGY.md).
 
 ## License
 

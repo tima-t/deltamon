@@ -14,7 +14,7 @@ const bricolage = Bricolage_Grotesque({
 export const metadata: Metadata = {
   title: "DeltaMon",
   description:
-    "Automated, non-custodial delta-neutral vaults on Monad. Staked MON hedged with an equal short; yield paid in USDC.",
+    "Deposit USDC, hold 60% MON and 40% USDC in one vault on Monad, and receive sdMON for your share. Built for Monad Metropolis.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

@@ -1,13 +1,12 @@
 import { type Address } from "viem";
-import { deltaVaultAbi, type KeeperStatus } from "@deltamon/shared";
+import { sdMonVaultAbi, type KeeperStatus } from "@deltamon/shared";
 import { env } from "../config.js";
 import { getKeeperWallet, publicClient } from "../chain.js";
 import { logger } from "../lib/logger.js";
 
 /**
- * Keeper: watches net delta and calls `rebalance()` on the vault when it drifts
- * past the threshold. It holds KEEPER_ROLE only — it can never move user funds
- * out of the vault, which is what keeps the product non-custodial.
+ * Keeper: watches the vault's MON allocation and calls `rebalance()` when it drifts past the
+ * vault's threshold. It holds KEEPER_ROLE only — it can never move user funds out of the vault.
  */
 export class Keeper {
   private timer: NodeJS.Timeout | null = null;
@@ -55,41 +54,41 @@ export class Keeper {
   }
 
   private async tick(): Promise<string> {
-    if (!env.VAULT_ADDRESS) {
-      return "skipped: VAULT_ADDRESS not set";
-    }
+    if (!env.VAULT_ADDRESS) return "skipped: VAULT_ADDRESS not set";
+
     const vault = env.VAULT_ADDRESS as Address;
-    const contract = { address: vault, abi: deltaVaultAbi } as const;
-    const [netDeltaBps, paused] = await publicClient.multicall({
+    const c = { address: vault, abi: sdMonVaultAbi } as const;
+    const [driftBps, thresholdBps, paused] = await publicClient.multicall({
       allowFailure: false,
       contracts: [
-        { ...contract, functionName: "netDeltaBps" },
-        { ...contract, functionName: "paused" },
+        { ...c, functionName: "allocationDriftBps" },
+        { ...c, functionName: "rebalanceThresholdBps" },
+        { ...c, functionName: "paused" },
       ],
     });
 
     if (paused) return "skipped: vault paused";
 
-    const drift = Math.abs(Number(netDeltaBps));
-    if (drift < env.REBALANCE_THRESHOLD_BPS) {
-      return `noop: delta ${netDeltaBps} bps within ${env.REBALANCE_THRESHOLD_BPS} bps`;
+    const drift = Number(driftBps);
+    const threshold = Math.max(Number(thresholdBps), env.REBALANCE_THRESHOLD_BPS);
+    if (Math.abs(drift) <= threshold) {
+      return `noop: MON allocation drift ${drift} bps within ${threshold} bps`;
     }
 
     const wallet = getKeeperWallet();
     if (!wallet || !wallet.account) {
-      logger.warn({ netDeltaBps }, "would rebalance (dry run, no KEEPER_PRIVATE_KEY)");
-      return `dry-run: would rebalance at delta ${netDeltaBps} bps`;
+      logger.warn({ drift }, "would rebalance (dry run, no KEEPER_PRIVATE_KEY)");
+      return `dry-run: would rebalance at drift ${drift} bps`;
     }
 
     const { request } = await publicClient.simulateContract({
-      ...contract,
+      ...c,
       functionName: "rebalance",
-      args: ["0x"],
       account: wallet.account,
     });
     const hash = await wallet.writeContract(request);
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
-    logger.info({ hash, status: receipt.status, netDeltaBps }, "rebalanced");
+    logger.info({ hash, status: receipt.status, drift }, "rebalanced");
     return `rebalanced in ${hash} (${receipt.status})`;
   }
 }

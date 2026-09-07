@@ -14,11 +14,12 @@ Foundry project. Solidity 0.8.28, OpenZeppelin 5.
 
 ```bash
 forge build
-forge test -vvv
+forge test -vvv                                                     # unit tests (mock venues)
+RUN_FORK_TESTS=true forge test --match-contract KuruMainnetFork -vv # real Kuru + Chainlink on a mainnet fork
 forge fmt
 cp .env.example .env   # then fill ADMIN / PRIVATE_KEY
-forge script script/Deploy.s.sol:Deploy --rpc-url monad_testnet --broadcast --private-key $PRIVATE_KEY
+forge script script/DeploySdMon.s.sol:DeploySdMon --rpc-url monad --broadcast --private-key $PRIVATE_KEY
 ```
 
 After deploying, run `pnpm abi:sync` from the repo root to refresh the ABIs in `@deltamon/shared`, and copy the
-addresses from `deployments/<chainId>.json` into `packages/shared/src/deployments.ts`.
+addresses from `deployments/sdmon-<chainId>.json` into `packages/shared/src/deployments.ts`.

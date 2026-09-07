@@ -9,6 +9,7 @@ const outDir = join(here, "..", "..", "contracts", "out");
 const targetDir = join(here, "..", "src", "abis");
 
 const CONTRACTS = [
+  { name: "SdMonVault", file: "sdMonVault.ts", exportName: "sdMonVaultAbi" },
   { name: "DeltaVault", file: "deltaVault.ts", exportName: "deltaVaultAbi" },
   {
     name: "DeltaNeutralStrategy",
