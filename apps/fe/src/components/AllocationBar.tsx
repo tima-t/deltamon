@@ -1,4 +1,4 @@
-import { formatUsd } from "@/lib/format";
+import { formatPrice, formatUsd } from "@/lib/format";
 import type { Allocation } from "@deltamon/shared";
 
 /**
@@ -55,7 +55,7 @@ export function AllocationBar({ allocation }: { allocation: Allocation }) {
             {drifted ? "rebalance due" : "on target"}
           </span>
         </span>
-        <span className="tabular-nums">MON {formatUsd(mon.priceUsd, { compact: false })}</span>
+        <span className="tabular-nums">MON {formatPrice(mon.priceUsd)}</span>
       </figcaption>
     </figure>
   );

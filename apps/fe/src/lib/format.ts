@@ -1,4 +1,4 @@
-export { formatUsd, formatPercent, bpsToPercent } from "@deltamon/shared";
+export { formatUsd, formatPrice, formatPercent, bpsToPercent } from "@deltamon/shared";
 
 export function timeAgo(iso: string | null): string {
   if (!iso) return "never";

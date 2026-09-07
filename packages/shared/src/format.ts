@@ -13,6 +13,17 @@ export function formatUsd(value: number, opts: { compact?: boolean } = {}): stri
   }).format(value);
 }
 
+/** Prices below $1 need more precision than whole dollars (MON trades around $0.03). */
+export function formatPrice(value: number): string {
+  const digits = value >= 100 ? 2 : value >= 1 ? 3 : 4;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value);
+}
+
 export function formatPercent(value: number, digits = 1): string {
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(digits)}%`;

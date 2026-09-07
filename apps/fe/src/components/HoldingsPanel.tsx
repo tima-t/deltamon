@@ -1,4 +1,4 @@
-import { formatUsd } from "@/lib/format";
+import { formatPrice, formatUsd } from "@/lib/format";
 import type { VaultStats } from "@deltamon/shared";
 
 export function HoldingsPanel({ stats }: { stats: VaultStats }) {
@@ -14,7 +14,7 @@ export function HoldingsPanel({ stats }: { stats: VaultStats }) {
     },
     {
       name: "MON",
-      detail: `${monAmount.toLocaleString()} MON bought on Kuru at ${formatUsd(allocation.mon.priceUsd, { compact: false })}`,
+      detail: `${monAmount.toLocaleString()} MON bought on Kuru at ${formatPrice(allocation.mon.priceUsd)}`,
       value: allocation.mon.valueUsd,
       share: allocation.monShareBps,
     },
