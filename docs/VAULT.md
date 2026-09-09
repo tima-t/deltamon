@@ -127,9 +127,17 @@ first signature is your admin wallet proving it operates the account. The second
 key over the same digest, proving you hold it. It names the vault as `target_profile`, so the vault
 stays the account owner and never has to sign anything.
 
-Two prerequisites come from Perpl rather than from us. They must whitelist the origin you enrol
-from, otherwise both endpoints reject the request. And they must accept a contract address as the
-target profile, which is the open item noted above.
+One prerequisite is settled and one is not.
+
+Origin whitelisting turned out not to be a blocker. Probing Perpl's testnet endpoint shows that a
+request carrying no `Origin` header is accepted and returns a valid payload, while an arbitrary
+Origin is rejected with 400. So leave `PERPL_ORIGIN` empty unless Perpl has whitelisted one for you.
+
+Whether Perpl accepts a contract as the `target_profile` is still unverified, and cannot be
+determined from outside. The EIP-712 struct they return, `PerplRegisterApiKey`, contains no profile
+field at all: it binds the signer, the public key, the scope, the label and the origin. Delegation is
+therefore resolved entirely server-side at the enrol step. The only way to settle it is to enrol
+against a real account, or to ask them.
 
 Enrol with scope 2, which is trade and implies read. Withdrawals are impossible at any scope. Set
 `PERPL_IP_CIDRS` to your backend's address so a leaked key is useless from anywhere else, and delete

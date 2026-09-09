@@ -18,7 +18,10 @@ import { privateKeyToAccount } from "viem/accounts";
 
 const API_URL = process.env.PERPL_API_URL ?? "https://app.perpl.xyz/api";
 const CHAIN_ID = Number(process.env.PERPL_CHAIN_ID ?? 143);
-/** Must be whitelisted by Perpl before either endpoint will answer. */
+/**
+ * Optional. A non-whitelisted Origin is rejected with 400, but omitting the header entirely
+ * works from a server and records the key with an empty origin. Verified against testnet.
+ */
 const ORIGIN = process.env.PERPL_ORIGIN;
 /** The vault. It owns the Perpl account, so it is the profile the key acts for. */
 const TARGET_PROFILE = process.env.PERPL_TARGET_PROFILE;
@@ -44,13 +47,17 @@ function requireEnv(name: string, value: string | undefined): string {
 async function post(path: string, body: unknown): Promise<Record<string, unknown>> {
   const res = await fetch(`${API_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Origin: ORIGIN as string },
+    headers: {
+      "Content-Type": "application/json",
+      ...(ORIGIN ? { Origin: ORIGIN } : {}),
+    },
     body: JSON.stringify(body),
   });
   const text = await res.text();
   if (!res.ok) {
     const hint: Record<number, string> = {
-      403: "Origin is not whitelisted by Perpl. Ask them to add it.",
+      400: "Usually a non-whitelisted Origin. Leave PERPL_ORIGIN empty to send no Origin header at all.",
+      403: "Origin is not whitelisted by Perpl. Ask them to add it, or leave PERPL_ORIGIN empty.",
       404: "Target profile not found. Has the vault called createAccount yet?",
       409: "That public key is already registered. Revoked keys cannot be reused, so run this again for a fresh pair.",
       423: "This profile already has the maximum of 16 active keys.",
@@ -61,7 +68,6 @@ async function post(path: string, body: unknown): Promise<Record<string, unknown
   return JSON.parse(text) as Record<string, unknown>;
 }
 
-const origin = requireEnv("PERPL_ORIGIN", ORIGIN);
 const target = requireEnv("PERPL_TARGET_PROFILE", TARGET_PROFILE);
 const adminKey = requireEnv("PERPL_ENROLL_PRIVATE_KEY", ADMIN_PRIVATE_KEY) as Hex;
 if (!isAddress(target)) {
@@ -80,6 +86,7 @@ console.log(`signing wallet   ${admin.address}`);
 console.log(`vault profile    ${target}`);
 console.log(`chain            ${CHAIN_ID}`);
 console.log(`scope            ${SCOPE_MASK} (2 = trade, never withdraw)`);
+console.log(`origin           ${ORIGIN ?? "(none sent)"}`);
 if (IP_CIDRS.length > 0) console.log(`ip allow-list    ${IP_CIDRS.join(", ")}`);
 
 // 2. Ask Perpl what to sign.
@@ -99,6 +106,14 @@ const typedData = payload.typed_data as {
   primaryType?: string;
   message: Record<string, unknown>;
 };
+// The signed struct carries no profile field, so the delegation is resolved server-side at
+// enrolment. Check the scope actually granted rather than assuming it matched the request.
+const grantedScope = Number((typedData.message as Record<string, unknown>).scope ?? SCOPE_MASK);
+if (grantedScope !== SCOPE_MASK) {
+  console.warn(`\nNote: asked for scope ${SCOPE_MASK}, payload says ${grantedScope}.`);
+  console.warn("Both are safe, since withdrawals are refused at every scope.\n");
+}
+
 const { EIP712Domain: _domainType, ...types } = typedData.types;
 const primaryType = typedData.primaryType ?? Object.keys(types)[0];
 
