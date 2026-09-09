@@ -38,3 +38,6 @@ lcov.info
 !.vscode/extensions.json
 *.pem
 .vercel
+
+# enrolment output, contains secrets
+apps/be/perpl-key.env

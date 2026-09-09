@@ -111,6 +111,30 @@ hidden loss cannot be reported at all and the vault freezes on staleness instead
 never larger than the collateral the admin moved to Perpl in the first place. Capping that collateral
 as a fraction of the vault would bound the damage directly, and is worth adding before real money.
 
+## Getting a Perpl API key that only the admin holds
+
+The key is an Ed25519 pair generated on your own machine. Perpl only ever receives the public half,
+and the token it hands back is shown once and cannot be re-derived. Nothing about it goes on-chain
+or into this repo.
+
+```bash
+cp apps/be/.env.example apps/be/.env   # fill the enrolment block
+pnpm --filter @deltamon/be perpl:enroll
+```
+
+The script generates the pair, asks Perpl for the EIP-712 payload, signs it twice, and enrols. The
+first signature is your admin wallet proving it operates the account. The second is made by the new
+key over the same digest, proving you hold it. It names the vault as `target_profile`, so the vault
+stays the account owner and never has to sign anything.
+
+Two prerequisites come from Perpl rather than from us. They must whitelist the origin you enrol
+from, otherwise both endpoints reject the request. And they must accept a contract address as the
+target profile, which is the open item noted above.
+
+Enrol with scope 2, which is trade and implies read. Withdrawals are impossible at any scope. Set
+`PERPL_IP_CIDRS` to your backend's address so a leaked key is useless from anywhere else, and delete
+`PERPL_ENROLL_PRIVATE_KEY` from the environment once enrolment is done.
+
 ## Two live constraints worth knowing
 
 **A fresh delegation only activates at the next epoch boundary.** Unstaking in the same epoch
