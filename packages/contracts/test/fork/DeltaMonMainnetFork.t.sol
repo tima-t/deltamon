@@ -189,6 +189,51 @@ contract DeltaMonMainnetForkTest is Test {
         vault.perplWithdrawCollateral(5000e6);
     }
 
+    /// @notice The admin's own key is useless against the vault's Perpl collateral. Perpl keys an
+    ///         account by msg.sender and its only withdrawal function takes an amount and no
+    ///         address, so nobody can name someone else's account as the source or the destination.
+    function test_adminKeyCannotTouchPerplCollateral() public onlyFork {
+        address attacker = makeAddr("attacker");
+
+        vm.prank(alice);
+        vault.deposit(10_000e6, alice);
+        vm.prank(AUSD_WHALE);
+        IERC20(AUSD).transfer(address(vault), 5000e6);
+        vm.prank(admin);
+        vault.perplCreateAccount(5000e6);
+        // Worst case for the vault: order forwarding is on, so the admin is fully authorised to trade.
+        vm.prank(admin);
+        vault.perplAllowOrderForwarding(true);
+
+        uint256 adminBefore = IERC20(AUSD).balanceOf(admin);
+        uint256 attackerBefore = IERC20(AUSD).balanceOf(attacker);
+
+        // The admin signs a withdrawal straight to Perpl with their own key.
+        vm.prank(admin);
+        try IPerplExchange(PERPL).withdrawCollateral(5000e6) {
+            console2.log("admin direct withdraw did not revert");
+        } catch {
+            console2.log("admin direct withdraw reverted");
+        }
+        vm.prank(attacker);
+        try IPerplExchange(PERPL).withdrawCollateral(5000e6) {
+            console2.log("attacker direct withdraw did not revert");
+        } catch {
+            console2.log("attacker direct withdraw reverted");
+        }
+
+        // Neither of them received anything.
+        assertEq(IERC20(AUSD).balanceOf(admin), adminBefore);
+        assertEq(IERC20(AUSD).balanceOf(attacker), attackerBefore);
+
+        // And the vault's collateral is still whole: it can take the full amount back.
+        vm.prank(admin);
+        uint256 back = vault.perplWithdrawCollateral(5000e6);
+        assertEq(back, 5000e6);
+        assertEq(IERC20(AUSD).balanceOf(address(vault)), 5000e6);
+        assertEq(IERC20(AUSD).balanceOf(admin), adminBefore);
+    }
+
     function test_fullCycleWithProfitFee() public onlyFork {
         vm.prank(alice);
         vault.deposit(10_000e6, alice);

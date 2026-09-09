@@ -77,6 +77,40 @@ Fork tests in `test/fork/DeltaMonMainnetFork.t.sol` drive live contracts.
 - The vault opens its own account on the real Perpl Exchange, turns on order forwarding, and takes
   collateral back out.
 
+## Can the admin's own key drain the Perpl collateral?
+
+No, and this is tested rather than argued. `test_adminKeyCannotTouchPerplCollateral` opens the
+vault's Perpl account on a mainnet fork, turns order forwarding on so the admin is fully authorised
+to trade, then has the admin sign a withdrawal straight to Perpl with their own key. It reverts. So
+does the same attempt from an unrelated address. The vault then takes the full collateral back,
+proving nothing moved.
+
+The reason is structural. Perpl keys an account by `msg.sender`, and its only withdrawal function is
+`withdrawCollateral(uint256)`, which takes an amount and no address. There is no source parameter and
+no destination parameter, so no caller can name someone else's account. I probed the deployed
+implementation for every delegated variant, `withdrawCollateralFor`, `withdrawTo`, `withdrawOnBehalf`,
+`setOperator`, `setDelegate`, and none of them exist. The vault created the account, so the vault is
+the account. The admin's address is simply a different, empty account.
+
+Both doors are therefore closed:
+
+| Route                                                | Outcome                                      |
+| ---------------------------------------------------- | -------------------------------------------- |
+| Admin signs a withdrawal on-chain with their own key | reverts, verified on a fork                  |
+| Admin uses the Perpl API key                         | withdrawals are never permitted at any scope |
+
+### The risk that does remain
+
+The admin holds a trade-scoped key, so they can place bad orders. Someone acting in bad faith could
+trade the vault's position against themselves on Perpl's book and move value out through losses
+rather than through a withdrawal. That cannot be bounded on-chain the way swap slippage can, because
+orders never touch the chain and the vault only learns the result from `reportPerplPnl`.
+
+Two things limit it today. The reported result is capped against posted collateral, so a large
+hidden loss cannot be reported at all and the vault freezes on staleness instead. And the exposure is
+never larger than the collateral the admin moved to Perpl in the first place. Capping that collateral
+as a fraction of the vault would bound the damage directly, and is worth adding before real money.
+
 ## Two live constraints worth knowing
 
 **A fresh delegation only activates at the next epoch boundary.** Unstaking in the same epoch
