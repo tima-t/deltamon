@@ -139,6 +139,44 @@ field at all: it binds the signer, the public key, the scope, the label and the 
 therefore resolved entirely server-side at the enrol step. The only way to settle it is to enrol
 against a real account, or to ask them.
 
+### What the docs do and do not say about contract accounts
+
+Perpl uses "Smart Contract Account" to mean the account that lives on the Exchange contract, as
+opposed to API authentication. Their own table reads "Exchange Account | On-chain account exists on
+Exchange contract with collateral". The phrase is about where the account lives, not who owns it.
+
+Across all seven files in their API documentation there is no mention of EIP-1271, ERC-4337, account
+abstraction or contract wallets. The owner is always called a wallet. So the documentation neither
+grants nor refuses contract ownership; it simply does not address it.
+
+### A better question to ask them: direct on-chain orders
+
+The same page says twice that the API is not the only way to trade:
+
+> "The flag gates only the forwarded path. An account can still trade by sending its own order
+> transactions on-chain; that is out of scope for these docs"
+
+> "It is **not** a prerequisite for trading itself. An account can always transact directly on-chain
+> from its own wallet, submitting its own order transactions and paying its own gas, and that path is
+> unaffected by the flag."
+
+If the vault can place orders on-chain itself, the API key leaves the trading path completely and the
+delegation question stops mattering. The obstacle is only that the ABI for it is undocumented. A scan
+of 120 recent blocks found 564 calls to the Exchange using four selectors from ten senders, all of
+which look like Perpl's own forwarders, and both public selector databases were unavailable when this
+was written.
+
+So the request to Perpl should be, in order of value:
+
+1. The ABI for placing orders directly on-chain.
+2. Failing that, confirmation that an EOA operator may enrol a key against a contract `target_profile`.
+3. Failing that, whether signature verification goes through a checker that honours EIP-1271, in which
+   case the vault can sign its own enrolment and stay the owner.
+
+`getAccountByAddr(address)` is confirmed present on the Exchange and reverts with
+`AccountDoesNotExist` for an unknown address, which gives the vault a way to assert its own account
+on-chain.
+
 Enrol with scope 2, which is trade and implies read. Withdrawals are impossible at any scope. Set
 `PERPL_IP_CIDRS` to your backend's address so a leaked key is useless from anywhere else, and delete
 `PERPL_ENROLL_PRIVATE_KEY` from the environment once enrolment is done.
