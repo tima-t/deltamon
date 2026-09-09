@@ -3,7 +3,13 @@ export const BPS = 10_000;
 /** Target net APY the product is designed around (basis points). */
 export const TARGET_APY_BPS = 1_500;
 
-/** v1 sdMON vault: share of every deposit swapped into MON on Kuru. */
+/** Admin-directed vault: a queued redemption must be funded within this window. */
+export const REDEMPTION_DEADLINE_HOURS = 36;
+
+/** Performance fee ceiling, charged on profit above each depositor's own cost basis. */
+export const MAX_PERFORMANCE_FEE_BPS = 1_000;
+
+/** Earlier automatic-split variant (SdMonVault): share of each deposit swapped to MON. */
 export const TARGET_MON_BPS = 6_000;
 
 /** v1: rebalance when |monShare − target| exceeds this many bps. */

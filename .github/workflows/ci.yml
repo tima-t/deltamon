@@ -49,7 +49,7 @@ jobs:
           FOUNDRY_PROFILE: ci
 
   fork-tests:
-    name: Kuru swap on Monad mainnet fork
+    name: Monad mainnet fork tests
     runs-on: ubuntu-latest
     # Uses the public Monad RPC; treated as informational so rate limits never block a merge.
     continue-on-error: true
@@ -63,7 +63,7 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: stable
-      - run: forge test --match-contract KuruMainnetFork -vv
+      - run: forge test --match-path 'test/fork/*' -vv
         env:
           RUN_FORK_TESTS: "true"
           MONAD_RPC_URL: https://rpc.monad.xyz

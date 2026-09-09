@@ -78,10 +78,10 @@ Other commands: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm 
 ```bash
 cd packages/contracts
 cp .env.example .env            # ADMIN, PRIVATE_KEY (mainnet addresses are pre-filled)
-forge script script/DeploySdMon.s.sol:DeploySdMon --rpc-url monad --broadcast --private-key $PRIVATE_KEY
+forge script script/DeployDeltaMon.s.sol:DeployDeltaMon --rpc-url monad --broadcast --private-key $PRIVATE_KEY
 ```
 
-Then copy the addresses from `packages/contracts/deployments/sdmon-<chainId>.json` into `packages/shared/src/deployments.ts`, run `pnpm abi:sync`, and set `VAULT_ADDRESS` (backend) / `NEXT_PUBLIC_VAULT_ADDRESS` (frontend).
+Then copy the addresses from `packages/contracts/deployments/deltamon-<chainId>.json` into `packages/shared/src/deployments.ts`, run `pnpm abi:sync`, and set `VAULT_ADDRESS` (backend) / `NEXT_PUBLIC_VAULT_ADDRESS` (frontend).
 
 The v1 vault targets **Monad mainnet** with a small deposit cap: the Monad testnet Kuru MON/USDC market has no liquidity and the testnet WMON address in the registry has no code, so a testnet deployment cannot swap.
 
@@ -90,7 +90,8 @@ Monad networks: mainnet chain id 143, RPC `https://rpc.monad.xyz`, explorer [mon
 ## Status
 
 - [x] Monorepo, CI, shared address book
-- [x] **v1 `SdMonVault`**: USDC in, 60 % swapped to MON on Kuru, sdMON shares, redeem / redeem-in-kind, keeper rebalance — unit tests + Monad mainnet fork tests
+- [x] **`DeltaMonVault`**: two roles, admin-directed Kuru swaps, native staking, Perpl collateral rails, redemption queue with a 36 h deadline, profit-only fee on a per-depositor basis — 33 unit tests + 5 mainnet fork tests
+- [x] `SdMonVault`: earlier variant that split every deposit 60/40 automatically, kept for reference
 - [x] `KuruSpotAdapter` (native-MON aware, direction derived from market params), Chainlink + Pyth oracle adapters
 - [x] Backend API + keeper loop, frontend dashboard + deposit / redeem flow (demo data until deployed)
 - [x] v2 `DeltaVault` + `DeltaNeutralStrategy` (hedged) with mock-venue tests, not wired yet
@@ -100,7 +101,7 @@ Monad networks: mainnet chain id 143, RPC `https://rpc.monad.xyz`, explorer [mon
 
 ## Risks
 
-v1 holds 60 % MON, so sdMON moves with the MON price until the hedge leg ships. Kuru is a third-party venue (slippage-guarded). The oracle is Chainlink MON/USD (staleness-guarded). DeltaMon contracts are new and unaudited; deposit caps apply. See [docs/STRATEGY.md](docs/STRATEGY.md).
+sdMON moves with the MON price until the admin opens the offsetting short on Perpl. Kuru is a third-party venue (slippage-guarded). The oracle is Chainlink MON/USD (staleness-guarded). DeltaMon contracts are new and unaudited; deposit caps apply. See [docs/STRATEGY.md](docs/STRATEGY.md).
 
 ## License
 
