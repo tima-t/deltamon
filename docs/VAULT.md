@@ -210,6 +210,28 @@ price rose. It now comes off `grossAssets`, so deploying the USDC behind a fee c
 alive while deposits and redemptions kept pricing against it. The clock now starts only when the book
 goes from empty to funded, where a zero result is true by definition.
 
+Three more came from an independent adversarial review of the same code.
+
+**The reentrancy guard did not cover the swap path.** OpenZeppelin's guard is one shared flag, and it
+only blocks reentry into a guarded function if the outer call engaged it. The swaps, staking and
+manager funding were unguarded, so a venue that called back into `deposit` mid-swap would have minted
+shares against a book that was transiently short the value that had left and had not yet received
+what it bought. Not reachable through the current Kuru adapter, which has no callback, but it would
+have become reachable the moment the venue changed. Every function that moves a balance around an
+external call is now guarded, and a test drives a venue that reenters `deposit` mid-swap.
+
+**A silent admin could trap every depositor.** Exits were gated on a fresh perp mark, so an admin who
+simply stopped calling `reportPerpPnl` froze `redeem`, `withdraw` and `claimRedemption` after six
+hours, no matter how much idle USDC sat in the vault. The overdue freeze did nothing about it,
+because it never gated the exits. Deposits are still gated, since nobody is harmed by being unable to
+buy in, but exits now always proceed and price against a conservative mark instead: once the report
+goes stale an unconfirmed gain is dropped while a reported loss still counts, so whoever leaves
+cannot take more than their share from those who stay.
+
+**A fee cut left a queued rise armed.** Proposing a decrease applied at once but returned early
+without clearing a pending increase, so a 10 % rise proposed earlier could still be applied later,
+behind a lower headline number and with no fresh announcement. A decrease now cancels the queue.
+
 Separately, the deploy script now sets the oracle staleness window to one hour rather than a day. The
 MON/USD feed was measured updating every thirty seconds, so an hour is generous while still refusing
 a price that has genuinely gone dark.

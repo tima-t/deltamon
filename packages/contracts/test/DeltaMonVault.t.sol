@@ -13,7 +13,7 @@ import {MockERC20} from "./mocks/MockERC20.sol";
 import {MockOracle} from "./mocks/MockOracle.sol";
 import {MockWMON} from "./mocks/MockKuru.sol";
 import {IMonadStaking} from "../src/interfaces/external/IMonadStaking.sol";
-import {MockDeskVenue, MockStakingPrecompile, LyingVenue} from "./mocks/MockProtocols.sol";
+import {MockDeskVenue, MockStakingPrecompile, LyingVenue, ReenteringVenue} from "./mocks/MockProtocols.sol";
 
 /// @dev Identical to the deployed vault except that it points at a mock precompile.
 contract TestableVault is DeltaMonVault {
@@ -416,22 +416,96 @@ contract DeltaMonVaultTest is Test {
         vault.reportPerpPnl(300e6); // band is 50 % of 500
     }
 
-    function test_staleReportBlocksDepositsAndExits() public {
+    function test_staleReportBlocksDepositsButNeverTrapsAnExit() public {
         _deposit(alice, 1000e6);
-        _fundManager(500e6);
+        _fundManager(400e6);
+        vm.prank(admin);
+        vault.reportPerpPnl(100e6); // an unconfirmed gain
 
         vm.warp(block.timestamp + 7 hours);
+        assertTrue(vault.perpReportIsStale());
+
+        // Nobody may buy in against a mark nobody has confirmed.
         vm.prank(bob);
         vm.expectRevert(DeltaMonVault.StalePerpReport.selector);
         vault.deposit(100e6, bob);
 
+        // The stale gain is dropped, so the book is valued conservatively rather than optimistically.
+        assertEq(vault.perpEquity(), 400e6);
+        assertApproxEqRel(vault.totalAssets(), 1000e6, 1e12);
+
+        // An admin who simply stops reporting must not be able to trap anyone.
+        uint256 someShares = vault.balanceOf(alice) / 4;
         vm.prank(alice);
-        vm.expectRevert(DeltaMonVault.StalePerpReport.selector);
-        vault.redeem(1e18, alice, alice);
+        uint256 out = vault.redeem(someShares, alice, alice);
+        assertGt(out, 0);
 
         vm.prank(admin);
         vault.reportPerpPnl(0);
         _deposit(bob, 100e6);
+    }
+
+    function test_queuedExitSurvivesASilentAdmin() public {
+        _deposit(alice, 1000e6);
+        _fundManager(400e6);
+        _buyMon(550e6);
+
+        uint256 shares = vault.balanceOf(alice);
+        vm.prank(alice);
+        uint256 id = vault.requestRedeem(shares);
+
+        // Admin goes quiet, then unwinds enough to cover the queue but still never reports.
+        vm.warp(block.timestamp + 40 hours);
+        assertTrue(vault.perpReportIsStale());
+        assertTrue(vault.hasOverdueRedemptions());
+
+        uint256 monHeld = wmon.balanceOf(address(vault));
+        vm.prank(admin);
+        vault.swapMonForUsdc(monHeld, 0);
+        vm.startPrank(perpManager);
+        usdc.approve(address(vault), 400e6);
+        vault.perpManagerDeposit(address(usdc), 400e6);
+        vm.stopPrank();
+
+        vault.claimRedemption(id); // must not depend on the admin speaking up
+        assertApproxEqRel(usdc.balanceOf(alice), START, 1e15);
+    }
+
+    function test_reentrantVenueCannotMintAgainstADeflatedBook() public {
+        _deposit(alice, 1000e6);
+        address attacker = makeAddr("attacker");
+        ReenteringVenue evil = new ReenteringVenue(address(vault), usdc, attacker);
+
+        vm.prank(admin);
+        vault.proposeVenue(ISpotVenue(address(evil)), IPriceOracle(address(oracle)));
+        vm.warp(block.timestamp + 3 days + 1);
+        vm.prank(admin);
+        vault.applyVenue();
+
+        vm.prank(admin);
+        vm.expectRevert(); // ReentrancyGuardReentrantCall
+        vault.swapUsdcForMon(500e6, 0);
+
+        assertEq(vault.balanceOf(attacker), 0);
+        assertEq(vault.usdcBalance(), 1000e6);
+    }
+
+    function test_aFeeCutCancelsAQueuedRise() public {
+        vm.startPrank(admin);
+        vault.proposePerformanceFee(500); // down from 1000, immediate
+        vault.proposePerformanceFee(900); // queued rise
+        assertEq(vault.pendingPerformanceFeeBps(), 900);
+
+        vault.proposePerformanceFee(300); // a cut must also withdraw the queued rise
+        assertEq(vault.performanceFeeBps(), 300);
+        assertEq(vault.pendingPerformanceFeeBps(), 0);
+        assertEq(vault.pendingFeeEffectiveAt(), 0);
+
+        vm.warp(block.timestamp + 2 days);
+        vm.expectRevert(DeltaMonVault.NoFeeTimelockPending.selector);
+        vault.applyPerformanceFee();
+        vm.stopPrank();
+        assertEq(vault.performanceFeeBps(), 300);
     }
 
     function test_leftoverReportCannotInflateAnEmptyBook() public {

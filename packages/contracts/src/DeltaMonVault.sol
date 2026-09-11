@@ -231,8 +231,17 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         uint256 deployed = perpDeployed();
         // Nothing out means nothing to value, whatever a leftover report still says.
         if (deployed == 0) return 0;
-        int256 equity = deployed.toInt256() + perpReportedPnl;
+        int256 pnl = perpReportedPnl;
+        // A mark that has gone stale is only trusted in the direction that does not favour whoever
+        // is leaving. An unconfirmed gain is dropped; a reported loss still counts.
+        if (perpReportIsStale() && pnl > 0) pnl = 0;
+        int256 equity = deployed.toInt256() + pnl;
         return equity > 0 ? uint256(equity) : 0;
+    }
+
+    function perpReportIsStale() public view returns (bool) {
+        if (perpDeployed() == 0) return false;
+        return block.timestamp > uint256(perpReportedAt) + perpReportMaxAge;
     }
 
     function monPrice() public view returns (uint256) {
@@ -343,7 +352,6 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         nonReentrant
         returns (uint256 assetsOut)
     {
-        _requireFreshPerpReport();
         uint256 maxShares = maxRedeem(owner);
         if (shares > maxShares) revert ERC4626ExceededMaxRedeem(owner, shares, maxShares);
 
@@ -360,7 +368,6 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         nonReentrant
         returns (uint256 shares)
     {
-        _requireFreshPerpReport();
         uint256 maxAssets = maxWithdraw(owner);
         if (assets > maxAssets) revert ERC4626ExceededMaxWithdraw(owner, assets, maxAssets);
         shares = previewWithdraw(assets);
@@ -393,7 +400,6 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
 
     /// @notice Settle a queued redemption once the USDC is there. Anyone may trigger it.
     function claimRedemption(uint256 id) external nonReentrant returns (uint256 assetsOut) {
-        _requireFreshPerpReport();
         Redemption storage r = redemptions[id];
         if (r.settled) revert AlreadySettled();
 
@@ -428,6 +434,7 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
 
     function swapUsdcForMon(uint256 usdcIn, uint256 minMonOut)
         external
+        nonReentrant
         onlyOwner
         whenNotPaused
         notOverdue
@@ -437,13 +444,14 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         return _swap(asset(), address(wmon), usdcIn, Math.max(minMonOut, floorOut));
     }
 
-    function swapMonForUsdc(uint256 monIn, uint256 minUsdcOut) external onlyOwner returns (uint256) {
+    function swapMonForUsdc(uint256 monIn, uint256 minUsdcOut) external nonReentrant onlyOwner returns (uint256) {
         uint256 floorOut = monToAssets(monIn).mulDiv(BPS - maxSwapSlippageBps, BPS);
         return _swap(address(wmon), asset(), monIn, Math.max(minUsdcOut, floorOut));
     }
 
     function swapUsdcForAusd(uint256 usdcIn, uint256 minAusdOut)
         external
+        nonReentrant
         onlyOwner
         whenNotPaused
         notOverdue
@@ -453,7 +461,7 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         return _swap(asset(), address(ausd), usdcIn, Math.max(minAusdOut, floorOut));
     }
 
-    function swapAusdForUsdc(uint256 ausdIn, uint256 minUsdcOut) external onlyOwner returns (uint256) {
+    function swapAusdForUsdc(uint256 ausdIn, uint256 minUsdcOut) external nonReentrant onlyOwner returns (uint256) {
         uint256 floorOut = ausdIn.mulDiv(BPS - stableParityBandBps, BPS);
         return _swap(address(ausd), asset(), ausdIn, Math.max(minUsdcOut, floorOut));
     }
@@ -475,7 +483,7 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
     // ───────────────────────────── admin: staking ─────────────────────────────
 
     /// @notice Delegate MON to a validator. Wrapped MON is unwrapped first as the precompile is native.
-    function stake(uint64 validatorId, uint256 monAmount) external onlyOwner whenNotPaused notOverdue {
+    function stake(uint64 validatorId, uint256 monAmount) external nonReentrant onlyOwner whenNotPaused notOverdue {
         _requireCommissionInRange(validatorId);
         uint256 native = address(this).balance;
         if (native < monAmount) wmon.withdraw(monAmount - native);
@@ -486,7 +494,7 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
     }
 
     /// @notice Begin unbonding. The MON is claimable after one epoch, roughly six to twelve hours.
-    function unstake(uint64 validatorId, uint256 monAmount) external onlyOwner returns (uint8 withdrawId) {
+    function unstake(uint64 validatorId, uint256 monAmount) external nonReentrant onlyOwner returns (uint8 withdrawId) {
         withdrawId = nextWithdrawId[validatorId];
         if (pendingUnstake[validatorId][withdrawId] != 0) revert WithdrawSlotBusy(validatorId, withdrawId);
         unchecked {
@@ -554,6 +562,7 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
     ///      and the reporting gate below are what bound the exposure.
     function sendFundPerpManager(address manager, address token, uint256 amount)
         external
+        nonReentrant
         onlyOwner
         whenNotPaused
         notOverdue
@@ -606,9 +615,11 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         emit MaxPerpAllocationUpdated(bps);
     }
 
+    /// @dev Only deposits are gated on a fresh mark. Exits are not, because an admin who simply
+    ///      stopped reporting would otherwise trap every depositor behind their silence. Exits
+    ///      instead price against the conservative valuation in `perpEquity`.
     function _requireFreshPerpReport() internal view {
-        if (perpDeployed() == 0) return;
-        if (block.timestamp > uint256(perpReportedAt) + perpReportMaxAge) revert StalePerpReport();
+        if (perpReportIsStale()) revert StalePerpReport();
     }
 
     function _requireSupportedToken(address token) internal view {
@@ -624,7 +635,7 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
     // ───────────────────────────── admin: fees and config ─────────────────────────────
 
     /// @notice The only assets the admin can move out, and only what depositors' profits accrued.
-    function withdrawFees(address to, uint256 amount) external onlyOwner notOverdue {
+    function withdrawFees(address to, uint256 amount) external nonReentrant onlyOwner notOverdue {
         if (to == address(0)) revert ZeroAddress();
         accruedFees -= amount;
         IERC20(asset()).safeTransfer(to, amount);
@@ -635,6 +646,10 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         if (bps > MAX_PERFORMANCE_FEE_BPS) revert InvalidBps();
         if (bps <= performanceFeeBps) {
             performanceFeeBps = bps;
+            // Cancel any queued increase too, or it stays armed behind the lower headline number
+            // and fires later without ever being re-announced.
+            delete pendingPerformanceFeeBps;
+            delete pendingFeeEffectiveAt;
             emit FeeUpdated(bps);
             return;
         }

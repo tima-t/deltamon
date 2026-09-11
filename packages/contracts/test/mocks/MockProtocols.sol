@@ -6,6 +6,7 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ISpotVenue} from "../../src/interfaces/ISpotVenue.sol";
+import {MockERC20} from "./MockERC20.sol";
 import {MockOracle} from "./MockOracle.sol";
 
 /// @dev Swaps at the oracle price minus a fee, paying out of its own pre-funded inventory.
@@ -125,5 +126,36 @@ contract LyingVenue is ISpotVenue {
     {
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
         return minAmountOut; // a lie
+    }
+}
+
+interface IReenterTarget {
+    function deposit(uint256 assets, address receiver) external returns (uint256);
+}
+
+/// @dev Pulls the input, then calls back into the vault mid-swap, while the value that left has not
+///      yet been replaced. Without a shared reentrancy guard this mints shares against a
+///      transiently deflated book.
+contract ReenteringVenue is ISpotVenue {
+    using SafeERC20 for IERC20;
+
+    address public immutable vault;
+    MockERC20 public immutable asset;
+    address public immutable attacker;
+
+    constructor(address vault_, MockERC20 asset_, address attacker_) {
+        vault = vault_;
+        asset = asset_;
+        attacker = attacker_;
+    }
+
+    function swapExactIn(address tokenIn, address, uint256 amountIn, uint256, address) external returns (uint256) {
+        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
+
+        // The vault is short the input and has not received the output. Strike here.
+        asset.mint(address(this), 100e6);
+        asset.approve(vault, 100e6);
+        IReenterTarget(vault).deposit(100e6, attacker);
+        return 0;
     }
 }

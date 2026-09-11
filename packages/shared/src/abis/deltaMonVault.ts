@@ -1040,6 +1040,19 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
+    "name": "perpReportIsStale",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "perpReportMaxAge",
     "inputs": [],
     "outputs": [
