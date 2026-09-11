@@ -7,14 +7,13 @@ import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.so
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {DeltaMonVault} from "../src/DeltaMonVault.sol";
 import {IWMON} from "../src/interfaces/external/IWMON.sol";
-import {IPerplExchange} from "../src/interfaces/external/IPerplExchange.sol";
 import {ISpotVenue} from "../src/interfaces/ISpotVenue.sol";
 import {IPriceOracle} from "../src/interfaces/IPriceOracle.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
 import {MockOracle} from "./mocks/MockOracle.sol";
 import {MockWMON} from "./mocks/MockKuru.sol";
 import {IMonadStaking} from "../src/interfaces/external/IMonadStaking.sol";
-import {MockDeskVenue, MockStakingPrecompile, MockPerplExchange} from "./mocks/MockProtocols.sol";
+import {MockDeskVenue, MockStakingPrecompile} from "./mocks/MockProtocols.sol";
 
 /// @dev Identical to the deployed vault except that it points at a mock precompile.
 contract TestableVault is DeltaMonVault {
@@ -26,11 +25,10 @@ contract TestableVault is DeltaMonVault {
         IERC20 ausd_,
         ISpotVenue spotVenue_,
         IPriceOracle oracle_,
-        IPerplExchange perpl_,
         uint256 depositCap_,
         uint16 performanceFeeBps_,
         IMonadStaking mockStaking_
-    ) DeltaMonVault(usdc_, wmon_, ausd_, spotVenue_, oracle_, perpl_, depositCap_, performanceFeeBps_) {
+    ) DeltaMonVault(usdc_, wmon_, ausd_, spotVenue_, oracle_, depositCap_, performanceFeeBps_) {
         _mockStaking = mockStaking_;
     }
 
@@ -45,7 +43,6 @@ contract DeltaMonVaultTest is Test {
     MockWMON wmon;
     MockOracle oracle;
     MockDeskVenue venue;
-    MockPerplExchange perpl;
     MockStakingPrecompile staking;
     DeltaMonVault vault;
 
@@ -70,7 +67,6 @@ contract DeltaMonVaultTest is Test {
         oracle.setPrice(address(wmon), MON_PRICE);
 
         venue = new MockDeskVenue(oracle);
-        perpl = new MockPerplExchange(IERC20(address(ausd)));
 
         staking = new MockStakingPrecompile();
         vm.deal(address(staking), 1_000_000e18);
@@ -89,7 +85,6 @@ contract DeltaMonVaultTest is Test {
             IERC20(address(ausd)),
             ISpotVenue(address(venue)),
             IPriceOracle(address(oracle)),
-            IPerplExchange(address(perpl)),
             CAP,
             1000, // 10 % performance fee
             IMonadStaking(address(staking))
@@ -398,28 +393,18 @@ contract DeltaMonVaultTest is Test {
         vault.stake(VAL, 1e18);
     }
 
-    // ───────────────────────────── perpl ─────────────────────────────
+    // ───────────────────────────── perp book reporting ─────────────────────────────
 
-    function _openPerpl(uint256 amount) internal {
-        vm.startPrank(admin);
-        vault.swapUsdcForAusd(amount, 0);
-        vault.perplCreateAccount(amount);
-        vm.stopPrank();
-    }
-
-    function test_perplCollateralIsCountedAtFullValue() public {
-        _deposit(alice, 1000e6);
-        _openPerpl(500e6);
-
-        assertEq(vault.perplPrincipal(), 500e6);
-        assertEq(vault.perpEquity(), 500e6);
-        assertApproxEqRel(vault.totalAssets(), 1000e6, 1e12);
-        assertEq(perpl.collateralOf(address(vault)), 500e6);
+    function _fundManager(uint256 amount) internal {
+        vm.prank(admin);
+        vault.controlPerpManagers(perpManager, true);
+        vm.prank(admin);
+        vault.sendFundPerpManager(perpManager, address(usdc), amount);
     }
 
     function test_reportedPnlMovesValueAndIsBounded() public {
         _deposit(alice, 1000e6);
-        _openPerpl(500e6);
+        _fundManager(500e6);
 
         vm.prank(admin);
         vault.reportPerpPnl(50e6);
@@ -433,7 +418,7 @@ contract DeltaMonVaultTest is Test {
 
     function test_staleReportBlocksDepositsAndExits() public {
         _deposit(alice, 1000e6);
-        _openPerpl(500e6);
+        _fundManager(500e6);
 
         vm.warp(block.timestamp + 7 hours);
         vm.prank(bob);
@@ -449,27 +434,22 @@ contract DeltaMonVaultTest is Test {
         _deposit(bob, 100e6);
     }
 
-    function test_perplWithdrawCollateralReducesPrincipal() public {
+    function test_leftoverReportCannotInflateAnEmptyBook() public {
         _deposit(alice, 1000e6);
-        _openPerpl(500e6);
-
+        _fundManager(500e6);
         vm.prank(admin);
-        uint256 got = vault.perplWithdrawCollateral(200e6);
-        assertEq(got, 200e6);
-        assertEq(vault.perplPrincipal(), 300e6);
-        assertEq(ausd.balanceOf(address(vault)), 200e6);
+        vault.reportPerpPnl(100e6);
+        assertApproxEqRel(vault.totalAssets(), 1100e6, 1e12);
 
-        vm.prank(admin);
-        vm.expectPartialRevert(DeltaMonVault.AmountExceedsPrincipal.selector);
-        vault.perplWithdrawCollateral(400e6);
-    }
+        usdc.mint(perpManager, 100e6);
+        vm.startPrank(perpManager);
+        usdc.approve(address(vault), 600e6);
+        vault.perpManagerDeposit(address(usdc), 600e6);
+        vm.stopPrank();
 
-    function test_orderForwardingToggle() public {
-        _deposit(alice, 1000e6);
-        _openPerpl(500e6);
-        vm.prank(admin);
-        vault.perplAllowOrderForwarding(true);
-        assertTrue(perpl.orderForwarding(address(vault)));
+        assertEq(vault.perpDeployed(), 0);
+        assertEq(vault.perpEquity(), 0); // the stale gain cannot be counted twice
+        assertEq(vault.totalAssets(), 1100e6);
     }
 
     // ───────────────────────────── perp managers ─────────────────────────────

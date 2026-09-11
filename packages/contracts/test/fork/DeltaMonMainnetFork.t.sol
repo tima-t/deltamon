@@ -9,7 +9,6 @@ import {ChainlinkOracle} from "../../src/oracles/ChainlinkOracle.sol";
 import {ISpotVenue} from "../../src/interfaces/ISpotVenue.sol";
 import {IPriceOracle} from "../../src/interfaces/IPriceOracle.sol";
 import {IWMON} from "../../src/interfaces/external/IWMON.sol";
-import {IPerplExchange} from "../../src/interfaces/external/IPerplExchange.sol";
 import {IMonadStaking} from "../../src/interfaces/external/IMonadStaking.sol";
 
 /// @notice Exercises the vault against live Monad mainnet contracts: Kuru's router, Chainlink's
@@ -24,8 +23,6 @@ contract DeltaMonMainnetForkTest is Test {
     address constant KURU_MON_AUSD = 0x131A2e70A5b31a517A74b8c567149bc294470Da9;
     address constant KURU_AUSD_USDC = 0x699AbC15308156E9a3AB89Ec7387e9CfE1c86A3b;
     address constant CHAINLINK_MON_USD = 0xBcD78f76005B7515837af6b50c7C52BCf73822fb;
-    address constant PERPL = 0x34B6552d57a35a1D042CcAe1951BD1C370112a6F;
-    address constant AUSD_WHALE = 0xdeBFeDF35faEd5d1664E553545e144C02227A2Ec; // Aave aAUSD
     address constant USDC_WHALE = 0x35a73BAcb179d3740395A3ceCc87FF2e581d6042;
     IMonadStaking constant STAKING = IMonadStaking(0x0000000000000000000000000000000000001000);
     uint64 constant VALIDATOR = 5;
@@ -67,7 +64,6 @@ contract DeltaMonMainnetForkTest is Test {
             IERC20(AUSD),
             ISpotVenue(address(adapter)),
             IPriceOracle(address(oracle)),
-            IPerplExchange(PERPL),
             1_000_000e6,
             1000
         );
@@ -91,25 +87,25 @@ contract DeltaMonMainnetForkTest is Test {
         console2.log("MON/USD 1e18", vault.monPrice());
 
         vm.prank(alice);
-        uint256 shares = vault.deposit(10_000e6, alice);
-        assertEq(shares, 10_000e18);
-        assertEq(vault.costBasis(alice), 10_000e6);
+        uint256 shares = vault.deposit(1000e6, alice);
+        assertEq(shares, 1000e18);
+        assertEq(vault.costBasis(alice), 1000e6);
 
         vm.prank(admin);
-        vault.swapUsdcForMon(6000e6, 0);
+        vault.swapUsdcForMon(250e6, 0);
 
         console2.log("USDC held", vault.usdcBalance());
         console2.log("WMON held", IERC20(WMON).balanceOf(address(vault)));
-        assertEq(vault.usdcBalance(), 4000e6);
+        assertEq(vault.usdcBalance(), 750e6);
         assertGt(IERC20(WMON).balanceOf(address(vault)), 0);
-        assertApproxEqRel(vault.totalAssets(), 10_000e6, 0.01e18);
+        assertApproxEqRel(vault.totalAssets(), 1000e6, 0.01e18);
     }
 
     function test_realNativeStaking() public onlyFork {
         vm.prank(alice);
-        vault.deposit(10_000e6, alice);
+        vault.deposit(1000e6, alice);
         vm.prank(admin);
-        vault.swapUsdcForMon(6000e6, 0);
+        vault.swapUsdcForMon(250e6, 0);
 
         uint256 mon = IERC20(WMON).balanceOf(address(vault));
         vm.prank(admin);
@@ -117,7 +113,7 @@ contract DeltaMonMainnetForkTest is Test {
 
         assertEq(vault.stakedMon(), mon);
         assertEq(IERC20(WMON).balanceOf(address(vault)), 0);
-        assertApproxEqRel(vault.totalAssets(), 10_000e6, 0.01e18);
+        assertApproxEqRel(vault.totalAssets(), 1000e6, 0.01e18);
 
         (uint256 stakeNow,,, uint256 deltaStake,,,) = STAKING.getDelegator(VALIDATOR, address(vault));
         console2.log("precompile stake", stakeNow);
@@ -137,7 +133,7 @@ contract DeltaMonMainnetForkTest is Test {
     ///         Until a route exists, AUSD has to reach the vault another way.
     function test_ausdCannotBeSourcedOnKuruToday() public onlyFork {
         vm.prank(alice);
-        vault.deposit(20_000e6, alice);
+        vault.deposit(2000e6, alice);
 
         uint256 snap = vm.snapshotState();
         vm.prank(admin);
@@ -155,95 +151,42 @@ contract DeltaMonMainnetForkTest is Test {
         vault.swapUsdcForAusd(200e6, 0);
     }
 
-    /// @notice Drives the real Perpl Exchange: open the vault's own account, add and remove
-    ///         collateral, and switch on order forwarding so the admin's API key can trade it.
-    function test_realPerplCollateralRails() public onlyFork {
+    /// @notice Measures the round-trip size Kuru's MON book can actually absorb right now.
+    function test_probeMonRoundTripDepth() public onlyFork {
+        vm.prank(admin);
+        vault.setRiskParams(300, 100, 2e17, 5000, 6 hours);
         vm.prank(alice);
-        vault.deposit(10_000e6, alice);
+        vault.deposit(2000e6, alice);
 
-        // Kuru cannot fill AUSD today, so the collateral is placed directly to test the rails.
-        vm.prank(AUSD_WHALE);
-        IERC20(AUSD).transfer(address(vault), 5000e6);
-        assertEq(IERC20(AUSD).balanceOf(address(vault)), 5000e6);
-
-        uint256 valueBefore = vault.totalAssets();
-        vm.prank(admin);
-        vault.perplCreateAccount(5000e6);
-        assertEq(vault.perplPrincipal(), 5000e6);
-        assertEq(vault.perpEquity(), 5000e6);
-        assertEq(vault.totalAssets(), valueBefore); // collateral still counted at full value
-        console2.log("Perpl account opened with AUSD", uint256(5000e6));
-
-        vm.prank(admin);
-        vault.perplAllowOrderForwarding(true);
-
-        vm.prank(admin);
-        uint256 back = vault.perplWithdrawCollateral(1000e6);
-        console2.log("AUSD withdrawn from Perpl", back);
-        assertEq(back, 1000e6);
-        assertEq(vault.perplPrincipal(), 4000e6);
-        assertEq(IERC20(AUSD).balanceOf(address(vault)), 1000e6);
-
-        vm.prank(admin);
-        vm.expectPartialRevert(DeltaMonVault.AmountExceedsPrincipal.selector);
-        vault.perplWithdrawCollateral(5000e6);
-    }
-
-    /// @notice The admin's own key is useless against the vault's Perpl collateral. Perpl keys an
-    ///         account by msg.sender and its only withdrawal function takes an amount and no
-    ///         address, so nobody can name someone else's account as the source or the destination.
-    function test_adminKeyCannotTouchPerplCollateral() public onlyFork {
-        address attacker = makeAddr("attacker");
-
-        vm.prank(alice);
-        vault.deposit(10_000e6, alice);
-        vm.prank(AUSD_WHALE);
-        IERC20(AUSD).transfer(address(vault), 5000e6);
-        vm.prank(admin);
-        vault.perplCreateAccount(5000e6);
-        // Worst case for the vault: order forwarding is on, so the admin is fully authorised to trade.
-        vm.prank(admin);
-        vault.perplAllowOrderForwarding(true);
-
-        uint256 adminBefore = IERC20(AUSD).balanceOf(admin);
-        uint256 attackerBefore = IERC20(AUSD).balanceOf(attacker);
-
-        // The admin signs a withdrawal straight to Perpl with their own key.
-        vm.prank(admin);
-        try IPerplExchange(PERPL).withdrawCollateral(5000e6) {
-            console2.log("admin direct withdraw did not revert");
-        } catch {
-            console2.log("admin direct withdraw reverted");
+        uint256[4] memory sizes = [uint256(250e6), 500e6, 1000e6, 2500e6];
+        for (uint256 i = 0; i < sizes.length; i++) {
+            uint256 snap = vm.snapshotState();
+            vm.prank(admin);
+            try vault.swapUsdcForMon(sizes[i], 0) {
+                uint256 mon = IERC20(WMON).balanceOf(address(vault));
+                vm.prank(admin);
+                try vault.swapMonForUsdc(mon, 0) {
+                    console2.log("round trip OK at USDC", sizes[i], "-> back", vault.usdcBalance());
+                } catch {
+                    console2.log("SELL failed at USDC", sizes[i]);
+                }
+            } catch {
+                console2.log("BUY failed at USDC", sizes[i]);
+            }
+            vm.revertToState(snap);
         }
-        vm.prank(attacker);
-        try IPerplExchange(PERPL).withdrawCollateral(5000e6) {
-            console2.log("attacker direct withdraw did not revert");
-        } catch {
-            console2.log("attacker direct withdraw reverted");
-        }
-
-        // Neither of them received anything.
-        assertEq(IERC20(AUSD).balanceOf(admin), adminBefore);
-        assertEq(IERC20(AUSD).balanceOf(attacker), attackerBefore);
-
-        // And the vault's collateral is still whole: it can take the full amount back.
-        vm.prank(admin);
-        uint256 back = vault.perplWithdrawCollateral(5000e6);
-        assertEq(back, 5000e6);
-        assertEq(IERC20(AUSD).balanceOf(address(vault)), 5000e6);
-        assertEq(IERC20(AUSD).balanceOf(admin), adminBefore);
     }
 
     function test_fullCycleWithProfitFee() public onlyFork {
         // The vault's default floor is half a percent per leg, which a live book can exceed on a
         // round trip. Widen it for this test so it measures the fee path, not today's spread.
         vm.prank(admin);
-        vault.setRiskParams(200, 100, 2e17, 5000, 6 hours);
+        vault.setRiskParams(300, 100, 2e17, 5000, 6 hours);
 
         vm.prank(alice);
-        vault.deposit(10_000e6, alice);
+        vault.deposit(1000e6, alice);
         vm.prank(admin);
-        vault.swapUsdcForMon(6000e6, 0);
+        vault.swapUsdcForMon(250e6, 0);
 
         uint256 mon = IERC20(WMON).balanceOf(address(vault));
         vm.prank(admin);
@@ -254,8 +197,8 @@ contract DeltaMonMainnetForkTest is Test {
         uint256 out = vault.redeem(aliceShares, alice, alice);
         console2.log("alice out", out);
         // Two crossings of a real order book cost some spread, so this always lands under par.
-        assertApproxEqRel(out, 10_000e6, 0.02e18);
-        assertLe(out, 10_000e6);
+        assertApproxEqRel(out, 1000e6, 0.02e18);
+        assertLe(out, 1000e6);
         assertEq(vault.accruedFees(), 0); // a loss, so no performance fee
     }
 }

@@ -80,7 +80,9 @@ Fork tests in `test/fork/DeltaMonMainnetFork.t.sol` drive live contracts.
 ## Perp managers
 
 Because Perpl's on-chain order ABI is undocumented and contract-owned API keys are unconfirmed, the
-short leg can also be run by a person or bot rather than by the contract.
+short leg is run by a person or bot rather than by the contract. The vault no longer holds a Perpl
+account of its own: the functions that opened one and moved its collateral were removed once this
+route was chosen, since carrying two paths to the same exposure only widened the surface to audit.
 
 | Function                                      | Who     | What it does                                     |
 | --------------------------------------------- | ------- | ------------------------------------------------ |
@@ -107,39 +109,15 @@ Returns are a repayment of capital, not a subscription. No shares are minted, so
 above what was sent is profit that lands with existing depositors. A manager removed from the list
 can still return what they hold, so cutting off a bad actor never strands the funds they have.
 
-## Can the admin's own key drain the Perpl collateral?
+## Where the Perpl trust boundary now sits
 
-No, and this is tested rather than argued. `test_adminKeyCannotTouchPerplCollateral` opens the
-vault's Perpl account on a mainnet fork, turns order forwarding on so the admin is fully authorised
-to trade, then has the admin sign a withdrawal straight to Perpl with their own key. It reverts. So
-does the same attempt from an unrelated address. The vault then takes the full collateral back,
-proving nothing moved.
+Worth being exact, because it moved. The vault used to own its Perpl account, and a fork test proved
+that neither the admin's key nor a stranger's could withdraw that collateral, since Perpl keys an
+account by `msg.sender` and its only withdrawal function takes an amount and no address.
 
-The reason is structural. Perpl keys an account by `msg.sender`, and its only withdrawal function is
-`withdrawCollateral(uint256)`, which takes an amount and no address. There is no source parameter and
-no destination parameter, so no caller can name someone else's account. I probed the deployed
-implementation for every delegated variant, `withdrawCollateralFor`, `withdrawTo`, `withdrawOnBehalf`,
-`setOperator`, `setDelegate`, and none of them exist. The vault created the account, so the vault is
-the account. The admin's address is simply a different, empty account.
-
-Both doors are therefore closed:
-
-| Route                                                | Outcome                                      |
-| ---------------------------------------------------- | -------------------------------------------- |
-| Admin signs a withdrawal on-chain with their own key | reverts, verified on a fork                  |
-| Admin uses the Perpl API key                         | withdrawals are never permitted at any scope |
-
-### The risk that does remain
-
-The admin holds a trade-scoped key, so they can place bad orders. Someone acting in bad faith could
-trade the vault's position against themselves on Perpl's book and move value out through losses
-rather than through a withdrawal. That cannot be bounded on-chain the way swap slippage can, because
-orders never touch the chain and the vault only learns the result from `reportPerplPnl`.
-
-Two things limit it today. The reported result is capped against posted collateral, so a large
-hidden loss cannot be reported at all and the vault freezes on staleness instead. And the exposure is
-never larger than the collateral the admin moved to Perpl in the first place. Capping that collateral
-as a fraction of the vault would bound the damage directly, and is worth adding before real money.
+That guarantee no longer applies, because the vault no longer holds Perpl collateral. The manager
+does. What protects depositors now is the allocation ceiling, the reporting gate and the freeze rules
+above, not the shape of Perpl's contract. That is a weaker guarantee and it should be read as one.
 
 ## Getting a Perpl API key that only the admin holds
 
@@ -210,6 +188,21 @@ on-chain.
 Enrol with scope 2, which is trade and implies read. Withdrawals are impossible at any scope. Set
 `PERPL_IP_CIDRS` to your backend's address so a leaked key is useless from anywhere else, and delete
 `PERPL_ENROLL_PRIVATE_KEY` from the environment once enrolment is done.
+
+## Kuru's MON book is thin on the sell side
+
+Measured on a fork by `test_probeMonRoundTripDepth`, which walks increasing sizes until the book
+refuses. Buying MON absorbs more than selling it does.
+
+| Round trip size | Result               | Cost         |
+| --------------- | -------------------- | ------------ |
+| 250 USDC        | fills                | about 0.07 % |
+| 500 USDC        | fills                | about 0.13 % |
+| 1000 USDC       | the sell leg reverts |              |
+
+So the admin has to split a large unwind into pieces rather than sending one order, and the deposit
+cap should stay in proportion to what the book can actually absorb. This is why the fork tests trade
+in hundreds of USDC rather than thousands.
 
 ## Two live constraints worth knowing
 

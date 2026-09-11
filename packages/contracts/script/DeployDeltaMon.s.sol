@@ -9,7 +9,6 @@ import {ChainlinkOracle} from "../src/oracles/ChainlinkOracle.sol";
 import {ISpotVenue} from "../src/interfaces/ISpotVenue.sol";
 import {IPriceOracle} from "../src/interfaces/IPriceOracle.sol";
 import {IWMON} from "../src/interfaces/external/IWMON.sol";
-import {IPerplExchange} from "../src/interfaces/external/IPerplExchange.sol";
 
 /// @notice Deploys the vault stack. The broadcasting key becomes the admin, per the spec.
 ///         forge script script/DeployDeltaMon.s.sol:DeployDeltaMon --rpc-url monad --broadcast --private-key $PRIVATE_KEY
@@ -22,7 +21,6 @@ contract DeployDeltaMon is Script {
         address kuruMonUsdc;
         address kuruAusdUsdc;
         address chainlinkMonUsd;
-        address perpl;
         uint256 depositCap;
         uint256 minDeposit;
         uint16 performanceFeeBps;
@@ -37,7 +35,6 @@ contract DeployDeltaMon is Script {
         p.kuruMonUsdc = vm.envAddress("KURU_MARKET_MON_USDC");
         p.kuruAusdUsdc = vm.envOr("KURU_MARKET_AUSD_USDC", address(0));
         p.chainlinkMonUsd = vm.envAddress("CHAINLINK_MON_USD");
-        p.perpl = vm.envAddress("PERPL_EXCHANGE");
         p.depositCap = vm.envOr("DEPOSIT_CAP", uint256(50_000e6));
         p.minDeposit = vm.envOr("MIN_DEPOSIT", uint256(10e6));
         p.performanceFeeBps = uint16(vm.envOr("PERFORMANCE_FEE_BPS", uint256(1000)));
@@ -67,7 +64,6 @@ contract DeployDeltaMon is Script {
             IERC20(p.ausd),
             ISpotVenue(address(spot)),
             IPriceOracle(address(oracle)),
-            IPerplExchange(p.perpl),
             p.depositCap,
             p.performanceFeeBps
         );

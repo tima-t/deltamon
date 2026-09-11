@@ -13,7 +13,6 @@ import {ISpotVenue} from "./interfaces/ISpotVenue.sol";
 import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 import {IWMON} from "./interfaces/external/IWMON.sol";
 import {IMonadStaking} from "./interfaces/external/IMonadStaking.sol";
-import {IPerplExchange} from "./interfaces/external/IPerplExchange.sol";
 
 /// @title DeltaMonVault
 /// @notice A USDC vault with two roles. Depositors put USDC in and receive sdMON, an ERC-4626 share
@@ -52,7 +51,6 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
 
     IWMON public immutable wmon;
     IERC20 public immutable ausd;
-    IPerplExchange public immutable perpl;
     uint8 private immutable _assetDecimals;
 
     ISpotVenue public spotVenue;
@@ -127,10 +125,6 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
     event Unstaked(uint64 indexed validatorId, uint8 withdrawId, uint256 monAmount);
     event UnstakeClaimed(uint64 indexed validatorId, uint8 withdrawId, uint256 monReceived);
     event StakingRewardsClaimed(uint64 indexed validatorId, uint256 monReceived);
-    event PerplAccountOpened(uint256 ausdAmount);
-    event PerplCollateralDeposited(uint256 ausdAmount);
-    event PerplCollateralWithdrawn(uint256 ausdAmount);
-    event PerplOrderForwardingSet(bool allowed);
     event PerpPnlReported(int256 pnl, uint256 deployed);
     event PerpManagerSet(address indexed manager, bool allowed);
     event SentToPerpManager(address indexed manager, address indexed token, uint256 amount, uint256 outstanding);
@@ -165,11 +159,9 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
     error StakingCallFailed();
     error NoFeeTimelockPending();
     error FeeTimelockActive(uint64 effectiveAt);
-    error AmountExceedsPrincipal(uint256 amount, uint256 principal);
     error NotAPerpManager(address account);
     error UnsupportedToken(address token);
     error PerpAllocationTooHigh(uint256 deployed, uint256 ceiling);
-    error AccountAlreadyOpen();
 
     constructor(
         IERC20 usdc_,
@@ -177,13 +169,12 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         IERC20 ausd_,
         ISpotVenue spotVenue_,
         IPriceOracle oracle_,
-        IPerplExchange perpl_,
         uint256 depositCap_,
         uint16 performanceFeeBps_
     ) ERC20("DeltaMon Vault Share", "sdMON") ERC4626(usdc_) Ownable(msg.sender) {
         if (
             address(wmon_) == address(0) || address(ausd_) == address(0) || address(spotVenue_) == address(0)
-                || address(oracle_) == address(0) || address(perpl_) == address(0)
+                || address(oracle_) == address(0)
         ) revert ZeroAddress();
         if (performanceFeeBps_ > MAX_PERFORMANCE_FEE_BPS) revert InvalidBps();
 
@@ -191,7 +182,6 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         ausd = ausd_;
         spotVenue = spotVenue_;
         oracle = oracle_;
-        perpl = perpl_;
         _assetDecimals = IERC20Metadata(address(usdc_)).decimals();
 
         depositCap = depositCap_;
@@ -216,10 +206,9 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         return wmon.balanceOf(address(this)) + address(this).balance + stakedMon + unstakingMon;
     }
 
-    /// @notice Everything the vault has pushed out to run the short leg: collateral sitting on
-    ///         Perpl's Exchange, plus value held by perp managers.
+    /// @notice Everything the vault has pushed out to run the short leg, held by perp managers.
     function perpDeployed() public view returns (uint256) {
-        return perplPrincipal + perpManagerDeployed;
+        return perpManagerDeployed;
     }
 
     /// @notice The perp book at its reported value, floored at zero.
@@ -525,60 +514,6 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         if (commission > maxValidatorCommission) revert ValidatorCommissionTooHigh(commission, maxValidatorCommission);
     }
 
-    // ───────────────────────────── admin: Perpl ─────────────────────────────
-
-    function perplCreateAccount(uint256 ausdAmount) external onlyOwner whenNotPaused notOverdue {
-        if (perplAccountOpened) revert AccountAlreadyOpen();
-        perplAccountOpened = true;
-        perplPrincipal += ausdAmount;
-        ausd.forceApprove(address(perpl), ausdAmount);
-        perpl.createAccount(ausdAmount);
-        perpReportedAt = uint64(block.timestamp);
-        _requirePerpAllocationInRange();
-        emit PerplAccountOpened(ausdAmount);
-    }
-
-    function perplDepositCollateral(uint256 ausdAmount) external onlyOwner whenNotPaused notOverdue {
-        perplPrincipal += ausdAmount;
-        perpReportedAt = uint64(block.timestamp);
-        ausd.forceApprove(address(perpl), ausdAmount);
-        perpl.depositCollateral(ausdAmount);
-        _requirePerpAllocationInRange();
-        emit PerplCollateralDeposited(ausdAmount);
-    }
-
-    function perplWithdrawCollateral(uint256 ausdAmount) external onlyOwner returns (uint256 received) {
-        if (ausdAmount > perplPrincipal) revert AmountExceedsPrincipal(ausdAmount, perplPrincipal);
-        uint256 before = ausd.balanceOf(address(this));
-        perpl.withdrawCollateral(ausdAmount);
-        received = ausd.balanceOf(address(this)) - before;
-        perplPrincipal -= ausdAmount;
-        emit PerplCollateralWithdrawn(received);
-    }
-
-    /// @notice Let Perpl forward the admin's API-signed orders for this vault's account.
-    /// @dev Perpl never permits withdrawals through an API key, so this grants trading only.
-    function perplAllowOrderForwarding(bool allowed) external onlyOwner {
-        perpl.allowOrderForwarding(allowed);
-        emit PerplOrderForwardingSet(allowed);
-    }
-
-    /// @notice Mark the unrealised result across the whole perp book, both the collateral on Perpl
-    ///         and the value held by managers. Deposits and redemptions require this to be fresh,
-    ///         and it is bounded relative to what was actually deployed.
-    function reportPerpPnl(int256 pnl) external onlyOwner {
-        uint256 magnitude = pnl < 0 ? uint256(-pnl) : uint256(pnl);
-        if (magnitude > perpDeployed().mulDiv(perpPnlBandBps, BPS)) revert PnlOutOfBand();
-        perpReportedPnl = pnl;
-        perpReportedAt = uint64(block.timestamp);
-        emit PerpPnlReported(pnl, perpDeployed());
-    }
-
-    function _requireFreshPerpReport() internal view {
-        if (perpDeployed() == 0) return;
-        if (block.timestamp > uint256(perpReportedAt) + perpReportMaxAge) revert StalePerpReport();
-    }
-
     // ───────────────────────────── admin: perp managers ─────────────────────────────
 
     /// @notice Add or remove an address cleared to run the short leg with vault funds.
@@ -631,10 +566,25 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         emit ReturnedByPerpManager(msg.sender, token, amount, perpManagerOutstanding[msg.sender]);
     }
 
+    /// @notice Mark the unrealised result across the perp book. Deposits and redemptions require
+    ///         this to be fresh, and it is bounded relative to what was actually deployed.
+    function reportPerpPnl(int256 pnl) external onlyOwner {
+        uint256 magnitude = pnl < 0 ? uint256(-pnl) : uint256(pnl);
+        if (magnitude > perpDeployed().mulDiv(perpPnlBandBps, BPS)) revert PnlOutOfBand();
+        perpReportedPnl = pnl;
+        perpReportedAt = uint64(block.timestamp);
+        emit PerpPnlReported(pnl, perpDeployed());
+    }
+
     function setMaxPerpAllocation(uint16 bps) external onlyOwner {
         if (bps > BPS) revert InvalidBps();
         maxPerpAllocationBps = bps;
         emit MaxPerpAllocationUpdated(bps);
+    }
+
+    function _requireFreshPerpReport() internal view {
+        if (perpDeployed() == 0) return;
+        if (block.timestamp > uint256(perpReportedAt) + perpReportMaxAge) revert StalePerpReport();
     }
 
     function _requireSupportedToken(address token) internal view {

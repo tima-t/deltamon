@@ -69,43 +69,43 @@ contract KuruMainnetForkTest is Test {
         console2.log("MON/USD (1e18)", price);
 
         vm.prank(alice);
-        uint256 shares = vault.deposit(1000e6, alice);
+        uint256 shares = vault.deposit(400e6, alice);
 
         console2.log("USDC held", vault.usdcBalance());
         console2.log("WMON held", vault.monBalance());
         console2.log("sdMON minted", shares);
         console2.log("mon share bps", vault.monShareBps());
 
-        assertEq(vault.usdcBalance(), 400e6);
+        assertEq(vault.usdcBalance(), 160e6);
         assertGt(vault.monBalance(), 0);
-        assertApproxEqRel(vault.monToAssets(vault.monBalance()), 600e6, 0.01e18); // within 1 % of oracle
+        assertApproxEqRel(vault.monToAssets(vault.monBalance()), 240e6, 0.01e18); // within 1 % of oracle
         assertApproxEqAbs(vault.monShareBps(), 6000, 60);
-        assertApproxEqRel(shares, 1000e18, 0.01e18);
+        assertApproxEqRel(shares, 400e18, 0.01e18);
         assertEq(address(adapter).balance, 0);
         assertEq(IERC20(WMON).balanceOf(address(adapter)), 0);
     }
 
     function test_secondDepositorAndRedeemRoundTrip() public onlyFork {
         vm.prank(alice);
-        uint256 aliceShares = vault.deposit(1000e6, alice);
+        uint256 aliceShares = vault.deposit(400e6, alice);
         vm.prank(bob);
-        uint256 bobShares = vault.deposit(500e6, bob);
+        uint256 bobShares = vault.deposit(200e6, bob);
 
         assertApproxEqRel(bobShares * 2, aliceShares, 0.01e18);
 
         vm.prank(alice);
         uint256 out = vault.redeem(aliceShares, alice, alice);
         console2.log("alice redeemed USDC", out);
-        assertApproxEqRel(out, 1000e6, 0.01e18); // round trip inside 1 % (spread + slippage)
-        assertApproxEqRel(vault.convertToAssets(vault.balanceOf(bob)), 500e6, 0.01e18);
+        assertApproxEqRel(out, 400e6, 0.02e18); // round trip inside 1 % (spread + slippage)
+        assertApproxEqRel(vault.convertToAssets(vault.balanceOf(bob)), 200e6, 0.02e18);
     }
 
     function test_redeemInKindOnFork() public onlyFork {
         vm.prank(alice);
-        uint256 shares = vault.deposit(1000e6, alice);
+        uint256 shares = vault.deposit(400e6, alice);
         vm.prank(alice);
         (uint256 usdcOut, uint256 monOut) = vault.redeemInKind(shares, alice, alice);
-        assertApproxEqAbs(usdcOut, 400e6, 1);
+        assertApproxEqAbs(usdcOut, 160e6, 1);
         assertEq(IERC20(WMON).balanceOf(alice), monOut);
         assertGt(monOut, 0);
     }

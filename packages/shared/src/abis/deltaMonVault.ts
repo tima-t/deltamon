@@ -29,11 +29,6 @@ export const deltaMonVaultAbi = [
         "internalType": "contract IPriceOracle"
       },
       {
-        "name": "perpl_",
-        "type": "address",
-        "internalType": "contract IPerplExchange"
-      },
-      {
         "name": "depositCap_",
         "type": "uint256",
         "internalType": "uint256"
@@ -1018,19 +1013,6 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
-    "name": "perpl",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "contract IPerplExchange"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "perplAccountOpened",
     "inputs": [],
     "outputs": [
@@ -1044,45 +1026,6 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
-    "name": "perplAllowOrderForwarding",
-    "inputs": [
-      {
-        "name": "allowed",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "perplCreateAccount",
-    "inputs": [
-      {
-        "name": "ausdAmount",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "perplDepositCollateral",
-    "inputs": [
-      {
-        "name": "ausdAmount",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "perplPrincipal",
     "inputs": [],
     "outputs": [
@@ -1093,25 +1036,6 @@ export const deltaMonVaultAbi = [
       }
     ],
     "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "perplWithdrawCollateral",
-    "inputs": [
-      {
-        "name": "ausdAmount",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "received",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -2159,58 +2083,6 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "event",
-    "name": "PerplAccountOpened",
-    "inputs": [
-      {
-        "name": "ausdAmount",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "PerplCollateralDeposited",
-    "inputs": [
-      {
-        "name": "ausdAmount",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "PerplCollateralWithdrawn",
-    "inputs": [
-      {
-        "name": "ausdAmount",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "PerplOrderForwardingSet",
-    "inputs": [
-      {
-        "name": "allowed",
-        "type": "bool",
-        "indexed": false,
-        "internalType": "bool"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
     "name": "RedemptionCancelled",
     "inputs": [
       {
@@ -2561,29 +2433,8 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "error",
-    "name": "AccountAlreadyOpen",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "AlreadySettled",
     "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "AmountExceedsPrincipal",
-    "inputs": [
-      {
-        "name": "amount",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "principal",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
   },
   {
     "type": "error",
