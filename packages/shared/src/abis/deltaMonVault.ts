@@ -125,6 +125,19 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
+    "name": "VENUE_TIMELOCK",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "acceptOwnership",
     "inputs": [],
     "outputs": [],
@@ -170,6 +183,13 @@ export const deltaMonVaultAbi = [
   {
     "type": "function",
     "name": "applyPerformanceFee",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "applyVenue",
     "inputs": [],
     "outputs": [],
     "stateMutability": "nonpayable"
@@ -304,6 +324,13 @@ export const deltaMonVaultAbi = [
         "internalType": "uint256"
       }
     ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "cancelVenueChange",
+    "inputs": [],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
@@ -484,6 +511,19 @@ export const deltaMonVaultAbi = [
   {
     "type": "function",
     "name": "depositCap",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "grossAssets",
     "inputs": [],
     "outputs": [
       {
@@ -822,6 +862,19 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
+    "name": "pendingOracle",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IPriceOracle"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "pendingOwner",
     "inputs": [],
     "outputs": [
@@ -842,6 +895,19 @@ export const deltaMonVaultAbi = [
         "name": "",
         "type": "uint16",
         "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingSpotVenue",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract ISpotVenue"
       }
     ],
     "stateMutability": "view"
@@ -1141,6 +1207,24 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
+    "name": "proposeVenue",
+    "inputs": [
+      {
+        "name": "spotVenue_",
+        "type": "address",
+        "internalType": "contract ISpotVenue"
+      },
+      {
+        "name": "oracle_",
+        "type": "address",
+        "internalType": "contract IPriceOracle"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "queueHead",
     "inputs": [],
     "outputs": [
@@ -1385,24 +1469,6 @@ export const deltaMonVaultAbi = [
         "name": "perpReportMaxAge_",
         "type": "uint32",
         "internalType": "uint32"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "setVenue",
-    "inputs": [
-      {
-        "name": "spotVenue_",
-        "type": "address",
-        "internalType": "contract ISpotVenue"
-      },
-      {
-        "name": "oracle_",
-        "type": "address",
-        "internalType": "contract IPriceOracle"
       }
     ],
     "outputs": [],
@@ -1745,6 +1811,19 @@ export const deltaMonVaultAbi = [
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "venueEffectiveAt",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
       }
     ],
     "stateMutability": "view"
@@ -2383,6 +2462,31 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "event",
+    "name": "VenueProposed",
+    "inputs": [
+      {
+        "name": "spotVenue",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "oracle",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "effectiveAt",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "WhitelistModeSet",
     "inputs": [
       {
@@ -2671,6 +2775,11 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "error",
+    "name": "NoVenueChangePending",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "NotAPerpManager",
     "inputs": [
       {
@@ -2810,6 +2919,33 @@ export const deltaMonVaultAbi = [
         "name": "maximum",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "VenueShortchanged",
+    "inputs": [
+      {
+        "name": "received",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "minimum",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "VenueTimelockActive",
+    "inputs": [
+      {
+        "name": "effectiveAt",
+        "type": "uint64",
+        "internalType": "uint64"
       }
     ]
   },

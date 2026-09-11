@@ -43,7 +43,9 @@ contract DeployDeltaMon is Script {
         address admin = msg.sender;
 
         ChainlinkOracle oracle = new ChainlinkOracle(admin);
-        oracle.setFeed(p.wmon, p.chainlinkMonUsd, address(0), 1 days);
+        // The MON/USD feed was measured updating every 30 seconds, so an hour is ample headroom
+        // while still refusing a price that has actually gone dark.
+        oracle.setFeed(p.wmon, p.chainlinkMonUsd, address(0), vm.envOr("ORACLE_MAX_STALENESS", uint256(1 hours)));
 
         KuruSpotAdapter spot = new KuruSpotAdapter(p.kuruRouter, p.wmon, admin);
         address[] memory monRoute = new address[](1);

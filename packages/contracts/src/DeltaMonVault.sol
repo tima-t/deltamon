@@ -44,6 +44,9 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
     uint256 public constant REDEMPTION_DEADLINE = 36 hours;
     /// @notice Fee increases wait this long. Decreases apply at once.
     uint256 public constant FEE_TIMELOCK = 1 days;
+    /// @notice Changing the swap venue or the oracle waits this long. It is deliberately longer
+    ///         than the redemption deadline so a depositor who dislikes the new one can leave first.
+    uint256 public constant VENUE_TIMELOCK = 3 days;
     uint8 private constant SHARE_DECIMALS_OFFSET = 12;
     uint256 private constant WAD = 1e18;
 
@@ -55,6 +58,9 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
 
     ISpotVenue public spotVenue;
     IPriceOracle public oracle;
+    ISpotVenue public pendingSpotVenue;
+    IPriceOracle public pendingOracle;
+    uint64 public venueEffectiveAt;
 
     // ───────────────────────────── config ─────────────────────────────
 
@@ -140,6 +146,7 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
     event WhitelistModeSet(bool enabled);
     event DepositorSet(address indexed account, bool allowed);
     event ConfigUpdated();
+    event VenueProposed(address spotVenue, address oracle, uint64 effectiveAt);
 
     // ───────────────────────────── errors ─────────────────────────────
 
@@ -162,6 +169,9 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
     error NotAPerpManager(address account);
     error UnsupportedToken(address token);
     error PerpAllocationTooHigh(uint256 deployed, uint256 ceiling);
+    error NoVenueChangePending();
+    error VenueTimelockActive(uint64 effectiveAt);
+    error VenueShortchanged(uint256 received, uint256 minimum);
 
     constructor(
         IERC20 usdc_,
@@ -199,6 +209,11 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
     function availableLiquidity() public view returns (uint256) {
         uint256 bal = usdcBalance();
         return bal > accruedFees ? bal - accruedFees : 0;
+    }
+
+    /// @notice Everything the vault controls, before the fees it owes.
+    function grossAssets() public view returns (uint256) {
+        return usdcBalance() + monToAssets(totalMon()) + ausdToAssets(ausd.balanceOf(address(this))) + perpEquity();
     }
 
     /// @notice Every MON the vault controls: wrapped, native, delegated, and unbonding.
@@ -239,9 +254,11 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         return ausdAmount;
     }
 
+    /// @dev The fee comes off the whole book, not off the idle USDC alone. Otherwise deploying the
+    ///      USDC that backs an accrued fee would quietly lift the share price for everyone else.
     function totalAssets() public view override returns (uint256) {
-        return
-            availableLiquidity() + monToAssets(totalMon()) + ausdToAssets(ausd.balanceOf(address(this))) + perpEquity();
+        uint256 gross = grossAssets();
+        return gross > accruedFees ? gross - accruedFees : 0;
     }
 
     function pricePerShare() external view returns (uint256) {
@@ -445,8 +462,13 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         internal
         returns (uint256 amountOut)
     {
+        uint256 before = IERC20(tokenOut).balanceOf(address(this));
         IERC20(tokenIn).forceApprove(address(spotVenue), amountIn);
-        amountOut = spotVenue.swapExactIn(tokenIn, tokenOut, amountIn, minOut, address(this));
+        spotVenue.swapExactIn(tokenIn, tokenOut, amountIn, minOut, address(this));
+        // The venue reports its own result. Believe the balance instead.
+        amountOut = IERC20(tokenOut).balanceOf(address(this)) - before;
+        if (amountOut < minOut) revert VenueShortchanged(amountOut, minOut);
+        IERC20(tokenIn).forceApprove(address(spotVenue), 0);
         emit Swapped(tokenIn, tokenOut, amountIn, amountOut);
     }
 
@@ -539,9 +561,11 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         if (!isPerpManager[manager]) revert NotAPerpManager(manager);
         _requireSupportedToken(token);
 
+        // Start the reporting clock only when the book was empty, where a zero result is true by
+        // definition. Refreshing it on every send would let dust top-ups keep a stale mark alive.
+        if (perpManagerDeployed == 0) perpReportedAt = uint64(block.timestamp);
         perpManagerOutstanding[manager] += amount;
         perpManagerDeployed += amount;
-        perpReportedAt = uint64(block.timestamp); // freshly deployed value carries no result yet
 
         IERC20(token).safeTransfer(manager, amount);
         _requirePerpAllocationInRange(); // measured after the value leaves, never double counted
@@ -665,10 +689,32 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         emit ConfigUpdated();
     }
 
-    function setVenue(ISpotVenue spotVenue_, IPriceOracle oracle_) external onlyOwner {
+    /// @notice Queue a new swap venue and oracle. Both are trusted by the swap path, so a malicious
+    ///         pair could drain the vault. The delay is what makes that survivable: depositors can
+    ///         see the proposal and leave before it takes effect.
+    function proposeVenue(ISpotVenue spotVenue_, IPriceOracle oracle_) external onlyOwner {
         if (address(spotVenue_) == address(0) || address(oracle_) == address(0)) revert ZeroAddress();
-        spotVenue = spotVenue_;
-        oracle = oracle_;
+        pendingSpotVenue = spotVenue_;
+        pendingOracle = oracle_;
+        venueEffectiveAt = uint64(block.timestamp + VENUE_TIMELOCK);
+        emit VenueProposed(address(spotVenue_), address(oracle_), venueEffectiveAt);
+    }
+
+    function applyVenue() external onlyOwner {
+        if (venueEffectiveAt == 0) revert NoVenueChangePending();
+        if (block.timestamp < venueEffectiveAt) revert VenueTimelockActive(venueEffectiveAt);
+        spotVenue = pendingSpotVenue;
+        oracle = pendingOracle;
+        delete pendingSpotVenue;
+        delete pendingOracle;
+        delete venueEffectiveAt;
+        emit ConfigUpdated();
+    }
+
+    function cancelVenueChange() external onlyOwner {
+        delete pendingSpotVenue;
+        delete pendingOracle;
+        delete venueEffectiveAt;
         emit ConfigUpdated();
     }
 

@@ -113,3 +113,17 @@ contract MockStakingPrecompile {
 
     receive() external payable {}
 }
+
+/// @dev Takes the input, delivers nothing, and reports success. Stands in for a compromised or
+///      simply broken venue, to prove the vault trusts its own balance rather than the return value.
+contract LyingVenue is ISpotVenue {
+    using SafeERC20 for IERC20;
+
+    function swapExactIn(address tokenIn, address, uint256 amountIn, uint256 minAmountOut, address)
+        external
+        returns (uint256)
+    {
+        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
+        return minAmountOut; // a lie
+    }
+}

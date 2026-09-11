@@ -13,7 +13,7 @@ import {MockERC20} from "./mocks/MockERC20.sol";
 import {MockOracle} from "./mocks/MockOracle.sol";
 import {MockWMON} from "./mocks/MockKuru.sol";
 import {IMonadStaking} from "../src/interfaces/external/IMonadStaking.sol";
-import {MockDeskVenue, MockStakingPrecompile} from "./mocks/MockProtocols.sol";
+import {MockDeskVenue, MockStakingPrecompile, LyingVenue} from "./mocks/MockProtocols.sol";
 
 /// @dev Identical to the deployed vault except that it points at a mock precompile.
 contract TestableVault is DeltaMonVault {
@@ -710,6 +710,98 @@ contract DeltaMonVaultTest is Test {
         vm.prank(alice);
         uint256 out = vault.redeem(shares_alice, alice, alice);
         assertApproxEqAbs(out, 1000e6, 2);
+    }
+
+    // ───────────────────────────── pre-mainnet hardening ─────────────────────────────
+
+    function test_venueChangeIsTimelocked() public {
+        LyingVenue liar = new LyingVenue();
+
+        vm.prank(admin);
+        vault.proposeVenue(ISpotVenue(address(liar)), IPriceOracle(address(oracle)));
+        assertEq(address(vault.spotVenue()), address(venue)); // unchanged for now
+
+        vm.prank(admin);
+        vm.expectPartialRevert(DeltaMonVault.VenueTimelockActive.selector);
+        vault.applyVenue();
+
+        // A depositor who dislikes the proposal has longer than the redemption deadline to leave.
+        vm.warp(block.timestamp + 3 days + 1);
+        vm.prank(admin);
+        vault.applyVenue();
+        assertEq(address(vault.spotVenue()), address(liar));
+    }
+
+    function test_venueChangeCanBeCancelled() public {
+        LyingVenue liar = new LyingVenue();
+        vm.prank(admin);
+        vault.proposeVenue(ISpotVenue(address(liar)), IPriceOracle(address(oracle)));
+        vm.prank(admin);
+        vault.cancelVenueChange();
+        vm.warp(block.timestamp + 4 days);
+        vm.prank(admin);
+        vm.expectRevert(DeltaMonVault.NoVenueChangePending.selector);
+        vault.applyVenue();
+    }
+
+    function test_swapRevertsWhenTheVenueDeliversNothing() public {
+        _deposit(alice, 1000e6);
+        LyingVenue liar = new LyingVenue();
+        vm.prank(admin);
+        vault.proposeVenue(ISpotVenue(address(liar)), IPriceOracle(address(oracle)));
+        vm.warp(block.timestamp + 3 days + 1);
+        vm.prank(admin);
+        vault.applyVenue();
+
+        // The venue claims it paid out. The vault checks its own balance and refuses.
+        vm.prank(admin);
+        vm.expectPartialRevert(DeltaMonVault.VenueShortchanged.selector);
+        vault.swapUsdcForMon(500e6, 0);
+        assertEq(vault.usdcBalance(), 1000e6);
+    }
+
+    function test_deployingUsdcCannotInflateTheSharePriceViaAccruedFees() public {
+        _deposit(alice, 1000e6);
+        _deposit(bob, 1000e6);
+        usdc.mint(address(vault), 400e6); // +20 % for both
+
+        uint256 aliceShares = vault.balanceOf(alice);
+        vm.prank(alice);
+        vault.redeem(aliceShares, alice, alice);
+        uint256 fees = vault.accruedFees();
+        assertApproxEqAbs(fees, 20e6, 2);
+
+        uint256 bobValueBefore = vault.convertToAssets(vault.balanceOf(bob));
+        assertApproxEqAbs(bobValueBefore, 1200e6, 2);
+
+        // Deploy almost everything, leaving less idle USDC than the fee that is owed.
+        vm.prank(admin);
+        vault.swapUsdcForMon(1210e6, 0);
+        assertLt(vault.usdcBalance(), fees);
+
+        // Bob's claim must not move just because the USDC backing the fee was put to work.
+        assertApproxEqAbs(vault.convertToAssets(vault.balanceOf(bob)), bobValueBefore, 2);
+    }
+
+    function test_dustTopUpCannotRefreshAStaleMark() public {
+        _deposit(alice, 1000e6);
+        _fundManager(400e6);
+
+        vm.warp(block.timestamp + 7 hours);
+        vm.prank(bob);
+        vm.expectRevert(DeltaMonVault.StalePerpReport.selector);
+        vault.deposit(100e6, bob);
+
+        // Topping up must not pass for a fresh mark.
+        vm.prank(admin);
+        vault.sendFundPerpManager(perpManager, address(usdc), 1);
+        vm.prank(bob);
+        vm.expectRevert(DeltaMonVault.StalePerpReport.selector);
+        vault.deposit(100e6, bob);
+
+        vm.prank(admin);
+        vault.reportPerpPnl(0);
+        _deposit(bob, 100e6);
     }
 
     // ───────────────────────────── fuzz ─────────────────────────────

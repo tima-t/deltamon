@@ -189,6 +189,31 @@ Enrol with scope 2, which is trade and implies read. Withdrawals are impossible 
 `PERPL_IP_CIDRS` to your backend's address so a leaked key is useless from anywhere else, and delete
 `PERPL_ENROLL_PRIVATE_KEY` from the environment once enrolment is done.
 
+## Pre-mainnet hardening
+
+Four things were found and fixed while reviewing this for a real deployment.
+
+**The venue and the oracle were a drain path.** Both are trusted by the swap code, so an admin who
+pointed them at contracts they controlled could have taken the book. Changing either now goes through
+`proposeVenue` and waits three days, which is deliberately longer than the redemption deadline so a
+depositor who dislikes the proposal can leave first. `cancelVenueChange` withdraws a proposal.
+
+**The vault believed the venue's own report of what it paid.** A swap now measures the balance before
+and after and reverts with `VenueShortchanged` if less arrived than the oracle floor demanded. A test
+points the vault at a venue that takes the input, delivers nothing and claims success.
+
+**Accrued fees were subtracted from the idle USDC rather than from the whole book.** Once the idle
+balance fell below the fee owed, the shortfall silently vanished and every remaining holder's share
+price rose. It now comes off `grossAssets`, so deploying the USDC behind a fee changes nothing.
+
+**Topping up a manager refreshed the reporting clock.** That let dust transfers keep a stale mark
+alive while deposits and redemptions kept pricing against it. The clock now starts only when the book
+goes from empty to funded, where a zero result is true by definition.
+
+Separately, the deploy script now sets the oracle staleness window to one hour rather than a day. The
+MON/USD feed was measured updating every thirty seconds, so an hour is generous while still refusing
+a price that has genuinely gone dark.
+
 ## Kuru's MON book is thin on the sell side
 
 Measured on a fork by `test_probeMonRoundTripDepth`, which walks increasing sizes until the book
