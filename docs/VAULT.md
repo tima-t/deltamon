@@ -77,6 +77,36 @@ Fork tests in `test/fork/DeltaMonMainnetFork.t.sol` drive live contracts.
 - The vault opens its own account on the real Perpl Exchange, turns on order forwarding, and takes
   collateral back out.
 
+## Perp managers
+
+Because Perpl's on-chain order ABI is undocumented and contract-owned API keys are unconfirmed, the
+short leg can also be run by a person or bot rather than by the contract.
+
+| Function                                      | Who     | What it does                                     |
+| --------------------------------------------- | ------- | ------------------------------------------------ |
+| `controlPerpManagers(manager, allowed)`       | admin   | adds or removes an address from the manager list |
+| `sendFundPerpManager(manager, token, amount)` | admin   | sends USDC or AUSD to a listed manager           |
+| `perpManagerDeposit(token, amount)`           | manager | returns USDC or AUSD, minting no shares          |
+| `setMaxPerpAllocation(bps)`                   | admin   | ceiling on the whole perp book                   |
+
+**Read this part carefully, because it changes the trust model.** `sendFundPerpManager` is a real
+transfer to an externally owned address. Once it lands, only that address can move it, and the vault
+has no way to claw it back. Every other path in this vault is enforced by code. This one is not, and
+rests on trusting the manager.
+
+Four things bound it rather than eliminate it.
+
+- The perp book cannot exceed `maxPerpAllocationBps` of the vault, fifty percent by default, and the
+  ceiling is measured after the value leaves so it is never double counted.
+- Only USDC and AUSD can be sent. Nothing else in the vault is reachable this way.
+- Funding is frozen while the vault is paused and while a redemption request is past its deadline.
+- What a manager holds stays on the books as `perpManagerOutstanding`, so the share price keeps
+  counting it and the admin has to mark losses through `reportPerpPnl` for the number to fall.
+
+Returns are a repayment of capital, not a subscription. No shares are minted, so anything returned
+above what was sent is profit that lands with existing depositors. A manager removed from the list
+can still return what they hold, so cutting off a bad actor never strands the funds they have.
+
 ## Can the admin's own key drain the Perpl collateral?
 
 No, and this is tested rather than argued. `test_adminKeyCannotTouchPerplCollateral` opens the

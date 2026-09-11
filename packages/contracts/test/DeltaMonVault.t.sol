@@ -412,7 +412,7 @@ contract DeltaMonVaultTest is Test {
         _openPerpl(500e6);
 
         assertEq(vault.perplPrincipal(), 500e6);
-        assertEq(vault.perplEquity(), 500e6);
+        assertEq(vault.perpEquity(), 500e6);
         assertApproxEqRel(vault.totalAssets(), 1000e6, 1e12);
         assertEq(perpl.collateralOf(address(vault)), 500e6);
     }
@@ -422,13 +422,13 @@ contract DeltaMonVaultTest is Test {
         _openPerpl(500e6);
 
         vm.prank(admin);
-        vault.reportPerplPnl(50e6);
-        assertEq(vault.perplEquity(), 550e6);
+        vault.reportPerpPnl(50e6);
+        assertEq(vault.perpEquity(), 550e6);
         assertApproxEqRel(vault.totalAssets(), 1050e6, 1e12);
 
         vm.prank(admin);
         vm.expectRevert(DeltaMonVault.PnlOutOfBand.selector);
-        vault.reportPerplPnl(300e6); // band is 50 % of 500
+        vault.reportPerpPnl(300e6); // band is 50 % of 500
     }
 
     function test_staleReportBlocksDepositsAndExits() public {
@@ -437,15 +437,15 @@ contract DeltaMonVaultTest is Test {
 
         vm.warp(block.timestamp + 7 hours);
         vm.prank(bob);
-        vm.expectRevert(DeltaMonVault.StalePerplReport.selector);
+        vm.expectRevert(DeltaMonVault.StalePerpReport.selector);
         vault.deposit(100e6, bob);
 
         vm.prank(alice);
-        vm.expectRevert(DeltaMonVault.StalePerplReport.selector);
+        vm.expectRevert(DeltaMonVault.StalePerpReport.selector);
         vault.redeem(1e18, alice, alice);
 
         vm.prank(admin);
-        vault.reportPerplPnl(0);
+        vault.reportPerpPnl(0);
         _deposit(bob, 100e6);
     }
 
@@ -470,6 +470,199 @@ contract DeltaMonVaultTest is Test {
         vm.prank(admin);
         vault.perplAllowOrderForwarding(true);
         assertTrue(perpl.orderForwarding(address(vault)));
+    }
+
+    // ───────────────────────────── perp managers ─────────────────────────────
+
+    address perpManager = makeAddr("perpManager");
+
+    function _whitelistManager() internal {
+        vm.prank(admin);
+        vault.controlPerpManagers(perpManager, true);
+    }
+
+    function test_onlyWhitelistedManagerCanBeFunded() public {
+        _deposit(alice, 1000e6);
+        vm.prank(admin);
+        vm.expectPartialRevert(DeltaMonVault.NotAPerpManager.selector);
+        vault.sendFundPerpManager(perpManager, address(usdc), 100e6);
+
+        _whitelistManager();
+        vm.prank(admin);
+        vault.sendFundPerpManager(perpManager, address(usdc), 100e6);
+        assertEq(usdc.balanceOf(perpManager), 100e6);
+    }
+
+    function test_fundingAManagerDoesNotChangeVaultValue() public {
+        _deposit(alice, 1000e6);
+        _whitelistManager();
+
+        vm.prank(admin);
+        vault.sendFundPerpManager(perpManager, address(usdc), 400e6);
+
+        assertEq(vault.perpManagerOutstanding(perpManager), 400e6);
+        assertEq(vault.perpManagerDeployed(), 400e6);
+        assertEq(vault.usdcBalance(), 600e6);
+        assertEq(vault.totalAssets(), 1000e6); // still counted, just held elsewhere
+        assertEq(vault.availableLiquidity(), 600e6);
+    }
+
+    function test_managerReturnMintsNoShares() public {
+        _deposit(alice, 1000e6);
+        _whitelistManager();
+        vm.prank(admin);
+        vault.sendFundPerpManager(perpManager, address(usdc), 400e6);
+
+        uint256 supplyBefore = vault.totalSupply();
+        vm.startPrank(perpManager);
+        usdc.approve(address(vault), 400e6);
+        vault.perpManagerDeposit(address(usdc), 400e6);
+        vm.stopPrank();
+
+        assertEq(vault.totalSupply(), supplyBefore); // a return of capital, not a subscription
+        assertEq(vault.balanceOf(perpManager), 0);
+        assertEq(vault.perpManagerOutstanding(perpManager), 0);
+        assertEq(vault.perpManagerDeployed(), 0);
+        assertEq(vault.usdcBalance(), 1000e6);
+        assertEq(vault.totalAssets(), 1000e6);
+    }
+
+    function test_managerProfitGoesToDepositorsNotTheManager() public {
+        _deposit(alice, 1000e6);
+        _whitelistManager();
+        vm.prank(admin);
+        vault.sendFundPerpManager(perpManager, address(usdc), 400e6);
+
+        usdc.mint(perpManager, 100e6); // funding income earned on the short
+        vm.startPrank(perpManager);
+        usdc.approve(address(vault), 500e6);
+        vault.perpManagerDeposit(address(usdc), 500e6);
+        vm.stopPrank();
+
+        assertEq(vault.perpManagerDeployed(), 0);
+        assertEq(vault.totalAssets(), 1100e6);
+        assertEq(vault.totalSupply(), 1000e18);
+        assertApproxEqRel(vault.convertToAssets(vault.balanceOf(alice)), 1100e6, 1e12);
+    }
+
+    function test_reportedLossOnTheManagerBookReducesValue() public {
+        _deposit(alice, 1000e6);
+        _whitelistManager();
+        vm.prank(admin);
+        vault.sendFundPerpManager(perpManager, address(usdc), 400e6);
+
+        vm.prank(admin);
+        vault.reportPerpPnl(-100e6);
+        assertEq(vault.perpEquity(), 300e6);
+        assertEq(vault.totalAssets(), 900e6);
+
+        vm.startPrank(perpManager);
+        usdc.approve(address(vault), 300e6);
+        vault.perpManagerDeposit(address(usdc), 300e6);
+        vm.stopPrank();
+
+        assertEq(vault.perpManagerOutstanding(perpManager), 100e6);
+        assertEq(vault.totalAssets(), 900e6); // the loss stays booked, not conjured back
+    }
+
+    function test_perpAllocationCeilingEnforced() public {
+        _deposit(alice, 1000e6);
+        _whitelistManager();
+
+        vm.prank(admin);
+        vm.expectPartialRevert(DeltaMonVault.PerpAllocationTooHigh.selector);
+        vault.sendFundPerpManager(perpManager, address(usdc), 600e6); // over the 50 % default
+
+        vm.prank(admin);
+        vault.sendFundPerpManager(perpManager, address(usdc), 500e6);
+        assertEq(vault.perpManagerDeployed(), 500e6);
+
+        vm.prank(admin);
+        vault.setMaxPerpAllocation(2000);
+        vm.prank(admin);
+        vm.expectPartialRevert(DeltaMonVault.PerpAllocationTooHigh.selector);
+        vault.sendFundPerpManager(perpManager, address(usdc), 1);
+    }
+
+    function test_removedManagerCanStillReturnWhatTheyHold() public {
+        _deposit(alice, 1000e6);
+        _whitelistManager();
+        vm.prank(admin);
+        vault.sendFundPerpManager(perpManager, address(usdc), 400e6);
+
+        vm.prank(admin);
+        vault.controlPerpManagers(perpManager, false);
+        assertFalse(vault.isPerpManager(perpManager));
+
+        vm.prank(admin);
+        vm.expectPartialRevert(DeltaMonVault.NotAPerpManager.selector);
+        vault.sendFundPerpManager(perpManager, address(usdc), 1e6);
+
+        vm.startPrank(perpManager);
+        usdc.approve(address(vault), 400e6);
+        vault.perpManagerDeposit(address(usdc), 400e6);
+        vm.stopPrank();
+        assertEq(vault.perpManagerOutstanding(perpManager), 0);
+    }
+
+    function test_strangerCannotUseTheReturnPath() public {
+        _deposit(alice, 1000e6);
+        usdc.mint(bob, 100e6);
+        vm.startPrank(bob);
+        usdc.approve(address(vault), 100e6);
+        vm.expectPartialRevert(DeltaMonVault.NotAPerpManager.selector);
+        vault.perpManagerDeposit(address(usdc), 100e6);
+        vm.stopPrank();
+    }
+
+    function test_onlySettlementTokensCanMove() public {
+        _deposit(alice, 1000e6);
+        _whitelistManager();
+        vm.prank(admin);
+        vm.expectPartialRevert(DeltaMonVault.UnsupportedToken.selector);
+        vault.sendFundPerpManager(perpManager, address(wmon), 1e18);
+    }
+
+    function test_pauseStopsNewRiskButNotUnwinding() public {
+        _deposit(alice, 1000e6);
+        _whitelistManager();
+        vm.prank(admin);
+        vault.sendFundPerpManager(perpManager, address(usdc), 400e6);
+        _buyMon(200e6);
+
+        vm.prank(admin);
+        vault.pause();
+
+        vm.startPrank(admin);
+        vm.expectRevert();
+        vault.sendFundPerpManager(perpManager, address(usdc), 1e6);
+        vm.expectRevert();
+        vault.swapUsdcForMon(1e6, 0);
+        vm.stopPrank();
+
+        // Unwinding is still open.
+        uint256 monHeld = wmon.balanceOf(address(vault));
+        vm.prank(admin);
+        vault.swapMonForUsdc(monHeld, 0);
+        vm.startPrank(perpManager);
+        usdc.approve(address(vault), 400e6);
+        vault.perpManagerDeposit(address(usdc), 400e6);
+        vm.stopPrank();
+        assertEq(vault.perpManagerDeployed(), 0);
+    }
+
+    function test_fundingAManagerIsFrozenWhileRedemptionsAreOverdue() public {
+        _deposit(alice, 1000e6);
+        _whitelistManager();
+        _buyMon(900e6);
+        uint256 shares = vault.balanceOf(alice);
+        vm.prank(alice);
+        vault.requestRedeem(shares);
+        vm.warp(block.timestamp + 37 hours);
+
+        vm.prank(admin);
+        vm.expectRevert(DeltaMonVault.RedemptionsOverdue.selector);
+        vault.sendFundPerpManager(perpManager, address(usdc), 1e6);
     }
 
     // ───────────────────────────── access and config ─────────────────────────────
