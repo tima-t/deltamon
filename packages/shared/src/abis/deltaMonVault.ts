@@ -60,6 +60,19 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
+    "name": "CONFIG_TIMELOCK",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "FEE_TIMELOCK",
     "inputs": [],
     "outputs": [
@@ -86,7 +99,33 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
+    "name": "MAX_QUEUE_SCAN",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "MAX_SWAP_SLIPPAGE_BPS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "ORACLE_CALL_GAS",
     "inputs": [],
     "outputs": [
       {
@@ -158,6 +197,25 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
+    "name": "advanceQueue",
+    "inputs": [
+      {
+        "name": "maxSteps",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "allowance",
     "inputs": [
       {
@@ -182,7 +240,34 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
+    "name": "applyMaxPerpAllocation",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "applyPerformanceFee",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "applyPerpManager",
+    "inputs": [
+      {
+        "name": "manager",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "applyRiskParams",
     "inputs": [],
     "outputs": [],
     "stateMutability": "nonpayable"
@@ -587,6 +672,19 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
+    "name": "keeper",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "maxDeposit",
     "inputs": [
       {
@@ -816,6 +914,19 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
+    "name": "oracleIsLive",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "owner",
     "inputs": [],
     "outputs": [
@@ -862,6 +973,32 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
+    "name": "pendingMaxPerpAllocationAt",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingMaxPerpAllocationBps",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "pendingOracle",
     "inputs": [],
     "outputs": [
@@ -895,6 +1032,52 @@ export const deltaMonVaultAbi = [
         "name": "",
         "type": "uint16",
         "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingRiskParams",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "maxSwapSlippageBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "stableParityBandBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "perpPnlBandBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "perpReportMaxAge",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "maxValidatorCommission",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingRiskParamsAt",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
       }
     ],
     "stateMutability": "view"
@@ -1008,6 +1191,25 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
+    "name": "perpManagerEffectiveAt",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "perpManagerOutstanding",
     "inputs": [
       {
@@ -1086,32 +1288,6 @@ export const deltaMonVaultAbi = [
         "name": "",
         "type": "int256",
         "internalType": "int256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "perplAccountOpened",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "perplPrincipal",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -1293,6 +1469,40 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
+    "name": "redeemInKind",
+    "inputs": [
+      {
+        "name": "shares",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "receiver",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "assetsOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "monOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "ausdOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "redemptionCount",
     "inputs": [],
     "outputs": [
@@ -1339,6 +1549,11 @@ export const deltaMonVaultAbi = [
         "name": "settled",
         "type": "bool",
         "internalType": "bool"
+      },
+      {
+        "name": "feeBps",
+        "type": "uint16",
+        "internalType": "uint16"
       }
     ],
     "stateMutability": "view"
@@ -1348,7 +1563,7 @@ export const deltaMonVaultAbi = [
     "name": "renounceOwnership",
     "inputs": [],
     "outputs": [],
-    "stateMutability": "nonpayable"
+    "stateMutability": "pure"
   },
   {
     "type": "function",
@@ -1418,6 +1633,19 @@ export const deltaMonVaultAbi = [
         "name": "allowed",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setKeeper",
+    "inputs": [
+      {
+        "name": "keeper_",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [],
@@ -2048,6 +2276,38 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "event",
+    "name": "KeeperSet",
+    "inputs": [
+      {
+        "name": "keeper",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "MaxPerpAllocationProposed",
+    "inputs": [
+      {
+        "name": "bps",
+        "type": "uint16",
+        "indexed": false,
+        "internalType": "uint16"
+      },
+      {
+        "name": "effectiveAt",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "MaxPerpAllocationUpdated",
     "inputs": [
       {
@@ -2137,6 +2397,25 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "event",
+    "name": "PerpManagerProposed",
+    "inputs": [
+      {
+        "name": "manager",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "effectiveAt",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "PerpManagerSet",
     "inputs": [
       {
@@ -2156,6 +2435,19 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "event",
+    "name": "PerpMarkInvalidated",
+    "inputs": [
+      {
+        "name": "pnl",
+        "type": "int256",
+        "indexed": false,
+        "internalType": "int256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "PerpPnlReported",
     "inputs": [
       {
@@ -2166,6 +2458,49 @@ export const deltaMonVaultAbi = [
       },
       {
         "name": "deployed",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RedeemedInKind",
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "receiver",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "shares",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "assetsOut",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "monOut",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "ausdOut",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -2281,6 +2616,19 @@ export const deltaMonVaultAbi = [
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RiskParamsProposed",
+    "inputs": [
+      {
+        "name": "effectiveAt",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
       }
     ],
     "anonymous": false
@@ -2571,6 +2919,22 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "error",
+    "name": "BelowMinRedemption",
+    "inputs": [
+      {
+        "name": "shares",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "minimum",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "ERC20InsufficientAllowance",
     "inputs": [
       {
@@ -2762,6 +3126,11 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "error",
+    "name": "InsufficientGasForOracleCheck",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InsufficientLiquidity",
     "inputs": [
       {
@@ -2783,6 +3152,11 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "error",
+    "name": "NoChangePending",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "NoFeeTimelockPending",
     "inputs": []
   },
@@ -2794,6 +3168,17 @@ export const deltaMonVaultAbi = [
   {
     "type": "error",
     "name": "NotAPerpManager",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "NotKeeperOrOwner",
     "inputs": [
       {
         "name": "account",
@@ -2821,6 +3206,11 @@ export const deltaMonVaultAbi = [
   {
     "type": "error",
     "name": "NothingToClaim",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OracleIsLive",
     "inputs": []
   },
   {
@@ -2878,6 +3268,11 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "error",
+    "name": "RenounceDisabled",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "SafeCastOverflowedUintToInt",
     "inputs": [
       {
@@ -2907,6 +3302,17 @@ export const deltaMonVaultAbi = [
     "type": "error",
     "name": "StalePerpReport",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TimelockActive",
+    "inputs": [
+      {
+        "name": "effectiveAt",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ]
   },
   {
     "type": "error",

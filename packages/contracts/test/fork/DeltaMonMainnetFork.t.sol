@@ -42,8 +42,10 @@ contract DeltaMonMainnetForkTest is Test {
         vm.createSelectFork(vm.envOr("MONAD_RPC_URL", string("https://rpc.monad.xyz")));
 
         oracle = new ChainlinkOracle(admin);
+        // Generous on purpose: some tests warp past the three day config timelock, and the forked
+        // feed cannot update while they do.
         vm.prank(admin);
-        oracle.setFeed(WMON, CHAINLINK_MON_USD, address(0), 1 days);
+        oracle.setFeed(WMON, CHAINLINK_MON_USD, address(0), 7 days);
 
         adapter = new KuruSpotAdapter(KURU_ROUTER, WMON, admin);
         address[] memory monRoute = new address[](1);
@@ -81,6 +83,16 @@ contract DeltaMonMainnetForkTest is Test {
     modifier onlyFork() {
         vm.skip(!enabled);
         _;
+    }
+
+    /// @dev The vault's default floor is half a percent per leg, which a live book can exceed on a
+    ///      round trip. Widening it is a loosening, so it waits out the config timelock as on mainnet.
+    function _widenSlippageForTheLiveBook() internal {
+        vm.prank(admin);
+        vault.setRiskParams(300, 100, 2e17, 5000, 6 hours);
+        skip(vault.CONFIG_TIMELOCK());
+        vm.prank(admin);
+        vault.applyRiskParams();
     }
 
     function test_depositThenRealKuruSwap() public onlyFork {
@@ -153,8 +165,7 @@ contract DeltaMonMainnetForkTest is Test {
 
     /// @notice Measures the round-trip size Kuru's MON book can actually absorb right now.
     function test_probeMonRoundTripDepth() public onlyFork {
-        vm.prank(admin);
-        vault.setRiskParams(300, 100, 2e17, 5000, 6 hours);
+        _widenSlippageForTheLiveBook();
         vm.prank(alice);
         vault.deposit(2000e6, alice);
 
@@ -178,10 +189,8 @@ contract DeltaMonMainnetForkTest is Test {
     }
 
     function test_fullCycleWithProfitFee() public onlyFork {
-        // The vault's default floor is half a percent per leg, which a live book can exceed on a
-        // round trip. Widen it for this test so it measures the fee path, not today's spread.
-        vm.prank(admin);
-        vault.setRiskParams(300, 100, 2e17, 5000, 6 hours);
+        // Widen the floor so this measures the fee path, not today's spread.
+        _widenSlippageForTheLiveBook();
 
         vm.prank(alice);
         vault.deposit(1000e6, alice);

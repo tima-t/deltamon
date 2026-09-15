@@ -1,30 +1,45 @@
 # DeltaMonVault
 
-The vault depositors and the admin actually use. USDC in, **sdMON** out, one admin who allocates
-and can never leave with anything but the fee.
+The vault depositors and the admin actually use. USDC in, **sdMON** out. A multisig admin
+allocates the book, a keeper key does routine upkeep, and anything that widens what the admin can
+reach waits three days, longer than it takes a depositor to leave.
 
 ## Roles
 
-|                     | Can do                                                         | Cannot do                              |
-| ------------------- | -------------------------------------------------------------- | -------------------------------------- |
-| Depositor           | deposit, redeem, queue a redemption, cancel it, transfer sdMON | nothing else                           |
-| Admin, the deployer | swap, stake, Perpl collateral, fee settings, pause             | move any asset out except accrued fees |
+|                   | Can do                                                                                  | Cannot do                                                 |
+| ----------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Depositor         | deposit, redeem, queue a redemption, cancel it, redeem in kind while the oracle is down | nothing else                                              |
+| Admin, a multisig | swap, stake, fund perp managers, fee and risk settings, pause                           | skip a timelock, renounce ownership                       |
+| Keeper, a hot key | mark the perp book inside the band, claim staking rewards                               | trade, stake, fund a manager, change settings, move funds |
 
 The admin surface is a fixed list of named functions. There is no generic call or delegatecall
 anywhere in the contract, so no other protocol is reachable even if the admin wants one.
 
+One thing depositors should understand plainly: perp managers are custodial. Funding one is a
+real transfer to an address the vault cannot claw back from, so the admin, by choosing managers,
+can put up to the perp ceiling at risk. What the vault guarantees is that adding a manager, or
+raising the ceiling, is announced three days before it can take effect.
+
 ## What the admin can call
 
-| Function                                                                    | Notes                                                   |
-| --------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `swapUsdcForMon` / `swapMonForUsdc`                                         | Kuru only, floored against Chainlink MON/USD            |
-| `swapUsdcForAusd` / `swapAusdForUsdc`                                       | Kuru only, floored against a parity band                |
-| `stake` / `unstake`                                                         | Monad's staking precompile, validator commission capped |
-| `claimUnstaked` / `claimStakingRewards`                                     | permissionless, funds can only land back in the vault   |
-| `perplCreateAccount` / `perplDepositCollateral` / `perplWithdrawCollateral` | Perpl Exchange only                                     |
-| `perplAllowOrderForwarding`                                                 | lets Perpl forward the admin's API-signed orders        |
-| `reportPerplPnl`                                                            | marks the open position, bounded and time-limited       |
-| `withdrawFees`                                                              | the only outbound transfer available to the admin       |
+| Function                                                 | Notes                                                                 |
+| -------------------------------------------------------- | --------------------------------------------------------------------- |
+| `swapUsdcForMon` / `swapMonForUsdc`                      | Kuru only, floored against Chainlink MON/USD                          |
+| `swapUsdcForAusd` / `swapAusdForUsdc`                    | Kuru only, floored against a parity band                              |
+| `stake` / `unstake`                                      | Monad's staking precompile, validator commission capped               |
+| `controlPerpManagers` / `applyPerpManager`               | adding a manager waits three days; removing one is immediate          |
+| `sendFundPerpManager`                                    | USDC or AUSD to a listed manager, inside the perp ceiling             |
+| `setMaxPerpAllocation` / `applyMaxPerpAllocation`        | raising the ceiling waits three days; lowering it is immediate        |
+| `setRiskParams` / `applyRiskParams`                      | loosening any limit waits three days; tightening is immediate         |
+| `proposePerformanceFee` / `applyPerformanceFee`          | a rise waits three days; a cut is immediate and cancels a queued rise |
+| `proposeVenue` / `applyVenue`                            | a new swap venue or oracle waits three days                           |
+| `reportPerpPnl`                                          | marks the perp book; the admin may also mark a loss past the band     |
+| `setKeeper`, `setLimits`, `setWhitelistEnabled`, `pause` | immediate; none of them widen what the admin can reach                |
+| `withdrawFees`                                           | the fee accrued on depositors' profits, and nothing else              |
+
+`claimUnstaked`, `claimRedemption` and `advanceQueue` are permissionless, since they can only
+bring funds back into the vault or pay a depositor what is theirs. `renounceOwnership` is
+disabled: with no owner, nothing could unwind MON, unstake or recall the perp book.
 
 ## The performance fee
 
@@ -43,14 +58,34 @@ fee          = profit * performanceFeeBps / 10000
 paid out     = gross - fee
 ```
 
-The fee is capped at ten percent. Raising it waits one day; lowering it takes effect at once.
+The fee is capped at ten percent. Raising it waits three days, longer than the redemption
+deadline, and lowering it takes effect at once. A queued redemption is charged at most the fee in
+force when it was requested, so a rise that lands while it waits never reaches it.
 
 ## Withdrawals
 
 Redeem instantly whenever idle USDC covers it. Otherwise queue the request. The admin has 36 hours
 to make the USDC available. Past that deadline every allocation function freezes, so the admin can
 only unwind towards the queue until it clears. Cancelling a queued request returns the shares and
-the cost basis untouched.
+the cost basis untouched. The keeper settles queued requests oldest first as soon as the idle USDC
+covers them, and anyone else may too.
+
+A request must be worth at least one whole share, unless it is the holder's whole balance. No
+queue operation walks more than 64 entries in one call, so a run of settled requests can never
+make the oldest one too expensive to settle. If the head falls behind, `advanceQueue` moves it on,
+and until it does the vault treats the queue as overdue rather than risk hiding a late request.
+
+### When the oracle is down
+
+Every normal exit prices the vault, and pricing needs Chainlink. If the feed cannot answer,
+`redeemInKind` opens: a holder takes their share of the vault's idle USDC, wrapped MON and AUSD
+directly, with no price involved. Their share of staked MON, unbonding MON and the perp book stays
+behind with the holders who remain, so nobody who stays can lose by it. No performance fee is
+charged, since there is no price to measure a profit against. Deposits stay shut until the feed
+returns.
+
+The vault always hands the oracle its full gas allowance when checking whether it is live, so
+nobody can fake an outage by sending just too little gas for the oracle to answer.
 
 ## How the vault is valued
 
@@ -58,14 +93,20 @@ the cost basis untouched.
 totalAssets = idle USDC
             + all MON (wrapped, native, delegated, unbonding) x Chainlink MON/USD
             + AUSD held
-            + Perpl collateral posted +/- reported result
+            + value sent to perp managers +/- reported result
 ```
 
 Accrued fees are excluded, so the share price never counts money owed to the admin.
 
-Staking rewards are counted only once claimed, which understates value slightly between claims.
-That is the safe direction: nobody can mint shares cheaply against a number the vault has not
-actually received.
+The perp result is reported by the keeper or the admin. A mark older than six hours stops deposits
+and drops any unconfirmed gain, while a reported loss still counts. When a book empties, the mark
+resets to zero. When a manager returns more than it was sent, the excess comes off the mark and the
+mark is treated as stale until reported again, so a realised gain is never counted twice.
+
+Staking rewards count only once claimed, so each claim steps the share price up. That is why only
+the keeper or the admin may claim: left open, a bot could deposit, claim and redeem in one
+transaction and take a slice of rewards it never earned. The keeper claims often, which keeps every
+step too small to be worth sandwiching.
 
 ## What was verified against Monad mainnet
 
@@ -74,8 +115,8 @@ Fork tests in `test/fork/DeltaMonMainnetFork.t.sol` drive live contracts.
 - A 6,000 USDC swap fills on Kuru's real MON book. A full round trip costs about 0.13 percent.
 - The vault delegates to a real validator through the staking precompile. Contracts can stake:
   Magma, aPriori and Kintsu all hold delegations the same way.
-- The vault opens its own account on the real Perpl Exchange, turns on order forwarding, and takes
-  collateral back out.
+- The earlier design opened the vault's own account on the real Perpl Exchange, turned on order
+  forwarding, and took collateral back out.
 
 ## Perp managers
 
@@ -84,26 +125,29 @@ short leg is run by a person or bot rather than by the contract. The vault no lo
 account of its own: the functions that opened one and moved its collateral were removed once this
 route was chosen, since carrying two paths to the same exposure only widened the surface to audit.
 
-| Function                                      | Who     | What it does                                     |
-| --------------------------------------------- | ------- | ------------------------------------------------ |
-| `controlPerpManagers(manager, allowed)`       | admin   | adds or removes an address from the manager list |
-| `sendFundPerpManager(manager, token, amount)` | admin   | sends USDC or AUSD to a listed manager           |
-| `perpManagerDeposit(token, amount)`           | manager | returns USDC or AUSD, minting no shares          |
-| `setMaxPerpAllocation(bps)`                   | admin   | ceiling on the whole perp book                   |
+| Function                                      | Who     | What it does                                                         |
+| --------------------------------------------- | ------- | -------------------------------------------------------------------- |
+| `controlPerpManagers(manager, true)`          | admin   | proposes a manager; `applyPerpManager` activates it after three days |
+| `controlPerpManagers(manager, false)`         | admin   | removes a manager at once, and cancels a pending add                 |
+| `sendFundPerpManager(manager, token, amount)` | admin   | sends USDC or AUSD to a listed manager                               |
+| `perpManagerDeposit(token, amount)`           | manager | returns USDC or AUSD, minting no shares                              |
+| `setMaxPerpAllocation(bps)`                   | admin   | ceiling on the whole perp book; a raise waits three days             |
 
 **Read this part carefully, because it changes the trust model.** `sendFundPerpManager` is a real
 transfer to an externally owned address. Once it lands, only that address can move it, and the vault
 has no way to claw it back. Every other path in this vault is enforced by code. This one is not, and
 rests on trusting the manager.
 
-Four things bound it rather than eliminate it.
+Five things bound it rather than eliminate it.
 
 - The perp book cannot exceed `maxPerpAllocationBps` of the vault, fifty percent by default, and the
   ceiling is measured after the value leaves so it is never double counted.
+- Adding a manager and raising the ceiling both wait three days, longer than the redemption
+  deadline, so a depositor who distrusts a new manager can be out before it can be funded.
 - Only USDC and AUSD can be sent. Nothing else in the vault is reachable this way.
 - Funding is frozen while the vault is paused and while a redemption request is past its deadline.
 - What a manager holds stays on the books as `perpManagerOutstanding`, so the share price keeps
-  counting it and the admin has to mark losses through `reportPerpPnl` for the number to fall.
+  counting it and a loss has to be marked through `reportPerpPnl` for the number to fall.
 
 Returns are a repayment of capital, not a subscription. No shares are minted, so anything returned
 above what was sent is profit that lands with existing depositors. A manager removed from the list
@@ -116,8 +160,9 @@ that neither the admin's key nor a stranger's could withdraw that collateral, si
 account by `msg.sender` and its only withdrawal function takes an amount and no address.
 
 That guarantee no longer applies, because the vault no longer holds Perpl collateral. The manager
-does. What protects depositors now is the allocation ceiling, the reporting gate and the freeze rules
-above, not the shape of Perpl's contract. That is a weaker guarantee and it should be read as one.
+does. What protects depositors now is the allocation ceiling, the timelocks, the reporting gate and
+the freeze rules above, not the shape of Perpl's contract. That is a weaker guarantee and it should
+be read as one.
 
 ## Getting a Perpl API key that only the admin holds
 
@@ -189,6 +234,24 @@ Enrol with scope 2, which is trade and implies read. Withdrawals are impossible 
 `PERPL_IP_CIDRS` to your backend's address so a leaked key is useless from anywhere else, and delete
 `PERPL_ENROLL_PRIVATE_KEY` from the environment once enrolment is done.
 
+## Deploying
+
+`script/DeployDeltaMon.s.sol` deploys the oracle, the Kuru adapter and the vault, then:
+
+1. Renounces ownership of the oracle and the adapter. Neither can be reconfigured afterwards, so a
+   new feed or a new route means a new contract, which can only reach the vault through the three
+   day venue timelock.
+2. Sets the keeper from `KEEPER_ADDRESS`, if given.
+3. Hands the vault to `VAULT_OWNER`, which must be a contract such as a Safe. It becomes the admin
+   once it calls `acceptOwnership()`. `ALLOW_EOA_OWNER=true` overrides the check for a throwaway
+   deploy.
+
+Then point the backend at it with `VAULT_ADDRESS`, `KEEPER_PRIVATE_KEY`, `PERP_BOOK_URL` and
+`VALIDATOR_IDS` in `apps/be/.env`. `PERP_BOOK_URL` is a small JSON document the perp managers
+publish, `{"equity":"<USDC units>","asOf":<unix seconds>}`, giving their total holdings. Without it
+the keeper will not invent a mark, so the mark goes stale and deposits pause, which is the safe way
+to fail.
+
 ## Pre-mainnet hardening
 
 Four things were found and fixed while reviewing this for a real deployment.
@@ -235,6 +298,43 @@ behind a lower headline number and with no fresh announcement. A decrease now ca
 Separately, the deploy script now sets the oracle staleness window to one hour rather than a day. The
 MON/USD feed was measured updating every thirty seconds, so an hour is generous while still refusing
 a price that has genuinely gone dark.
+
+### Second review
+
+A second pass before deployment found seven more, each now covered by a test.
+
+**A closed book's mark came back when it reopened.** Funding an empty book restarted the report clock
+but kept the old result, so a gain from a book closed days earlier was counted again as a fresh mark.
+With two managers it did not even need a reopen: a manager returning more than it was sent brought the
+gain home as USDC while the book-wide mark still counted it. Funding an empty book now starts from a
+zero mark, and a return above what a manager was sent comes off the mark and leaves it stale until it
+is reported again.
+
+**The redemption queue could be bricked.** Settling the oldest request walked every settled entry
+behind it in one call. A griefer who queued and cancelled a few tens of thousands of requests behind
+someone else's could push that walk past Monad's 30M gas limit, locking the victim's shares and
+freezing the admin for good. Every walk is now capped at 64 entries, `advanceQueue` clears the rest in
+steps, and a request must be worth at least one whole share.
+
+**The admin could take the liquid book in one block.** Listing themselves as a perp manager and
+raising the ceiling to 100 % were both instant. The oracle and the Kuru adapter were owned by the
+admin's wallet with instant setters, which also got around the venue timelock. Adding a manager,
+raising the ceiling and loosening any risk limit now wait three days, the deploy script renounces the
+oracle and the adapter, the vault is handed to a multisig, and ownership cannot be renounced.
+
+**A fee rise could land on a request queued to avoid it.** The fee timelock was one day and the
+redemption deadline 36 hours. The timelock is now three days, and a queued request is charged at most
+the fee in force when it was made.
+
+**Anyone could sandwich a reward claim.** Rewards count only once claimed, and the claim was
+permissionless, so a bot could deposit, claim and redeem in one transaction. Only the keeper or the
+admin can claim now.
+
+**An oracle outage blocked every exit.** Every exit priced the vault, so a stale feed stopped them all
+even with idle USDC on hand. `redeemInKind` now opens while the oracle is down.
+
+**Nothing ran the vault's upkeep.** The backend keeper still drove the earlier vault. It now marks the
+perp book, claims rewards and unbonded MON, advances the queue and settles redemptions for this one.
 
 ## Kuru's MON book is thin on the sell side
 

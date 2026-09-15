@@ -6,6 +6,7 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ISpotVenue} from "../../src/interfaces/ISpotVenue.sol";
+import {IPriceOracle} from "../../src/interfaces/IPriceOracle.sol";
 import {MockERC20} from "./MockERC20.sol";
 import {MockOracle} from "./MockOracle.sol";
 
@@ -157,5 +158,23 @@ contract ReenteringVenue is ISpotVenue {
         asset.approve(vault, 100e6);
         IReenterTarget(vault).deposit(100e6, attacker);
         return 0;
+    }
+}
+
+/// @dev Prices MON correctly, but only after burning a lot of gas. If a caller could choose how much
+///      gas the oracle gets, it could starve this one and pass the failure off as an outage.
+contract GasHungryOracle is IPriceOracle {
+    uint256 public immutable burn;
+    uint256 public immutable monPrice;
+
+    constructor(uint256 burn_, uint256 monPrice_) {
+        burn = burn_;
+        monPrice = monPrice_;
+    }
+
+    function price(address) external view returns (uint256) {
+        uint256 start = gasleft();
+        while (start - gasleft() < burn) {}
+        return monPrice;
     }
 }
