@@ -1,5 +1,5 @@
 import { type Address, erc20Abi, formatUnits } from "viem";
-import { sdMonVaultAbi, type VaultStats } from "@deltamon/shared";
+import { deltaMonVaultAbi, type VaultStats } from "@deltamon/shared";
 import { env } from "../config.js";
 import { publicClient } from "../chain.js";
 
@@ -43,7 +43,7 @@ export function demoVaultStats(): VaultStats {
 }
 
 export async function readVaultStats(vault: Address): Promise<VaultStats> {
-  const c = { address: vault, abi: sdMonVaultAbi } as const;
+  const c = { address: vault, abi: deltaMonVaultAbi } as const;
   const [
     totalAssets,
     totalSupply,
@@ -51,16 +51,11 @@ export async function readVaultStats(vault: Address): Promise<VaultStats> {
     symbol,
     asset,
     usdcBalance,
-    monBalance,
+    totalMon,
     monPrice,
-    monShareBps,
-    targetMonBps,
-    driftBps,
-    thresholdBps,
     paused,
     depositCap,
     minDeposit,
-    lastRebalanceAt,
     pricePerShare,
   ] = await publicClient.multicall({
     allowFailure: false,
@@ -71,16 +66,11 @@ export async function readVaultStats(vault: Address): Promise<VaultStats> {
       { ...c, functionName: "symbol" },
       { ...c, functionName: "asset" },
       { ...c, functionName: "usdcBalance" },
-      { ...c, functionName: "monBalance" },
+      { ...c, functionName: "totalMon" },
       { ...c, functionName: "monPrice" },
-      { ...c, functionName: "monShareBps" },
-      { ...c, functionName: "targetMonBps" },
-      { ...c, functionName: "allocationDriftBps" },
-      { ...c, functionName: "rebalanceThresholdBps" },
       { ...c, functionName: "paused" },
       { ...c, functionName: "depositCap" },
       { ...c, functionName: "minDeposit" },
-      { ...c, functionName: "lastRebalanceAt" },
       { ...c, functionName: "pricePerShare" },
     ],
   });
@@ -93,9 +83,12 @@ export async function readVaultStats(vault: Address): Promise<VaultStats> {
     ],
   });
 
+  const tvlUsd = Number(formatUnits(totalAssets, assetDecimals));
   const usdcValue = Number(formatUnits(usdcBalance, assetDecimals));
   const priceUsd = Number(formatUnits(monPrice, 18));
-  const monValue = Number(formatUnits(monBalance, 18)) * priceUsd;
+  // Wrapped, native, staked and unbonding MON alike.
+  const monValue = Number(formatUnits(totalMon, 18)) * priceUsd;
+  const monShareBps = tvlUsd > 0 ? Math.round((monValue / tvlUsd) * 10_000) : 0;
 
   return {
     source: "onchain",
@@ -103,7 +96,7 @@ export async function readVaultStats(vault: Address): Promise<VaultStats> {
     vault,
     asset: assetSymbol,
     assetDecimals,
-    tvlUsd: Number(formatUnits(totalAssets, assetDecimals)),
+    tvlUsd,
     totalAssets: totalAssets.toString(),
     depositCapUsd: Number(formatUnits(depositCap, assetDecimals)),
     minDepositUsd: Number(formatUnits(minDeposit, assetDecimals)),
@@ -116,14 +109,15 @@ export async function readVaultStats(vault: Address): Promise<VaultStats> {
     },
     allocation: {
       usdc: { balance: usdcBalance.toString(), valueUsd: usdcValue },
-      mon: { balance: monBalance.toString(), valueUsd: monValue, priceUsd },
-      monShareBps: Number(monShareBps),
-      targetMonBps: Number(targetMonBps),
-      driftBps: Number(driftBps),
-      rebalanceThresholdBps: Number(thresholdBps),
+      mon: { balance: totalMon.toString(), valueUsd: monValue, priceUsd },
+      monShareBps,
+      // DeltaMonVault is admin-directed and has no target split, so the target mirrors the
+      // actual share and drift reads zero until the dashboard is reworked for this vault.
+      targetMonBps: monShareBps,
+      driftBps: 0,
+      rebalanceThresholdBps: 0,
     },
-    lastRebalanceAt:
-      lastRebalanceAt === 0n ? null : new Date(Number(lastRebalanceAt) * 1000).toISOString(),
+    lastRebalanceAt: null,
     updatedAt: new Date().toISOString(),
   };
 }

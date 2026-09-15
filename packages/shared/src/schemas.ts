@@ -68,6 +68,8 @@ export const KeeperStatusSchema = z.object({
   lastRunAt: z.string().nullable(),
   lastAction: z.string().nullable(),
   lastError: z.string().nullable(),
+  /** Conditions from the last run that only the vault's admin can resolve. */
+  alerts: z.array(z.string()),
 });
 export type KeeperStatus = z.infer<typeof KeeperStatusSchema>;
 

@@ -23,7 +23,32 @@ const EnvSchema = z.object({
     .transform((v) => v === "true" || v === "1"),
   KEEPER_PRIVATE_KEY: z.preprocess(emptyToUndefined, privateKey.optional()),
   KEEPER_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
-  REBALANCE_THRESHOLD_BPS: z.coerce.number().int().nonnegative().default(200),
+  /** Where the perp managers publish what they hold in total. See services/perpBook.ts. */
+  PERP_BOOK_URL: z.preprocess(emptyToUndefined, z.url().optional()),
+  /** A feed older than this is not marked from. */
+  PERP_BOOK_MAX_AGE_SEC: z.coerce.number().int().positive().default(300),
+  /** Re-mark early once the book has moved more than this share of what is deployed. */
+  PERP_MARK_MIN_CHANGE_BPS: z.coerce.number().int().nonnegative().default(25),
+  /** Validators the vault delegates to. Rewards and unbonded MON are claimed from these. */
+  VALIDATOR_IDS: z
+    .string()
+    .default("")
+    .refine(
+      (v) => v.split(",").every((s) => /^\d*$/.test(s.trim())),
+      "expected comma-separated validator ids",
+    )
+    .transform((v) =>
+      v
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s !== "")
+        .map((s) => BigInt(s)),
+    ),
+  /** The smallest reward claim worth a transaction, in MON. Small, frequent claims are not worth sandwiching. */
+  REWARDS_MIN_CLAIM_MON: z
+    .string()
+    .regex(/^\d+(\.\d+)?$/)
+    .default("1"),
 
   PERPL_API_URL: z.preprocess(emptyToUndefined, z.url().default(PERPL_API_URL)),
   PERPL_API_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
