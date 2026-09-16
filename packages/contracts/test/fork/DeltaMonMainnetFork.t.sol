@@ -127,11 +127,14 @@ contract DeltaMonMainnetForkTest is Test {
         assertEq(IERC20(WMON).balanceOf(address(vault)), 0);
         assertApproxEqRel(vault.totalAssets(), 1000e6, 0.01e18);
 
-        (uint256 stakeNow,,, uint256 deltaStake,,,) = STAKING.getDelegator(VALIDATOR, address(vault));
+        (uint256 stakeNow,,, uint256 deltaStake, uint256 nextDeltaStake,,) =
+            STAKING.getDelegator(VALIDATOR, address(vault));
         console2.log("precompile stake", stakeNow);
         console2.log("precompile deltaStake", deltaStake);
-        // Delegation lands at the next epoch boundary, so it shows up in one field or the other.
-        assertEq(stakeNow + deltaStake, mon);
+        console2.log("precompile nextDeltaStake", nextDeltaStake);
+        // A delegation lands at the next epoch boundary, or the one after when it is made during the
+        // epoch delay period, so it shows up in exactly one of these three fields.
+        assertEq(stakeNow + deltaStake + nextDeltaStake, mon);
 
         // A fresh delegation only becomes active at the next epoch boundary, and Monad's epochs
         // cannot be advanced on a fork, so undelegating in the same epoch is expected to fail.
