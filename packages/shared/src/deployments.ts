@@ -17,7 +17,15 @@ export interface Deployment {
 }
 
 export const DEPLOYMENTS: Partial<Record<number, Deployment>> = {
-  // 143: { vault: "0x...", spotVenue: "0x...", oracle: "0x...", admin: "0x...", deployer: "0x...", keeper: "0x...", deployedAtBlock: 0 },
+  143: {
+    vault: "0x4ce4FA54196F132D928F1ae76db074C14E0203a3",
+    spotVenue: "0x06b78F0f747f3cf2D086f4EeCD30c3e89321c562",
+    oracle: "0x4dFB13DA673bcCfAD237EA6d90d5B1525aBF287F",
+    admin: "0x6f69cf4Be38aFEA938F73a88f10991Da4b5E2A7B",
+    deployer: "0x6f69cf4Be38aFEA938F73a88f10991Da4b5E2A7B",
+    keeper: "0x6f69cf4Be38aFEA938F73a88f10991Da4b5E2A7B",
+    deployedAtBlock: 105316612,
+  },
 };
 
 export function getDeployment(chainId: number): Deployment | undefined {
