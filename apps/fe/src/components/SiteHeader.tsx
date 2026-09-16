@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount } from "wagmi";
 import { isSupportedChainId } from "@deltamon/shared";
@@ -10,10 +11,13 @@ export function SiteHeader() {
 
   return (
     <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-6 sm:px-8">
-      <a href="#top" className="text-xl font-semibold tracking-tight">
+      <Link href="/" className="text-xl font-semibold tracking-tight">
         DeltaMon
-      </a>
+      </Link>
       <div className="flex items-center gap-4">
+        <Link href="/console" className="text-muted hover:text-ink text-sm">
+          Console
+        </Link>
         {wrongNetwork ? (
           <span className="text-short text-sm">Switch to Monad to deposit</span>
         ) : (

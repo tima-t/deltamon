@@ -5,7 +5,7 @@ import { formatUnits, parseUnits, type Address } from "viem";
 import { useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import {
   ADDRESSES,
-  sdMonVaultAbi,
+  deltaMonVaultAbi,
   erc20Abi,
   getDeployment,
   isSupportedChainId,
@@ -45,26 +45,26 @@ export function DepositPanel() {
   });
   const { data: shares, refetch: refetchShares } = useReadContract({
     address: vault,
-    abi: sdMonVaultAbi,
+    abi: deltaMonVaultAbi,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
     query: { enabled: Boolean(vault && address) },
   });
   const { data: shareDecimals } = useReadContract({
     address: vault,
-    abi: sdMonVaultAbi,
+    abi: deltaMonVaultAbi,
     functionName: "decimals",
     query: { enabled: Boolean(vault) },
   });
   const { data: minDeposit } = useReadContract({
     address: vault,
-    abi: sdMonVaultAbi,
+    abi: deltaMonVaultAbi,
     functionName: "minDeposit",
     query: { enabled: Boolean(vault) },
   });
   const { data: previewShares } = useReadContract({
     address: vault,
-    abi: sdMonVaultAbi,
+    abi: deltaMonVaultAbi,
     functionName: "previewDeposit",
     args: [input && !Number.isNaN(Number(input)) ? parseUnits(input, USDC_DECIMALS) : 0n],
     query: { enabled: Boolean(vault) && input !== "" },
@@ -108,7 +108,7 @@ export function DepositPanel() {
     setHash(
       await writeContractAsync({
         address: vault,
-        abi: sdMonVaultAbi,
+        abi: deltaMonVaultAbi,
         functionName: "deposit",
         args: [amount, address],
       }),
@@ -123,7 +123,7 @@ export function DepositPanel() {
     setHash(
       await writeContractAsync({
         address: vault,
-        abi: sdMonVaultAbi,
+        abi: deltaMonVaultAbi,
         functionName: "redeem",
         args: [shares, address, address],
       }),
@@ -183,7 +183,7 @@ export function DepositPanel() {
           {Number(formatUnits(previewShares, decimals)).toLocaleString(undefined, {
             maximumFractionDigits: 2,
           })}{" "}
-          sdMON. 60% of the deposit is swapped into MON on Kuru.
+          sdMON, your share of everything the vault holds.
         </p>
       ) : null}
 
@@ -208,8 +208,8 @@ export function DepositPanel() {
       {error ? <p className="text-short mt-3 text-sm">{error.message.split("\n")[0]}</p> : null}
 
       <p className="text-muted mt-4 text-sm">
-        sdMON is your share of everything the vault holds. Redeem any time for USDC, or take USDC
-        and MON out in kind.
+        Redeem for USDC whenever the vault holds enough idle cash. When it does not, queue a
+        redemption in the console and the admin has 36 hours to fund it.
       </p>
 
       {shares !== undefined && shares > 0n ? (
