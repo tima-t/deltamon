@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { formatUnits, isAddress, parseUnits, type Abi, type Address, type Hex } from "viem";
 import { useAccount, useReadContracts, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { chainById, deltaMonVaultAbi, getDeployment, isSupportedChainId } from "@deltamon/shared";
+import { describeRevert } from "@/lib/revert";
 import { DEFAULT_CHAIN_ID } from "@/lib/wagmi";
 
 /** Typed as a plain Abi on purpose: the console addresses functions by name, not by literal type. */
@@ -107,6 +108,21 @@ export function untilText(effectiveAt?: bigint): string {
   if (!effectiveAt || effectiveAt === 0n) return "nothing pending";
   const left = Number(effectiveAt) - Math.floor(Date.now() / 1000);
   return left <= 0 ? "ready to apply" : `ready in ${duration(left)}`;
+}
+
+/** Whether a pending timelock has matured. Zero means nothing is pending, so nothing to apply. */
+export function timelockReady(effectiveAt?: bigint): boolean {
+  if (!effectiveAt || effectiveAt === 0n) return false;
+  return Math.floor(Date.now() / 1000) >= Number(effectiveAt);
+}
+
+/** When a pending timelock matures, in the reader's own timezone. */
+export function readyAtText(effectiveAt?: bigint): string {
+  if (!effectiveAt || effectiveAt === 0n) return "";
+  return new Date(Number(effectiveAt) * 1000).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 export function agoText(timestamp?: bigint): string {
@@ -266,8 +282,7 @@ export function useVaultAction(vault: Address | undefined, onConfirmed?: () => v
         } as Parameters<typeof writeContractAsync>[0]);
         setHash(sent);
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        setError(message.split("\n")[0]);
+        setError(describeRevert(err));
       }
     },
     [vault, writeContractAsync, reset],

@@ -3,7 +3,18 @@
 import { useState } from "react";
 import { formatUnits, isAddress, type Address } from "viem";
 import { useReadContracts } from "wagmi";
-import { VAULT_ABI, addr, big, bool, fmtUsdc, int, untilText, type VaultState } from "@/lib/vault";
+import {
+  VAULT_ABI,
+  addr,
+  big,
+  bool,
+  fmtUsdc,
+  int,
+  readyAtText,
+  timelockReady,
+  untilText,
+  type VaultState,
+} from "@/lib/vault";
 import { ActionForm, Card, Pill } from "./ui";
 
 interface Props {
@@ -162,6 +173,9 @@ export function AdminPanel({ vault, chainId, state, busy, run }: Props) {
               <Pill tone="flat">not a manager</Pill>
             )}
             <Pill tone="flat">{untilText(managerEffectiveAt)}</Pill>
+            {managerEffectiveAt > 0n && !timelockReady(managerEffectiveAt) ? (
+              <span className="text-muted">activate from {readyAtText(managerEffectiveAt)}</span>
+            ) : null}
             <span className="text-muted">holds {fmtUsdc(managerOutstanding)} of vault value</span>
           </div>
         ) : null}
@@ -178,7 +192,7 @@ export function AdminPanel({ vault, chainId, state, busy, run }: Props) {
           </button>
           <button
             type="button"
-            disabled={busy || !managerIsAddress}
+            disabled={busy || !timelockReady(managerEffectiveAt)}
             onClick={() => run("applyPerpManager", [manager as Address], "activate a perp manager")}
             className="border-line hover:border-ink rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
           >
@@ -204,7 +218,7 @@ export function AdminPanel({ vault, chainId, state, busy, run }: Props) {
           ]}
           button="Send"
           busy={busy}
-          disabled={!managerIsAddress}
+          disabled={!managerIsAddress || !managerActive}
           onRun={(v) =>
             run(
               "sendFundPerpManager",
