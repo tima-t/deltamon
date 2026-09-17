@@ -13,7 +13,8 @@ const EnvSchema = z.object({
   LOG_LEVEL: z.string().default("info"),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
 
-  CHAIN_ID: z.coerce.number().int().default(10143),
+  /** Monad mainnet, where the vault is deployed. */
+  CHAIN_ID: z.coerce.number().int().default(143),
   RPC_URL: z.preprocess(emptyToUndefined, z.url().optional()),
   VAULT_ADDRESS: z.preprocess(emptyToUndefined, address.optional()),
 

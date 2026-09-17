@@ -16,4 +16,5 @@ export const wagmiConfig = getDefaultConfig({
   ssr: true,
 });
 
-export const DEFAULT_CHAIN_ID = Number(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID ?? monadTestnet.id);
+/** Mainnet by default: the vault lives there, and testnet Kuru has no liquidity to swap against. */
+export const DEFAULT_CHAIN_ID = Number(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID ?? monadMainnet.id);
