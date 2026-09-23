@@ -39,6 +39,7 @@ export function parseInput(value: unknown): {
   sourceAssetId: string;
   amount: bigint;
   minAcceptedOutput: bigint;
+  expectedIntermediaryBalance: bigint | null;
 } {
   if (!value || typeof value !== "object") throw new DepositError("Invalid deposit request");
   const body = value as Record<string, unknown>;
@@ -53,7 +54,11 @@ export function parseInput(value: unknown): {
     typeof body.minAcceptedOutput === "string" && /^\d+$/.test(body.minAcceptedOutput)
       ? BigInt(body.minAcceptedOutput)
       : 0n;
-  return { account, sourceAssetId: body.sourceAssetId, amount, minAcceptedOutput };
+  const expectedIntermediaryBalance =
+    typeof body.expectedIntermediaryBalance === "string" && /^\d+$/.test(body.expectedIntermediaryBalance)
+      ? BigInt(body.expectedIntermediaryBalance)
+      : null;
+  return { account, sourceAssetId: body.sourceAssetId, amount, minAcceptedOutput, expectedIntermediaryBalance };
 }
 
 export async function auroraRequest<T>(path: string, init?: RequestInit, keyed = false): Promise<T> {
@@ -89,6 +94,7 @@ interface AuroraExecution {
     details?: {
       networkFee?: string;
       serviceFee?: string;
+      intermediaryAddress?: string;
       payload?: { payload_json?: string; standard?: string };
     };
     destinationChainTxHashes?: string[];
@@ -202,12 +208,25 @@ export async function requestDepositExecution(input: ReturnType<typeof parseInpu
   if (!output || !/^\d+$/.test(output) || !feeText || !/^\d+$/.test(feeText)) {
     throw new DepositError("Aurora did not return a minimum output and destination fee", 502);
   }
-  const minimum = BigInt(output);
-  const estimatedFee = BigInt(feeText);
-  if (minimum <= estimatedFee * 2n) throw new DepositError("This route's output cannot cover the Monad execution fee");
-  // Aurora appends a fee transfer after the vault call. Reserve twice the estimated fee
-  // so that even the minimum output can fund both the vault deposit and that transfer.
-  const depositAmount = minimum - estimatedFee * 2n;
+  // Aurora's quoted minimum is already net of its appended destination fee.
+  // Add any USDC left in this wallet's Monad intermediary to the same signed vault call.
+  const quotedIntermediary = estimate.result.details?.intermediaryAddress;
+  const intermediary = typeof quotedIntermediary === "string" && isAddress(quotedIntermediary)
+    ? quotedIntermediary
+    : await getIntermediary(input.account);
+  const existingBalance = await monadClient.readContract({
+    address: usdcAddress,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: [intermediary],
+  });
+  if (!dry && input.expectedIntermediaryBalance === null) {
+    throw new DepositError("Review this deposit again to include your existing USDC");
+  }
+  if (!dry && existingBalance !== input.expectedIntermediaryBalance) {
+    throw new DepositError("Your intermediary USDC balance changed. Review a fresh quote before continuing");
+  }
+  const depositAmount = BigInt(output) + existingBalance;
   if (depositAmount < input.minAcceptedOutput) {
     throw new DepositError("The quote changed. Review the new amount before continuing");
   }
@@ -231,14 +250,14 @@ export async function requestDepositExecution(input: ReturnType<typeof parseInpu
   );
   const finalMinimum = execution.result.quote?.minAmountOut;
   const finalFee = execution.result.details?.networkFee;
-  if (!finalMinimum || !/^\d+$/.test(finalMinimum) || !finalFee || !/^\d+$/.test(finalFee) || BigInt(finalMinimum) < depositAmount + BigInt(finalFee)) {
-    throw new DepositError("Aurora's final quote cannot cover the vault deposit and execution fee");
+  if (!finalMinimum || !/^\d+$/.test(finalMinimum) || !finalFee || !/^\d+$/.test(finalFee) || BigInt(finalMinimum) + existingBalance < depositAmount) {
+    throw new DepositError("Aurora's final quote cannot cover the vault deposit");
   }
   await checkVaultDeposit(input.account, depositAmount);
   if (!dry && (!execution.result.id || !execution.result.quote?.depositAddress)) {
     throw new DepositError("Aurora did not return a deposit address", 502);
   }
-  return { execution: execution.result, source, minShares, depositAmount: depositAmount.toString(), startingBlock, initialShares };
+  return { execution: execution.result, source, minShares, depositAmount: depositAmount.toString(), reusedUsdc: existingBalance.toString(), startingBlock, initialShares };
 }
 
 const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";

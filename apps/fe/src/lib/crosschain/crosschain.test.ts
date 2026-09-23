@@ -46,6 +46,7 @@ import { POST as recoveryPOST } from "../../app/api/crosschain/recovery/route";
 
 const account = "0x1111111111111111111111111111111111111111";
 const otherAccount = "0x2222222222222222222222222222222222222222";
+const intermediary = "0x3333333333333333333333333333333333333333";
 const sourceId = "base-usdc";
 const destinationId = "monad-usdc";
 const catalog = {
@@ -114,38 +115,79 @@ describe("fixed vault execution", () => {
     vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
       if (!init?.body) return reply(catalog);
       posted = JSON.parse(init.body as string) as Record<string, unknown>;
-      return reply({ result: { quote: { minAmountOut: "9000000" }, details: { networkFee: "1000" }, steps: posted.steps } });
+      return reply({ result: { quote: { minAmountOut: "9000000" }, details: { networkFee: "1000", intermediaryAddress: intermediary }, steps: posted.steps } });
     }));
     const result = await requestDepositExecution(parseInput({ account, sourceAssetId: sourceId, amount: "10000000" }), true);
     expect(result.minShares).toBe("9000000");
-    expect(result.depositAmount).toBe("8998000");
+    expect(result.depositAmount).toBe("9000000");
+    expect(result.reusedUsdc).toBe("0");
     const steps = posted?.steps as Array<{ parameters: string[] }>;
-    expect(steps[0]?.parameters).toEqual(["0x4ce4FA54196F132D928F1ae76db074C14E0203a3", "8998000"]);
-    expect(steps[1]?.parameters).toEqual(["8998000", account]);
+    expect(steps[0]?.parameters).toEqual(["0x4ce4FA54196F132D928F1ae76db074C14E0203a3", "9000000"]);
+    expect(steps[1]?.parameters).toEqual(["9000000", account]);
+  });
+
+  it("folds existing intermediary USDC into the next signed vault deposit", async () => {
+    chain.balance = 17_178n;
+    let posted: Record<string, unknown> | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+      if (!init?.body) return reply(catalog);
+      posted = JSON.parse(init.body as string) as Record<string, unknown>;
+      return reply({ result: { quote: { minAmountOut: "9000000" }, details: { networkFee: "1000", intermediaryAddress: intermediary } } });
+    }));
+    const result = await requestDepositExecution(parseInput({ account, sourceAssetId: sourceId, amount: "10000000" }), true);
+    expect(result).toMatchObject({ depositAmount: "9017178", reusedUsdc: "17178" });
+    expect((posted?.steps as Array<{ parameters: string[] }>)[1]?.parameters).toEqual(["9017178", account]);
+  });
+
+  it("creates an execution using the reviewed leftover without an extra recovery action", async () => {
+    chain.balance = 17_178n;
+    const posted: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+      if (!init?.body) return reply(catalog);
+      posted.push(JSON.parse(init.body as string) as Record<string, unknown>);
+      return reply({ result: {
+        id: "execution-1",
+        quote: { minAmountOut: "9000000", depositAddress: intermediary },
+        details: { networkFee: "1000", intermediaryAddress: intermediary },
+      } });
+    }));
+    const input = parseInput({ account, sourceAssetId: sourceId, amount: "10000000", minAcceptedOutput: "9017178", expectedIntermediaryBalance: "17178" });
+    const result = await requestDepositExecution(input, false);
+    expect(result).toMatchObject({ depositAmount: "9017178", reusedUsdc: "17178" });
+    expect(posted[1]?.dry).toBe(false);
+    expect((posted[1]?.steps as Array<{ parameters: string[] }>)[1]?.parameters).toEqual(["9017178", account]);
+  });
+
+  it("requires a fresh review if the intermediary balance changes before execution creation", async () => {
+    chain.balance = 17_178n;
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) =>
+      init?.body ? reply({ result: { quote: { minAmountOut: "9000000" }, details: { networkFee: "1000", intermediaryAddress: intermediary } } }) : reply(catalog)));
+    await expect(requestDepositExecution(parseInput({ account, sourceAssetId: sourceId, amount: "10000000", expectedIntermediaryBalance: "0" }), false))
+      .rejects.toThrow("balance changed");
   });
 
   it("rejects a changed vault cap before the wallet funds Aurora", async () => {
     chain.maximum = 8_000_000n;
     vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) =>
-      init?.body ? reply({ result: { quote: { minAmountOut: "9000000" }, details: { networkFee: "1000" } } }) : reply(catalog)));
+      init?.body ? reply({ result: { quote: { minAmountOut: "9000000" }, details: { networkFee: "1000", intermediaryAddress: intermediary } } }) : reply(catalog)));
     await expect(requestDepositExecution(parseInput({ account, sourceAssetId: sourceId, amount: "10000000" }), true))
       .rejects.toThrow("cannot accept");
   });
 
   it("applies the vault minimum to the fee-adjusted amount", async () => {
-    chain.minimum = 9_000_000n;
+    chain.minimum = 9_000_001n;
     vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) =>
-      init?.body ? reply({ result: { quote: { minAmountOut: "9000000" }, details: { networkFee: "1000" } } }) : reply(catalog)));
+      init?.body ? reply({ result: { quote: { minAmountOut: "9000000" }, details: { networkFee: "1000", intermediaryAddress: intermediary } } }) : reply(catalog)));
     await expect(requestDepositExecution(parseInput({ account, sourceAssetId: sourceId, amount: "10000000" }), true))
       .rejects.toThrow("below the vault minimum");
   });
 
-  it("rejects a final quote that cannot fund the vault call and fee", async () => {
+  it("rejects a final net quote that cannot fund the vault call", async () => {
     let calls = 0;
     vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
       if (!init?.body) return reply(catalog);
       calls += 1;
-      return reply({ result: { quote: { minAmountOut: calls === 1 ? "9000000" : "8998000" }, details: { networkFee: "1000" } } });
+      return reply({ result: { quote: { minAmountOut: calls === 1 ? "9000000" : "8998000" }, details: { networkFee: "1000", intermediaryAddress: intermediary } } });
     }));
     await expect(requestDepositExecution(parseInput({ account, sourceAssetId: sourceId, amount: "10000000" }), true))
       .rejects.toThrow("cannot cover the vault deposit");

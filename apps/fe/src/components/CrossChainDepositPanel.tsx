@@ -35,6 +35,7 @@ interface QuoteResponse {
   source: FundedAsset;
   minShares: string;
   depositAmount: string;
+  reusedUsdc: string;
   startingBlock?: string;
   initialShares?: string;
 }
@@ -263,6 +264,7 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
         sourceAssetId: selected.assetId,
         amount: amount.toString(),
         minAcceptedOutput: quote.depositAmount,
+        expectedIntermediaryBalance: quote.reusedUsdc,
       });
       const execution = fresh.execution;
       const depositAddress = execution.quote?.depositAddress;
@@ -422,6 +424,9 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
             {status?.execution.destinationChainTxHashes?.[0] ? <><span className="text-muted">Monad transaction</span><a className="text-monad text-right font-mono text-xs underline" href={`https://monadvision.com/tx/${status.execution.destinationChainTxHashes[0]}`} target="_blank" rel="noreferrer">{short(status.execution.destinationChainTxHashes[0])}</a></> : null}
             {status?.mintTxHash ? <><span className="text-muted">Monad mint transaction</span><a className="text-monad text-right font-mono text-xs underline" href={`https://monadvision.com/tx/${status.mintTxHash}`} target="_blank" rel="noreferrer">{short(status.mintTxHash)}</a></> : null}
           </div>
+          <p className="text-muted text-xs leading-5 text-pretty">
+            The funding address is supplied by Aurora for this {session.sourceName} USDC route. It is separate from your wallet, the vault, and your Monad intermediary account. Send only USDC on {session.sourceName} for this quote; do not reuse the address for another deposit.
+          </p>
           {status?.execution.status === "SUCCESS" ? (
             <p className={mintConfirmed ? "text-long text-sm" : "text-muted text-sm"}>{status.mintTxHash ? "Vault Deposit event confirmed." : mintConfirmed ? "sdMON balance increased." : "Aurora reports success. Checking the vault mint."} {status.shares ? `Your wallet holds ${Number(formatUnits(BigInt(status.shares), 18)).toLocaleString(undefined, { maximumFractionDigits: 4 })} sdMON.` : ""}</p>
           ) : null}
@@ -430,7 +435,10 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
           ) : null}
           {status?.intermediaryBalance && BigInt(status.intermediaryBalance) > 0n ? (
             <div className="border-line space-y-2 border-t pt-3 text-sm">
-              <p>{formatUnits(BigInt(status.intermediaryBalance), 6)} USDC remains in your Aurora intermediary account on Monad.</p>
+              <p>{formatUnits(BigInt(status.intermediaryBalance), 6)} USDC remains in your wallet-controlled Aurora intermediary account on Monad.</p>
+              <p className="text-muted text-xs leading-5">{status.execution.status === "SUCCESS"
+                ? "A route can deliver more than its quoted minimum, and this balance may include earlier leftovers. It will be included automatically in your next deposit from another chain. You can also withdraw it now for an execution fee."
+                : "The vault call did not use this USDC. You can authorize a transfer back to your wallet on Monad."}</p>
               {session.recoveryId ? (
                 <>
                   <p className={recoveryStatus?.status === "SUCCESS" ? "text-long" : "text-muted"}>Recovery: {recoveryStatus?.status === "SUCCESS" ? "USDC returned to your connected address on Monad." : (recoveryStatus?.status ?? "waiting for status")}</p>
@@ -443,7 +451,7 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
                   <button type="button" disabled={busy} onClick={() => void startRecovery()} className="bg-monad w-full rounded-lg px-3 py-2 font-medium text-white disabled:opacity-50">Authorize recovery</button>
                 </>
               ) : (
-                <button type="button" disabled={busy} onClick={() => void reviewRecovery()} className="border-line w-full rounded-lg border px-3 py-2 font-medium disabled:opacity-50">Review USDC recovery</button>
+                <button type="button" disabled={busy} onClick={() => void reviewRecovery()} className="border-line w-full rounded-lg border px-3 py-2 font-medium disabled:opacity-50">{status.execution.status === "SUCCESS" ? "Review withdrawal instead" : "Review USDC recovery"}</button>
               )}
             </div>
           ) : null}
@@ -513,9 +521,10 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
           {quote ? (
             <div className="border-monad/40 bg-monad/5 space-y-2 rounded-lg border p-4 text-sm">
               <p className="font-semibold">Review your deposit</p>
-              <p className="text-muted">{amountText} USDC on {selected?.chainName} → at least {formatUnits(BigInt(quote.depositAmount), 6)} USDC deposited on Monad.</p>
+              <p className="text-muted">Send {amountText} USDC on {selected?.chainName}. The vault will receive {formatUnits(BigInt(quote.depositAmount), 6)} USDC on Monad.</p>
+              {BigInt(quote.reusedUsdc) > 0n ? <p className="text-muted">This includes {formatUnits(BigInt(quote.reusedUsdc), 6)} USDC already in your Monad intermediary account. It will join this deposit in the same wallet-authorized vault call.</p> : null}
               <p className="text-muted">About {Number(formatUnits(BigInt(quote.minShares), 18)).toLocaleString(undefined, { maximumFractionDigits: 4 })} sdMON goes to {short(address)} on Monad. The vault share price may change before settlement.</p>
-              {quote.execution.details?.networkFee ? <p className="text-muted">Estimated Monad execution fee: {formatUnits(BigInt(quote.execution.details.networkFee), 6)} USDC. The deposit amount reserves room for this fee.</p> : null}
+              {quote.execution.details?.networkFee ? <p className="text-muted">Estimated Monad execution fee: {formatUnits(BigInt(quote.execution.details.networkFee), 6)} USDC, already accounted for in Aurora’s minimum output.</p> : null}
               {quote.execution.quote?.deadline ? <p className="text-muted">Quote expires {new Date(quote.execution.quote.deadline).toLocaleString()}.</p> : null}
               <p className="text-muted">You will sign an authorization and send USDC on {selected?.chainName}. Source-chain gas is required; no Monad gas is needed.</p>
               <button type="button" disabled={busy} onClick={() => void start()} className="bg-monad hover:bg-monad-deep w-full rounded-lg px-4 py-3 font-medium text-white disabled:opacity-50">
