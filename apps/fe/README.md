@@ -7,8 +7,11 @@ cp .env.example .env.local
 pnpm dev   # http://localhost:3000
 ```
 
-The page renders labelled demo data until `NEXT_PUBLIC_API_URL` points at a running backend and a vault
-address is configured (`NEXT_PUBLIC_VAULT_ADDRESS` or `packages/shared/src/deployments.ts`).
+The page renders labelled demo data when the backend has no vault address configured. If the backend
+cannot be reached, the dashboard shows an unavailable state rather than substituting demo figures.
+Set `NEXT_PUBLIC_API_URL` for the backend, and `NEXT_PUBLIC_SITE_URL` to the public production origin
+so the 1200 × 630 social image resolves correctly. Wallet actions use `NEXT_PUBLIC_VAULT_ADDRESS` or
+the shared deployment address.
 Browser-injected wallets work without `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`. Set a valid
 Reown project ID to also offer WalletConnect QR wallets; an empty ID disables that option.
 

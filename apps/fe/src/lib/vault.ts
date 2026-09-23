@@ -105,7 +105,8 @@ const DAY = 86_400;
 
 function duration(seconds: number): string {
   if (seconds >= DAY) return `${Math.floor(seconds / DAY)}d ${Math.floor((seconds % DAY) / 3600)}h`;
-  if (seconds >= 3600) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+  if (seconds >= 3600)
+    return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
   if (seconds >= 60) return `${Math.floor(seconds / 60)}m`;
   return `${Math.max(seconds, 0)}s`;
 }
@@ -274,10 +275,15 @@ export function useVaultAction(
     hash,
     query: { enabled: Boolean(hash) },
   });
+  const receiptIsCurrent = Boolean(
+    hash && receipt.data?.transactionHash.toLowerCase() === hash.toLowerCase(),
+  );
+  const confirmed = receiptIsCurrent && receipt.data?.status === "success";
+  const reverted = receiptIsCurrent && receipt.data?.status === "reverted";
 
   useEffect(() => {
-    if (receipt.isSuccess) onConfirmed?.();
-  }, [receipt.isSuccess, onConfirmed]);
+    if (confirmed) onConfirmed?.();
+  }, [confirmed, onConfirmed]);
 
   const run = useCallback(
     async (
@@ -296,7 +302,9 @@ export function useVaultAction(
       try {
         const code = vault ? await publicClient?.getCode({ address: vault }) : undefined;
         if (!code || code === "0x") {
-          throw new Error(`No vault contract at ${vault ?? "this address"} on ${chainById(vaultChainId).name}.`);
+          throw new Error(
+            `No vault contract at ${vault ?? "this address"} on ${chainById(vaultChainId).name}.`,
+          );
         }
         if (walletChainId !== vaultChainId) {
           await switchChainAsync({ chainId: vaultChainId });
@@ -322,9 +330,19 @@ export function useVaultAction(
     run,
     hash,
     label,
-    error: error ?? (receipt.isError ? describeRevert(receipt.error) : undefined),
+    error:
+      error ??
+      (reverted
+        ? "The transaction reverted onchain. Your position was not changed."
+        : receipt.isError
+          ? describeRevert(receipt.error)
+          : undefined),
     busy: preparing || isPending || receipt.isLoading,
-    confirmed: receipt.isSuccess,
+    preparing,
+    awaitingWallet: isPending,
+    awaitingChain: Boolean(hash) && receipt.isLoading,
+    confirmed,
+    receipt: receipt.data,
   };
 }
 

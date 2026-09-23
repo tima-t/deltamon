@@ -2,7 +2,7 @@
   "name": "deltamon",
   "version": "0.1.0",
   "private": true,
-  "description": "Automated, non-custodial delta-neutral yield vaults on Monad",
+  "description": "DeltaMon vault on Monad with a manager-run MON hedge and measured exposure dashboard",
   "license": "MIT",
   "packageManager": "pnpm@11.25.0",
   "engines": {

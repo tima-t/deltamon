@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 260" role="img" aria-labelledby="title desc">
+  <title id="title">Illustrative vault deposit path</title>
+  <desc id="desc">USDC enters the vault, where some buys MON and some backs a manager-run short. The depositor receives sdMON shares.</desc>
+  <rect width="1000" height="260" rx="22" fill="#172128"/>
+  <path d="M164 132H276M466 132H533M723 132H834" stroke="#52616a" stroke-width="2" stroke-dasharray="7 7"/>
+  <path d="M551 119l-18 13 18 13M852 119l-18 13 18 13" fill="none" stroke="#a6b3b7" stroke-width="2"/>
+  <rect x="40" y="75" width="140" height="114" rx="14" fill="#203039" stroke="#46565e"/>
+  <text x="110" y="123" text-anchor="middle" fill="#f3f1ea" font-family="Arial,sans-serif" font-size="25" font-weight="700">USDC</text>
+  <text x="110" y="154" text-anchor="middle" fill="#a6b3b7" font-family="monospace" font-size="13">DEPOSIT</text>
+  <rect x="275" y="56" width="200" height="152" rx="20" fill="#243038" stroke="#75828a"/>
+  <circle cx="375" cy="111" r="24" fill="none" stroke="#ab96ff" stroke-width="5"/>
+  <path d="M350 111h50" stroke="#e5b977" stroke-width="3"/>
+  <text x="375" y="169" text-anchor="middle" fill="#f3f1ea" font-family="Arial,sans-serif" font-size="24" font-weight="700">Vault</text>
+  <rect x="540" y="44" width="200" height="72" rx="13" fill="#2b2843" stroke="#776eb0"/>
+  <text x="640" y="87" text-anchor="middle" fill="#c3b9ff" font-family="Arial,sans-serif" font-size="18" font-weight="700">MON long</text>
+  <rect x="540" y="143" width="200" height="72" rx="13" fill="#393127" stroke="#a3865b"/>
+  <text x="640" y="185" text-anchor="middle" fill="#f0cc94" font-family="Arial,sans-serif" font-size="18" font-weight="700">Short collateral</text>
+  <rect x="830" y="75" width="140" height="114" rx="14" fill="#203039" stroke="#46565e"/>
+  <text x="900" y="123" text-anchor="middle" fill="#f3f1ea" font-family="Arial,sans-serif" font-size="25" font-weight="700">sdMON</text>
+  <text x="900" y="154" text-anchor="middle" fill="#a6b3b7" font-family="monospace" font-size="13">YOUR SHARES</text>
+  <text x="500" y="242" text-anchor="middle" fill="#9baaad" font-family="monospace" font-size="13">ILLUSTRATIVE FLOW · ACTUAL ALLOCATION VARIES</text>
+</svg>

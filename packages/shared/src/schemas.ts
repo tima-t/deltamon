@@ -24,6 +24,19 @@ export const ShareTokenSchema = z.object({
 });
 export type ShareToken = z.infer<typeof ShareTokenSchema>;
 
+export const HedgeSchema = z.object({
+  longExposureUsd: z.number().nonnegative(),
+  shortExposureUsd: z.number().nonnegative().nullable(),
+  /** Capital transferred to manager addresses and their marked book value. Neither is short size. */
+  managerCapitalUsd: z.number().nonnegative(),
+  managerEquityUsd: z.number().nonnegative(),
+  /** (MON value - short notional) / vault value, in basis points. */
+  netDeltaBps: z.number().int().nullable(),
+  reportAsOf: z.string().nullable(),
+  dataStatus: z.enum(["fresh", "stale", "unavailable"]),
+});
+export type Hedge = z.infer<typeof HedgeSchema>;
+
 export const VaultStatsSchema = z.object({
   source: z.enum(["demo", "onchain"]),
   chainId: z.number().int(),
@@ -38,6 +51,7 @@ export const VaultStatsSchema = z.object({
   paused: z.boolean(),
   shareToken: ShareTokenSchema,
   allocation: AllocationSchema,
+  hedge: HedgeSchema,
   lastRebalanceAt: z.string().nullable(),
   updatedAt: z.string(),
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { fallbackVaultStats, fetchVaultStats } from "@/lib/api";
+import { fetchVaultStats } from "@/lib/api";
 
 export function useVaultStats() {
   const query = useQuery({
@@ -11,7 +11,7 @@ export function useVaultStats() {
   });
 
   return {
-    stats: query.data ?? fallbackVaultStats(),
+    stats: query.isError ? null : (query.data ?? null),
     isLive: query.isSuccess && query.data?.source === "onchain",
     isOffline: query.isError,
     isLoading: query.isPending,

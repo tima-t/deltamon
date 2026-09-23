@@ -3,7 +3,7 @@ import { HACKATHON } from "@deltamon/shared";
 export function SiteFooter() {
   return (
     <footer className="border-line mt-auto border-t">
-      <div className="text-muted mx-auto flex w-full max-w-6xl flex-col gap-3 px-5 py-8 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-8">
+      <div className="text-muted mx-auto flex w-full max-w-7xl flex-col gap-3 px-5 py-8 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-8">
         <span>
           Built for{" "}
           <a href={HACKATHON.url} className="text-ink underline-offset-2 hover:underline">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { formatUnits, parseUnits, type Address } from "viem";
 import {
@@ -38,8 +39,9 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
   const usdc = ADDRESSES[143].tokens.USDC as Address;
   const vault = useVaultAddress();
   const [input, setInput] = useState("");
+  const [reviewing, setReviewing] = useState(false);
   const [hash, setHash] = useState<`0x${string}` | undefined>();
-  const [lastAction, setLastAction] = useState<"approve" | "deposit" | "redeem" | null>(null);
+  const [lastAction, setLastAction] = useState<"approve" | "deposit" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
   const lastRefreshedHash = useRef<string | null>(null);
@@ -61,14 +63,6 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
     args: address && vault ? [address, vault] : undefined,
     query: { enabled: enabled && Boolean(vault) },
   });
-  const { data: shares, refetch: refetchShares } = useReadContract({
-    chainId: 143,
-    address: vault,
-    abi: deltaMonVaultAbi,
-    functionName: "balanceOf",
-    args: address ? [address] : undefined,
-    query: { enabled: Boolean(vault && address) },
-  });
   const { data: shareDecimals } = useReadContract({
     chainId: 143,
     address: vault,
@@ -82,6 +76,14 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
     abi: deltaMonVaultAbi,
     functionName: "minDeposit",
     query: { enabled: Boolean(vault) },
+  });
+  const { data: maxDeposit } = useReadContract({
+    chainId: 143,
+    address: vault,
+    abi: deltaMonVaultAbi,
+    functionName: "maxDeposit",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(vault && address) },
   });
   const { data: previewShares } = useReadContract({
     chainId: 143,
@@ -106,16 +108,24 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
   const amount = parsedAmount(input);
   const needsApproval = allowance !== undefined && amount > allowance;
   const overBalance = balance !== undefined && amount > balance;
+  const overCap = maxDeposit !== undefined && amount > maxDeposit;
   const belowMin = minDeposit !== undefined && amount > 0n && amount < minDeposit;
   const busy = preparing || switchingNetwork || isPending || confirming;
-  const canSubmit = isConnected && vault && amount > 0n && !overBalance && !belowMin && !busy;
+  const ready =
+    balance !== undefined &&
+    allowance !== undefined &&
+    minDeposit !== undefined &&
+    maxDeposit !== undefined &&
+    previewShares !== undefined;
+  const canSubmit =
+    isConnected && vault && ready && amount > 0n && !overBalance && !overCap && !belowMin && !busy;
   const decimals = shareDecimals ?? 18;
 
   useEffect(() => {
     if (!isSuccess || !hash || lastRefreshedHash.current === hash) return;
     lastRefreshedHash.current = hash;
-    void Promise.all([refetchBalance(), refetchAllowance(), refetchShares()]);
-  }, [isSuccess, hash, refetchBalance, refetchAllowance, refetchShares]);
+    void Promise.all([refetchBalance(), refetchAllowance()]);
+  }, [isSuccess, hash, refetchBalance, refetchAllowance]);
 
   async function submit() {
     if (!vault || !usdc || !address) return;
@@ -149,31 +159,7 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
         }),
       );
       setInput("");
-    } catch (cause) {
-      setActionError(describeRevert(cause));
-    } finally {
-      setPreparing(false);
-    }
-  }
-
-  async function redeemAll() {
-    if (!vault || !address || !shares) return;
-    setActionError(null);
-    setHash(undefined);
-    reset();
-    setPreparing(true);
-    try {
-      if (chainId !== 143) await switchChainAsync({ chainId: 143 });
-      setLastAction("redeem");
-      setHash(
-        await writeContractAsync({
-          address: vault,
-          chainId: 143,
-          abi: deltaMonVaultAbi,
-          functionName: "redeem",
-          args: [shares, address, address],
-        }),
-      );
+      setReviewing(false);
     } catch (cause) {
       setActionError(describeRevert(cause));
     } finally {
@@ -195,7 +181,7 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
         {embedded ? (
           <span className="text-muted text-sm">Amount from Monad</span>
         ) : (
-          <h2 className="text-xl font-semibold">Deposit</h2>
+          <h3 className="text-lg font-semibold">Amount on Monad</h3>
         )}
         {balance !== undefined ? (
           <button
@@ -215,7 +201,10 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
             inputMode="decimal"
             placeholder="0.00"
             value={input}
-            onChange={(e) => setInput(e.target.value.replace(/[^0-9.]/g, ""))}
+            onChange={(e) => {
+              setInput(e.target.value.replace(/[^0-9.]/g, ""));
+              setReviewing(false);
+            }}
             className="w-full bg-transparent py-3 text-2xl tabular-nums outline-none"
           />
           <span className="text-muted pl-2 text-sm">USDC</span>
@@ -223,6 +212,11 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
       </label>
       {overBalance ? (
         <p className="text-short mt-2 text-sm">That is more than your balance.</p>
+      ) : null}
+      {overCap ? (
+        <p className="text-short mt-2 text-sm">
+          That exceeds the vault&apos;s current deposit capacity.
+        </p>
       ) : null}
       {belowMin && minDeposit !== undefined ? (
         <p className="text-short mt-2 text-sm">
@@ -239,10 +233,45 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
         </p>
       ) : null}
 
+      {reviewing && amount > 0n ? (
+        <div className="mt-4 rounded-xl border border-monad/40 bg-monad/5 p-4 text-sm">
+          <p className="font-semibold">Review direct deposit</p>
+          <dl className="mt-3 space-y-2">
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">You send</dt>
+              <dd className="font-data">{input} USDC</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Estimated shares</dt>
+              <dd className="font-data">
+                {previewShares === undefined
+                  ? "Loading…"
+                  : `${Number(formatUnits(previewShares, decimals)).toLocaleString(undefined, { maximumFractionDigits: 4 })} sdMON`}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Network</dt>
+              <dd>Monad</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Vault entry fee</dt>
+              <dd>None</dd>
+            </div>
+          </dl>
+          <p className="text-muted mt-3 text-xs">
+            The final share amount is set by the contract transaction. Approval, when required, is a
+            separate wallet confirmation. Network gas is paid separately; a performance fee applies
+            only to profit when exiting.
+          </p>
+        </div>
+      ) : null}
+
       <button
         type="button"
         disabled={isConnected && !canSubmit}
-        onClick={() => (!isConnected ? openConnectModal?.() : void submit())}
+        onClick={() =>
+          !isConnected ? openConnectModal?.() : !reviewing ? setReviewing(true) : void submit()
+        }
         className="bg-monad hover:bg-monad-deep mt-4 w-full rounded-lg px-4 py-3 text-base font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
       >
         {switchingNetwork
@@ -253,7 +282,9 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
               ? "Confirm in wallet…"
               : confirming
                 ? "Confirming…"
-                : label}
+                : reviewing
+                  ? label
+                  : "Review deposit"}
       </button>
 
       {isConnected && chainId !== 143 ? (
@@ -264,9 +295,15 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
         <p className="text-long mt-3 text-sm">
           {lastAction === "approve"
             ? "Approved. You can deposit now."
-            : lastAction === "redeem"
-              ? "Redeemed. USDC is back in your wallet."
-              : "Deposited. sdMON is in your wallet."}
+            : "Deposited. sdMON is in your wallet."}{" "}
+          <a
+            href={`https://monadvision.com/tx/${hash}`}
+            target="_blank"
+            rel="noreferrer"
+            className="underline underline-offset-2"
+          >
+            View transaction ↗
+          </a>
         </p>
       ) : null}
       {actionError || error || receiptError ? (
@@ -275,30 +312,10 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
         </p>
       ) : null}
 
-      <p className="text-muted mt-4 text-sm">
-        Redeem for USDC whenever the vault holds enough idle cash. When it does not, queue a
-        redemption in the console and the admin has 36 hours to fund it.
+      <p className="text-muted mt-4 text-xs">
+        Approval and deposit are separate wallet transactions. A deposit adds USDC to the vault; its
+        allocation and hedge are managed afterward.
       </p>
-
-      {shares !== undefined && shares > 0n ? (
-        <div className="border-line mt-4 flex items-center justify-between border-t pt-4 text-sm">
-          <span className="tabular-nums">
-            You hold{" "}
-            {Number(formatUnits(shares, decimals)).toLocaleString(undefined, {
-              maximumFractionDigits: 2,
-            })}{" "}
-            sdMON
-          </span>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void redeemAll()}
-            className="border-line hover:border-ink rounded-md border px-3 py-1.5 font-medium transition-colors disabled:opacity-50"
-          >
-            Redeem all for USDC
-          </button>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -314,12 +331,28 @@ export function DepositPanel() {
   }, []);
 
   return (
-    <div id="deposit" className="border-line bg-surface rounded-xl border p-5">
-      {crossChainEnabled ? (
-        <CrossChainDepositPanel monadPanel={<MonadDepositPanel embedded />} />
-      ) : (
-        <MonadDepositPanel />
-      )}
-    </div>
+    <section className="panel p-6 sm:p-8" aria-labelledby="deposit-title">
+      <p className="eyebrow">Enter the vault / 03</p>
+      <h2 id="deposit-title" className="mt-2 text-2xl font-semibold">
+        Deposit USDC
+      </h2>
+      <p className="text-muted mt-2 text-sm">
+        Review the route and shares before signing. Your vault position appears below.
+      </p>
+      <Image
+        src="/art/deposit-path.svg"
+        alt="Illustrative path: USDC enters the vault, MON and short collateral are managed, sdMON shares return to you."
+        width={1000}
+        height={260}
+        className="mt-5 w-full rounded-xl"
+      />
+      <div className="mt-6 border-t border-line pt-5">
+        {crossChainEnabled ? (
+          <CrossChainDepositPanel monadPanel={<MonadDepositPanel embedded />} />
+        ) : (
+          <MonadDepositPanel />
+        )}
+      </div>
+    </section>
   );
 }

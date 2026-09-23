@@ -32,10 +32,9 @@ describe("api", () => {
     const body = VaultStatsSchema.parse(res.json());
     expect(body.source).toBe("demo");
     expect(body.shareToken.symbol).toBe("sdMON");
-    expect(body.allocation.targetMonBps).toBe(6000);
-    expect(Math.abs(body.allocation.driftBps)).toBeLessThanOrEqual(
-      body.allocation.rebalanceThresholdBps,
-    );
+    expect(body.allocation.targetMonBps).toBe(body.allocation.monShareBps);
+    expect(body.allocation.driftBps).toBe(0);
+    expect(body.lastRebalanceAt).toBeNull();
   });
 
   it("rejects unknown price symbols", async () => {

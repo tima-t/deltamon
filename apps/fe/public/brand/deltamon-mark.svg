@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" role="img" aria-labelledby="title">
+  <title id="title">DeltaMon</title>
+  <rect width="80" height="80" rx="19" fill="#12191f"/>
+  <circle cx="40" cy="40" r="28" fill="none" stroke="#35444b" stroke-width="2"/>
+  <path d="M20 23a28 28 0 0 1 40 0" fill="none" stroke="#ab96ff" stroke-width="6" stroke-linecap="round"/>
+  <path d="M20 57a28 28 0 0 0 40 0" fill="none" stroke="#e5b977" stroke-width="6" stroke-linecap="round"/>
+  <path d="M24 40h32M40 25v30" stroke="#f2f0e8" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="40" cy="40" r="5" fill="#f2f0e8"/>
+</svg>

@@ -13,17 +13,24 @@ import { z } from "zod";
  */
 const PerpBookSchema = z.object({
   equity: z.string().regex(/^\d+$/),
-  asOf: z.number().int().positive(),
+  asOf: z.number().int().positive().safe(),
+  /** MON short notional in six-decimal USDC units; optional for older publishers. */
+  shortNotional: z.string().regex(/^\d+$/).optional(),
 });
 
 export interface PerpBook {
   equity: bigint;
   asOfSec: bigint;
+  shortNotional?: bigint;
 }
 
-export async function fetchPerpBook(url: string): Promise<PerpBook> {
-  const res = await fetch(url, { signal: AbortSignal.timeout(5_000) });
+export async function fetchPerpBook(url: string, timeoutMs = 5_000): Promise<PerpBook> {
+  const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
   if (!res.ok) throw new Error(`perp book feed ${res.status}`);
   const body = PerpBookSchema.parse(await res.json());
-  return { equity: BigInt(body.equity), asOfSec: BigInt(body.asOf) };
+  return {
+    equity: BigInt(body.equity),
+    asOfSec: BigInt(body.asOf),
+    shortNotional: body.shortNotional === undefined ? undefined : BigInt(body.shortNotional),
+  };
 }

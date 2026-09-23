@@ -443,7 +443,7 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
       {!address ? (
         <div className="space-y-4">
           <div>
-            <h2 className="text-lg font-semibold">Deposit USDC</h2>
+            <h3 className="text-lg font-semibold">Choose a source</h3>
             <p className="text-muted mt-1 text-sm">Connect your wallet to find your USDC and choose an amount.</p>
           </div>
           <button type="button" onClick={() => openConnectModal?.()} className="bg-monad hover:bg-monad-deep w-full rounded-lg px-4 py-3 font-medium text-white transition-[background-color,scale] active:scale-[0.96]">
@@ -527,7 +527,7 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold">Deposit USDC</h2>
+                <h3 className="text-lg font-semibold">Choose a source</h3>
                 <p className="text-muted mt-0.5 text-xs">Choose where your USDC is held.</p>
               </div>
               <button type="button" disabled={loadingBalances} onClick={() => void refreshBalances(address)} className="text-monad hover:text-monad-deep min-h-10 px-2 text-xs font-medium disabled:opacity-50">Refresh</button>

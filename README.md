@@ -1,21 +1,21 @@
 # DeltaMon
 
-Automated, non-custodial delta-neutral vaults on [Monad](https://monad.xyz). Deposit USDC; the vault holds staked MON and an equal-sized short. Price moves cancel out, staking rewards and funding payments stay. Target 15 % net APY.
+DeltaMon is a USDC vault on [Monad](https://monad.xyz) that holds MON and allocates capital to a manager-run MON short. It targets low net MON exposure while seeking staking and funding returns. Exposure, returns, and the short are not guaranteed: the short is controlled and reported by an external manager, and capital sent to that manager leaves the vault's direct custody.
 
 Built for [**Monad Metropolis**](https://hackathon.monad.xyz/) (1 Sep – 13 Oct 2026), track _Onchain Finance & Trading_.
 
 ## How it works
 
 ```
-USDC ──▶ DeltaVault (ERC-4626) ──▶ DeltaNeutralStrategy
-                                       ├─ long  : USDC → MON (Kuru) → aprMON (aPriori)   earns staking yield
-                                       └─ short : USDC collateral → MON-PERP short (Perpl) earns funding
-                                    keeper: rebalance() when |net delta| ≥ 2 %
+USDC ──▶ DeltaMonVault (ERC-4626) ──▶ MON held and staked
+                   │                 └─ idle USDC / AUSD
+                   ├─ capital sent to a listed perp manager ──▶ manager-run MON short
+                   └─ sdMON shares to the depositor
 ```
 
-- **Non-custodial.** Shares are ERC-4626; withdrawals work at any time, even when paused. The keeper can only invest, rebalance and harvest. Strategy changes are timelocked one day and unwind the old strategy first.
-- **Delta-neutral.** `netDeltaBps()` is computed on-chain from oracle prices; the keeper re-hedges past a 2 % drift.
-- **Transparent yield.** The UI shows staking, funding and cost components separately. Numbers are estimates until realized.
+- **Measured exposure.** The public Balance Engine compares the vault's onchain MON value with a fresh, manager-reported short notional. It shows “within target” only inside a ±2% net exposure band. A missing or stale report is shown as unknown.
+- **Visible trust boundary.** The vault cannot claw back capital sent to a perp manager. Allocation caps and delayed changes limit this risk; they do not remove it. See [docs/VAULT.md](docs/VAULT.md).
+- **Exit path.** Holders can redeem from idle USDC or queue a redemption. If the admin has not funded a queued exit within 36 hours, vault allocation actions freeze until the queue clears.
 
 Details: [docs/STRATEGY.md](docs/STRATEGY.md) · Submission plan: [docs/SUBMISSION.md](docs/SUBMISSION.md)
 
