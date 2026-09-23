@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { erc20Abi, isAddress } from "viem";
-import { useAccount, useReadContract } from "wagmi";
+import { useAccount, useReadContract, useSwitchChain } from "wagmi";
+import { chainById } from "@deltamon/shared";
 import {
   addr,
   agoText,
@@ -31,14 +33,50 @@ import { Card, Pill, Stat, TxBanner } from "./ui";
 type Tab = "overview" | "deposit" | "queue" | "admin" | "keeper";
 
 export function VaultConsole() {
-  const { address: account, isConnected } = useAccount();
+  const {
+    address: account,
+    chain: walletChain,
+    chainId: walletChainId,
+    isConnected,
+  } = useAccount();
+  const {
+    switchChainAsync,
+    isPending: networkSwitchPending,
+    isError: networkSwitchFailed,
+  } = useSwitchChain();
+  const lastAutoSwitch = useRef<string | null>(null);
+  const queryClient = useQueryClient();
   const { address: vault, fallback, chainId, ready, isOverride, save, clear } = useVaultAddress();
   const [draft, setDraft] = useState("");
   const [tab, setTab] = useState<Tab>("overview");
 
   const { state, refetch, failed } = useVaultState(vault, chainId);
-  const onConfirmed = useCallback(() => void refetch(), [refetch]);
-  const action = useVaultAction(vault, onConfirmed);
+  const onConfirmed = useCallback(() => {
+    void refetch();
+    void queryClient.invalidateQueries({ queryKey: ["readContracts"] });
+    void queryClient.invalidateQueries({ queryKey: ["readContract"] });
+  }, [refetch, queryClient]);
+  const action = useVaultAction(vault, chainId, onConfirmed);
+  const busy = action.busy || networkSwitchPending;
+
+  useEffect(() => {
+    if (!account) {
+      lastAutoSwitch.current = null;
+      return;
+    }
+    if (!vault || !addr(state.asset) || walletChainId === undefined) return;
+    if (walletChainId === chainId) {
+      lastAutoSwitch.current = null;
+      return;
+    }
+
+    const attempt = `${account.toLowerCase()}:${vault.toLowerCase()}:${chainId}:${walletChainId}`;
+    if (lastAutoSwitch.current === attempt) return;
+    lastAutoSwitch.current = attempt;
+    void switchChainAsync({ chainId }).catch(() => {
+      // Keep the console usable. The next vault action can request the switch again.
+    });
+  }, [account, vault, state.asset, walletChainId, chainId, switchChainAsync]);
 
   const owner = addr(state.owner);
   const keeper = addr(state.keeper);
@@ -148,11 +186,23 @@ export function VaultConsole() {
             That address did not answer as a DeltaMonVault on chain {chainId}.
           </p>
         ) : null}
+        {isConnected && walletChainId !== chainId ? (
+          <p className="text-short mt-2 text-sm">
+            Wallet is on {walletChain?.name ?? `chain ${walletChainId}`}. This vault is on{" "}
+            {chainById(chainId).name}.{" "}
+            {networkSwitchPending
+              ? "Confirm the network switch in your wallet."
+              : networkSwitchFailed
+                ? "The automatic switch was declined. A vault action can request it again."
+                : "Your wallet will be asked to switch networks."}
+          </p>
+        ) : null}
         {same(pendingOwner, account) && !isOwner ? (
           <button
             type="button"
+            disabled={busy}
             onClick={() => action.run("acceptOwnership", [], "accept ownership")}
-            className="border-line hover:border-ink mt-3 rounded-md border px-3 py-1.5 text-sm"
+            className="border-line hover:border-ink mt-3 rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
           >
             Accept ownership
           </button>
@@ -269,37 +319,19 @@ export function VaultConsole() {
         ) : null}
 
         {vault && tab === "deposit" ? (
-          <UserPanel
-            vault={vault}
-            chainId={chainId}
-            state={state}
-            busy={action.busy}
-            run={action.run}
-          />
+          <UserPanel vault={vault} chainId={chainId} state={state} busy={busy} run={action.run} />
         ) : null}
 
         {vault && tab === "queue" ? (
-          <QueuePanel
-            vault={vault}
-            chainId={chainId}
-            state={state}
-            busy={action.busy}
-            run={action.run}
-          />
+          <QueuePanel vault={vault} chainId={chainId} state={state} busy={busy} run={action.run} />
         ) : null}
 
         {vault && tab === "admin" && isOwner ? (
-          <AdminPanel
-            vault={vault}
-            chainId={chainId}
-            state={state}
-            busy={action.busy}
-            run={action.run}
-          />
+          <AdminPanel vault={vault} chainId={chainId} state={state} busy={busy} run={action.run} />
         ) : null}
 
         {vault && tab === "keeper" && (isKeeper || isOwner) ? (
-          <KeeperPanel state={state} busy={action.busy} isOwner={isOwner} run={action.run} />
+          <KeeperPanel state={state} busy={busy} isOwner={isOwner} run={action.run} />
         ) : null}
       </div>
 

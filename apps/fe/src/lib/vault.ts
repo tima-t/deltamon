@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { formatUnits, isAddress, parseUnits, type Abi, type Address, type Hex } from "viem";
-import { useAccount, useReadContracts, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
+import {
+  useAccount,
+  usePublicClient,
+  useReadContracts,
+  useSwitchChain,
+  useWaitForTransactionReceipt,
+  useWriteContract,
+} from "wagmi";
 import { chainById, deltaMonVaultAbi, getDeployment, isSupportedChainId } from "@deltamon/shared";
 import { describeRevert } from "@/lib/revert";
 import { DEFAULT_CHAIN_ID } from "@/lib/wagmi";
@@ -249,12 +256,24 @@ export function useVaultState(vault: Address | undefined, chainId: number) {
 
 // ── sending a transaction ──
 
-export function useVaultAction(vault: Address | undefined, onConfirmed?: () => void) {
+export function useVaultAction(
+  vault: Address | undefined,
+  vaultChainId: number,
+  onConfirmed?: () => void,
+) {
+  const { chainId: walletChainId } = useAccount();
+  const publicClient = usePublicClient({ chainId: vaultChainId });
+  const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync, isPending, reset } = useWriteContract();
+  const [preparing, setPreparing] = useState(false);
   const [hash, setHash] = useState<Hex | undefined>();
   const [label, setLabel] = useState<string | undefined>();
   const [error, setError] = useState<string | undefined>();
-  const receipt = useWaitForTransactionReceipt({ hash, query: { enabled: Boolean(hash) } });
+  const receipt = useWaitForTransactionReceipt({
+    chainId: vaultChainId,
+    hash,
+    query: { enabled: Boolean(hash) },
+  });
 
   useEffect(() => {
     if (receipt.isSuccess) onConfirmed?.();
@@ -273,27 +292,38 @@ export function useVaultAction(vault: Address | undefined, onConfirmed?: () => v
       setLabel(what);
       setHash(undefined);
       reset();
+      setPreparing(true);
       try {
+        const code = vault ? await publicClient?.getCode({ address: vault }) : undefined;
+        if (!code || code === "0x") {
+          throw new Error(`No vault contract at ${vault ?? "this address"} on ${chainById(vaultChainId).name}.`);
+        }
+        if (walletChainId !== vaultChainId) {
+          await switchChainAsync({ chainId: vaultChainId });
+        }
         const sent = await writeContractAsync({
           address: target,
           abi: options?.abi ?? VAULT_ABI,
+          chainId: vaultChainId,
           functionName,
           args,
         } as Parameters<typeof writeContractAsync>[0]);
         setHash(sent);
       } catch (err) {
         setError(describeRevert(err));
+      } finally {
+        setPreparing(false);
       }
     },
-    [vault, writeContractAsync, reset],
+    [vault, vaultChainId, walletChainId, publicClient, switchChainAsync, writeContractAsync, reset],
   );
 
   return {
     run,
     hash,
     label,
-    error,
-    busy: isPending || receipt.isLoading,
+    error: error ?? (receipt.isError ? describeRevert(receipt.error) : undefined),
+    busy: preparing || isPending || receipt.isLoading,
     confirmed: receipt.isSuccess,
   };
 }

@@ -145,7 +145,7 @@ export function TxBanner({
         <span className="text-short">{error}</span>
       ) : (
         <span>
-          {confirmed ? "Done: " : "Sent: "}
+          {confirmed ? "Done: " : hash ? "Sent: " : "Preparing: "}
           {label}
           {hash && explorer ? (
             <>

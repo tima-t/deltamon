@@ -1,22 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { formatUnits, parseUnits, type Address } from "viem";
-import { useAccount, useReadContract, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import {
-  ADDRESSES,
-  deltaMonVaultAbi,
-  erc20Abi,
-  getDeployment,
-} from "@deltamon/shared";
+  useAccount,
+  useReadContract,
+  useSwitchChain,
+  useWaitForTransactionReceipt,
+  useWriteContract,
+} from "wagmi";
+import { ADDRESSES, deltaMonVaultAbi, erc20Abi, getDeployment } from "@deltamon/shared";
+import { describeRevert } from "@/lib/revert";
 import { CrossChainDepositPanel } from "./CrossChainDepositPanel";
 
 const USDC_DECIMALS = 6;
 
 function parsedAmount(input: string): bigint {
   if (!/^\d+(\.\d+)?$/.test(input)) return 0n;
-  try { return parseUnits(input, USDC_DECIMALS); } catch { return 0n; }
+  try {
+    return parseUnits(input, USDC_DECIMALS);
+  } catch {
+    return 0n;
+  }
 }
 
 function useVaultAddress(): Address | undefined {
@@ -28,13 +34,15 @@ function useVaultAddress(): Address | undefined {
 function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
   const { address, chainId, isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
-  const { switchChainAsync } = useSwitchChain();
-  const supported = chainId === 143;
+  const { switchChainAsync, isPending: switchingNetwork } = useSwitchChain();
   const usdc = ADDRESSES[143].tokens.USDC as Address;
   const vault = useVaultAddress();
   const [input, setInput] = useState("");
   const [hash, setHash] = useState<`0x${string}` | undefined>();
   const [lastAction, setLastAction] = useState<"approve" | "deposit" | "redeem" | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const lastRefreshedHash = useRef<string | null>(null);
 
   const enabled = Boolean(usdc && address);
   const { data: balance, refetch: refetchBalance } = useReadContract({
@@ -84,8 +92,13 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
     query: { enabled: Boolean(vault) && input !== "" },
   });
 
-  const { writeContractAsync, isPending, error } = useWriteContract();
-  const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({
+  const { writeContractAsync, isPending, error, reset } = useWriteContract();
+  const {
+    isLoading: confirming,
+    isSuccess,
+    error: receiptError,
+  } = useWaitForTransactionReceipt({
+    chainId: 143,
     hash,
     query: { enabled: Boolean(hash) },
   });
@@ -94,74 +107,96 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
   const needsApproval = allowance !== undefined && amount > allowance;
   const overBalance = balance !== undefined && amount > balance;
   const belowMin = minDeposit !== undefined && amount > 0n && amount < minDeposit;
-  const busy = isPending || confirming;
-  const canSubmit =
-    isConnected && supported && vault && amount > 0n && !overBalance && !belowMin && !busy;
+  const busy = preparing || switchingNetwork || isPending || confirming;
+  const canSubmit = isConnected && vault && amount > 0n && !overBalance && !belowMin && !busy;
   const decimals = shareDecimals ?? 18;
 
-  async function refresh() {
-    await Promise.all([refetchBalance(), refetchAllowance(), refetchShares()]);
-  }
+  useEffect(() => {
+    if (!isSuccess || !hash || lastRefreshedHash.current === hash) return;
+    lastRefreshedHash.current = hash;
+    void Promise.all([refetchBalance(), refetchAllowance(), refetchShares()]);
+  }, [isSuccess, hash, refetchBalance, refetchAllowance, refetchShares]);
 
   async function submit() {
     if (!vault || !usdc || !address) return;
-    if (needsApproval) {
-      setLastAction("approve");
+    setActionError(null);
+    setHash(undefined);
+    reset();
+    setPreparing(true);
+    try {
+      if (chainId !== 143) await switchChainAsync({ chainId: 143 });
+      if (needsApproval) {
+        setLastAction("approve");
+        setHash(
+          await writeContractAsync({
+            address: usdc,
+            chainId: 143,
+            abi: erc20Abi,
+            functionName: "approve",
+            args: [vault, amount],
+          }),
+        );
+        return;
+      }
+      setLastAction("deposit");
       setHash(
         await writeContractAsync({
-          address: usdc,
+          address: vault,
           chainId: 143,
-          abi: erc20Abi,
-          functionName: "approve",
-          args: [vault, amount],
+          abi: deltaMonVaultAbi,
+          functionName: "deposit",
+          args: [amount, address],
         }),
       );
-      await refetchAllowance();
-      return;
+      setInput("");
+    } catch (cause) {
+      setActionError(describeRevert(cause));
+    } finally {
+      setPreparing(false);
     }
-    setLastAction("deposit");
-    setHash(
-      await writeContractAsync({
-        address: vault,
-        chainId: 143,
-        abi: deltaMonVaultAbi,
-        functionName: "deposit",
-        args: [amount, address],
-      }),
-    );
-    setInput("");
-    await refresh();
   }
 
   async function redeemAll() {
     if (!vault || !address || !shares) return;
-    setLastAction("redeem");
-    setHash(
-      await writeContractAsync({
-        address: vault,
-        chainId: 143,
-        abi: deltaMonVaultAbi,
-        functionName: "redeem",
-        args: [shares, address, address],
-      }),
-    );
-    await refresh();
+    setActionError(null);
+    setHash(undefined);
+    reset();
+    setPreparing(true);
+    try {
+      if (chainId !== 143) await switchChainAsync({ chainId: 143 });
+      setLastAction("redeem");
+      setHash(
+        await writeContractAsync({
+          address: vault,
+          chainId: 143,
+          abi: deltaMonVaultAbi,
+          functionName: "redeem",
+          args: [shares, address, address],
+        }),
+      );
+    } catch (cause) {
+      setActionError(describeRevert(cause));
+    } finally {
+      setPreparing(false);
+    }
   }
 
   const label = !isConnected
     ? "Connect a wallet to deposit"
-    : !supported
-      ? "Switch to Monad"
-      : !vault
-        ? "Vault not deployed on this network yet"
-        : needsApproval
-          ? "Approve USDC"
-          : "Deposit USDC";
+    : !vault
+      ? "Vault not deployed on this network yet"
+      : needsApproval
+        ? "Approve USDC"
+        : "Deposit USDC";
 
   return (
     <div>
       <div className="flex items-baseline justify-between">
-        {embedded ? <span className="text-muted text-sm">Amount from Monad</span> : <h2 className="text-xl font-semibold">Deposit</h2>}
+        {embedded ? (
+          <span className="text-muted text-sm">Amount from Monad</span>
+        ) : (
+          <h2 className="text-xl font-semibold">Deposit</h2>
+        )}
         {balance !== undefined ? (
           <button
             type="button"
@@ -206,12 +241,24 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
 
       <button
         type="button"
-        disabled={isConnected && supported && !canSubmit}
-        onClick={() => !isConnected ? openConnectModal?.() : !supported ? void switchChainAsync({ chainId: 143 }) : void submit()}
+        disabled={isConnected && !canSubmit}
+        onClick={() => (!isConnected ? openConnectModal?.() : void submit())}
         className="bg-monad hover:bg-monad-deep mt-4 w-full rounded-lg px-4 py-3 text-base font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {isPending ? "Confirm in wallet…" : confirming ? "Confirming…" : label}
+        {switchingNetwork
+          ? "Switching to Monad…"
+          : preparing
+            ? "Preparing wallet…"
+            : isPending
+              ? "Confirm in wallet…"
+              : confirming
+                ? "Confirming…"
+                : label}
       </button>
+
+      {isConnected && chainId !== 143 ? (
+        <p className="text-muted mt-2 text-xs">Your wallet will switch to Monad first.</p>
+      ) : null}
 
       {isSuccess && hash ? (
         <p className="text-long mt-3 text-sm">
@@ -222,7 +269,11 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
               : "Deposited. sdMON is in your wallet."}
         </p>
       ) : null}
-      {error ? <p className="text-short mt-3 text-sm">{error.message.split("\n")[0]}</p> : null}
+      {actionError || error || receiptError ? (
+        <p className="text-short mt-3 text-sm">
+          {actionError ?? describeRevert(receiptError ?? error)}
+        </p>
+      ) : null}
 
       <p className="text-muted mt-4 text-sm">
         Redeem for USDC whenever the vault holds enough idle cash. When it does not, queue a
@@ -264,7 +315,11 @@ export function DepositPanel() {
 
   return (
     <div id="deposit" className="border-line bg-surface rounded-xl border p-5">
-      {crossChainEnabled ? <CrossChainDepositPanel monadPanel={<MonadDepositPanel embedded />} /> : <MonadDepositPanel />}
+      {crossChainEnabled ? (
+        <CrossChainDepositPanel monadPanel={<MonadDepositPanel embedded />} />
+      ) : (
+        <MonadDepositPanel />
+      )}
     </div>
   );
 }
