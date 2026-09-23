@@ -62,9 +62,45 @@ body {
 .beam-fill {
   transition: width 900ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+
+.deposit-progress-fill {
+  position: relative;
+  transition: width 700ms cubic-bezier(0.2, 0, 0, 1);
+}
+.deposit-progress-active::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 20%, rgb(255 255 255 / 35%) 50%, transparent 80%);
+  content: "";
+  animation: deposit-progress-sheen 2.4s linear infinite;
+}
+.deposit-stage-active .deposit-stage-mark {
+  animation: deposit-stage-pulse 2s ease-in-out infinite;
+}
+.deposit-live-dot {
+  animation: deposit-live-pulse 2s ease-in-out infinite;
+}
+@keyframes deposit-progress-sheen {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+@keyframes deposit-stage-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(165 148 255 / 25%); }
+  50% { box-shadow: 0 0 0 6px rgb(165 148 255 / 0%); }
+}
+@keyframes deposit-live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
 @media (prefers-reduced-motion: reduce) {
   .beam-needle,
-  .beam-fill {
+  .beam-fill,
+  .deposit-progress-fill {
     transition: none;
+  }
+  .deposit-progress-fill::after,
+  .deposit-stage-active .deposit-stage-mark,
+  .deposit-live-dot {
+    animation: none;
   }
 }

@@ -14,7 +14,7 @@ export function StatsRow({ stats }: { stats: VaultStats }) {
     {
       label: "1 sdMON is worth",
       value: `${stats.shareToken.pricePerShare.toFixed(4)} USDC`,
-      hint: `${supply.toLocaleString()} sdMON issued`,
+      hint: `${supply.toLocaleString("en-US")} sdMON issued`,
     },
     {
       label: "MON allocation",
@@ -29,7 +29,7 @@ export function StatsRow({ stats }: { stats: VaultStats }) {
       {items.map((it) => (
         <div key={it.label} className="px-4 py-4 first:pl-0 sm:py-2">
           <dt className="text-muted text-sm">{it.label}</dt>
-          <dd className="mt-1 text-2xl font-semibold tabular-nums">{it.value}</dd>
+          <dd suppressHydrationWarning={it.label === "Last rebalance"} className="mt-1 text-2xl font-semibold tabular-nums">{it.value}</dd>
           {it.hint ? <dd className="text-muted text-xs">{it.hint}</dd> : null}
         </div>
       ))}

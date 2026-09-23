@@ -28,6 +28,14 @@ const nextConfig: NextConfig = {
   turbopack: {
     resolveAlias: Object.fromEntries(optionalX402.map((m) => [m, "./src/lib/x402-stub.ts"])),
   },
+  webpack(config) {
+    config.resolve ??= {};
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      ...Object.fromEntries(optionalX402.map((module) => [module, false])),
+    };
+    return config;
+  },
 };
 
 export default nextConfig;

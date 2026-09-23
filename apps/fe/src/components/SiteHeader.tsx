@@ -3,11 +3,9 @@
 import Link from "next/link";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount } from "wagmi";
-import { isSupportedChainId } from "@deltamon/shared";
 
 export function SiteHeader() {
   const { chain, isConnected } = useAccount();
-  const wrongNetwork = isConnected && chain && !isSupportedChainId(chain.id);
 
   return (
     <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-6 sm:px-8">
@@ -18,12 +16,36 @@ export function SiteHeader() {
         <Link href="/console" className="text-muted hover:text-ink text-sm">
           Console
         </Link>
-        {wrongNetwork ? (
-          <span className="text-short text-sm">Switch to Monad to deposit</span>
-        ) : (
-          <span className="text-muted hidden text-sm sm:inline">{chain?.name ?? "Monad"}</span>
-        )}
-        <ConnectButton chainStatus="icon" showBalance={false} accountStatus="address" />
+        <span className="text-muted hidden text-sm sm:inline">
+          {isConnected ? (chain?.name ?? "Connected") : "Monad"}
+        </span>
+        <ConnectButton.Custom>
+          {({ account, chain, mounted, openAccountModal, openChainModal, openConnectModal }) => {
+            const action =
+              !mounted || !account
+                ? openConnectModal
+                : chain?.unsupported
+                  ? openChainModal
+                  : openAccountModal;
+            const label =
+              !mounted || !account
+                ? "Connect Wallet"
+                : chain?.unsupported
+                  ? "Switch Network"
+                  : `${account.address.slice(0, 6)}…${account.address.slice(-4)}`;
+
+            return (
+              <button
+                type="button"
+                disabled={!mounted}
+                onClick={action}
+                className="bg-monad hover:bg-monad-deep rounded-lg px-3 py-2 text-sm font-medium text-white transition-colors disabled:cursor-wait disabled:opacity-70"
+              >
+                {label}
+              </button>
+            );
+          }}
+        </ConnectButton.Custom>
       </div>
     </header>
   );
