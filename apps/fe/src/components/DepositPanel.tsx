@@ -1,35 +1,44 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { formatUnits, parseUnits, type Address } from "viem";
-import { useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
+import { useAccount, useReadContract, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import {
   ADDRESSES,
   deltaMonVaultAbi,
   erc20Abi,
   getDeployment,
-  isSupportedChainId,
 } from "@deltamon/shared";
+import { CrossChainDepositPanel } from "./CrossChainDepositPanel";
 
 const USDC_DECIMALS = 6;
 
-function useVaultAddress(chainId: number | undefined): Address | undefined {
-  const fromEnv = process.env.NEXT_PUBLIC_VAULT_ADDRESS as Address | undefined;
-  if (fromEnv && fromEnv.length === 42) return fromEnv;
-  return chainId ? getDeployment(chainId)?.vault : undefined;
+function parsedAmount(input: string): bigint {
+  if (!/^\d+(\.\d+)?$/.test(input)) return 0n;
+  try { return parseUnits(input, USDC_DECIMALS); } catch { return 0n; }
 }
 
-export function DepositPanel() {
+function useVaultAddress(): Address | undefined {
+  const fromEnv = process.env.NEXT_PUBLIC_VAULT_ADDRESS as Address | undefined;
+  if (fromEnv && fromEnv.length === 42) return fromEnv;
+  return getDeployment(143)?.vault;
+}
+
+function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
   const { address, chainId, isConnected } = useAccount();
-  const supported = chainId !== undefined && isSupportedChainId(chainId);
-  const usdc = supported ? (ADDRESSES[chainId].tokens.USDC as Address) : undefined;
-  const vault = useVaultAddress(chainId);
+  const { openConnectModal } = useConnectModal();
+  const { switchChainAsync } = useSwitchChain();
+  const supported = chainId === 143;
+  const usdc = ADDRESSES[143].tokens.USDC as Address;
+  const vault = useVaultAddress();
   const [input, setInput] = useState("");
   const [hash, setHash] = useState<`0x${string}` | undefined>();
   const [lastAction, setLastAction] = useState<"approve" | "deposit" | "redeem" | null>(null);
 
   const enabled = Boolean(usdc && address);
   const { data: balance, refetch: refetchBalance } = useReadContract({
+    chainId: 143,
     address: usdc,
     abi: erc20Abi,
     functionName: "balanceOf",
@@ -37,6 +46,7 @@ export function DepositPanel() {
     query: { enabled },
   });
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
+    chainId: 143,
     address: usdc,
     abi: erc20Abi,
     functionName: "allowance",
@@ -44,6 +54,7 @@ export function DepositPanel() {
     query: { enabled: enabled && Boolean(vault) },
   });
   const { data: shares, refetch: refetchShares } = useReadContract({
+    chainId: 143,
     address: vault,
     abi: deltaMonVaultAbi,
     functionName: "balanceOf",
@@ -51,22 +62,25 @@ export function DepositPanel() {
     query: { enabled: Boolean(vault && address) },
   });
   const { data: shareDecimals } = useReadContract({
+    chainId: 143,
     address: vault,
     abi: deltaMonVaultAbi,
     functionName: "decimals",
     query: { enabled: Boolean(vault) },
   });
   const { data: minDeposit } = useReadContract({
+    chainId: 143,
     address: vault,
     abi: deltaMonVaultAbi,
     functionName: "minDeposit",
     query: { enabled: Boolean(vault) },
   });
   const { data: previewShares } = useReadContract({
+    chainId: 143,
     address: vault,
     abi: deltaMonVaultAbi,
     functionName: "previewDeposit",
-    args: [input && !Number.isNaN(Number(input)) ? parseUnits(input, USDC_DECIMALS) : 0n],
+    args: [parsedAmount(input)],
     query: { enabled: Boolean(vault) && input !== "" },
   });
 
@@ -76,7 +90,7 @@ export function DepositPanel() {
     query: { enabled: Boolean(hash) },
   });
 
-  const amount = input && !Number.isNaN(Number(input)) ? parseUnits(input, USDC_DECIMALS) : 0n;
+  const amount = parsedAmount(input);
   const needsApproval = allowance !== undefined && amount > allowance;
   const overBalance = balance !== undefined && amount > balance;
   const belowMin = minDeposit !== undefined && amount > 0n && amount < minDeposit;
@@ -96,6 +110,7 @@ export function DepositPanel() {
       setHash(
         await writeContractAsync({
           address: usdc,
+          chainId: 143,
           abi: erc20Abi,
           functionName: "approve",
           args: [vault, amount],
@@ -108,6 +123,7 @@ export function DepositPanel() {
     setHash(
       await writeContractAsync({
         address: vault,
+        chainId: 143,
         abi: deltaMonVaultAbi,
         functionName: "deposit",
         args: [amount, address],
@@ -123,6 +139,7 @@ export function DepositPanel() {
     setHash(
       await writeContractAsync({
         address: vault,
+        chainId: 143,
         abi: deltaMonVaultAbi,
         functionName: "redeem",
         args: [shares, address, address],
@@ -142,9 +159,9 @@ export function DepositPanel() {
           : "Deposit USDC";
 
   return (
-    <div id="deposit" className="border-line bg-surface rounded-xl border p-5">
+    <div>
       <div className="flex items-baseline justify-between">
-        <h2 className="text-xl font-semibold">Deposit</h2>
+        {embedded ? <span className="text-muted text-sm">Amount from Monad</span> : <h2 className="text-xl font-semibold">Deposit</h2>}
         {balance !== undefined ? (
           <button
             type="button"
@@ -157,7 +174,7 @@ export function DepositPanel() {
       </div>
 
       <label className="mt-4 block">
-        <span className="text-muted text-sm">Amount</span>
+        {!embedded ? <span className="text-muted text-sm">Amount</span> : null}
         <div className="border-line focus-within:border-monad mt-1 flex items-center rounded-lg border px-3">
           <input
             inputMode="decimal"
@@ -189,8 +206,8 @@ export function DepositPanel() {
 
       <button
         type="button"
-        disabled={!canSubmit}
-        onClick={() => void submit()}
+        disabled={isConnected && supported && !canSubmit}
+        onClick={() => !isConnected ? openConnectModal?.() : !supported ? void switchChainAsync({ chainId: 143 }) : void submit()}
         className="bg-monad hover:bg-monad-deep mt-4 w-full rounded-lg px-4 py-3 text-base font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isPending ? "Confirm in wallet…" : confirming ? "Confirming…" : label}
@@ -231,6 +248,23 @@ export function DepositPanel() {
           </button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+export function DepositPanel() {
+  const [crossChainEnabled, setCrossChainEnabled] = useState(false);
+
+  useEffect(() => {
+    void fetch("/api/crosschain/config", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((config: { enabled?: boolean }) => setCrossChainEnabled(config.enabled === true))
+      .catch(() => setCrossChainEnabled(false));
+  }, []);
+
+  return (
+    <div id="deposit" className="border-line bg-surface rounded-xl border p-5">
+      {crossChainEnabled ? <CrossChainDepositPanel monadPanel={<MonadDepositPanel embedded />} /> : <MonadDepositPanel />}
     </div>
   );
 }

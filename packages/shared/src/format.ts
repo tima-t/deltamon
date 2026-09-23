@@ -9,6 +9,7 @@ export function formatUsd(value: number, opts: { compact?: boolean } = {}): stri
     style: "currency",
     currency: "USD",
     notation: opts.compact ? "compact" : "standard",
+    minimumFractionDigits: 0,
     maximumFractionDigits: opts.compact ? 2 : 0,
   }).format(value);
 }
