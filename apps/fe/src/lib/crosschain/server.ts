@@ -121,6 +121,11 @@ export async function getIntermediary(account: Address): Promise<Address> {
   return address;
 }
 
+export function isEoaCompatibleCode(code: Hex | undefined): boolean {
+  // EIP-7702 delegated EOAs have a 23-byte delegation marker, not contract bytecode.
+  return !code || code === "0x" || /^0xef0100[0-9a-f]{40}$/i.test(code);
+}
+
 export async function assertEoa(account: Address, asset: CrossChainAsset): Promise<void> {
   const source = sourceChains[asset.blockchain];
   if (!source) throw new DepositError("Unsupported source chain");
@@ -129,8 +134,11 @@ export async function assertEoa(account: Address, asset: CrossChainAsset): Promi
     sourceClient.getCode({ address: account }),
     monadClient.getCode({ address: account }),
   ]);
-  if ((sourceCode && sourceCode !== "0x") || (monadCode && monadCode !== "0x")) {
-    throw new DepositError("Cross-chain deposits currently support standard EVM wallets only");
+  if (!isEoaCompatibleCode(sourceCode)) {
+    throw new DepositError(`Your connected address is a contract wallet on ${source.name}. This route requires a standard EVM signature from the same address.`);
+  }
+  if (!isEoaCompatibleCode(monadCode)) {
+    throw new DepositError("Your connected address is a contract wallet on Monad. This route requires a standard EVM signature from the same address.");
   }
 }
 

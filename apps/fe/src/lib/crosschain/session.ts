@@ -1,6 +1,10 @@
 import { isAddress, type Address, type Hex } from "viem";
 
 export const SESSION_KEY = "deltamon.crosschain-deposit.v1";
+export const RECENT_SESSION_KEY = "deltamon.crosschain-deposit.recent.v1";
+
+export const TERMINAL_STATUSES = ["SUCCESS", "OPERATION_FAILED", "DEPOSIT_FAILED", "EXPIRED"] as const;
+export type TerminalStatus = (typeof TERMINAL_STATUSES)[number];
 
 export interface DepositSession {
   account: Address;
@@ -17,6 +21,11 @@ export interface DepositSession {
   initialShares?: string;
   startingBlock?: string;
   recoveryId?: string;
+  terminalStatus?: TerminalStatus;
+}
+
+export function isTerminalDeposit(status: string | undefined, mintConfirmed: boolean): status is TerminalStatus {
+  return status === "SUCCESS" ? mintConfirmed : TERMINAL_STATUSES.some((terminal) => terminal === status);
 }
 
 export function parseStoredSession(raw: string | null, account: Address): DepositSession | null {

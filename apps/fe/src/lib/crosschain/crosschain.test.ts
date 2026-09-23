@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const chain = vi.hoisted(() => ({
-  code: undefined as string | undefined,
+  sourceCode: undefined as `0x${string}` | undefined,
+  monadCode: undefined as `0x${string}` | undefined,
   balance: 0n,
   shares: 0n,
   failBalance: false,
@@ -17,8 +18,8 @@ vi.mock("viem", async (importOriginal) => {
   const actual = await importOriginal<typeof import("viem")>();
   return {
     ...actual,
-    createPublicClient: () => ({
-      getCode: async () => chain.code,
+    createPublicClient: ({ chain: rpcChain }: { chain: { id: number } }) => ({
+      getCode: async () => rpcChain.id === 143 ? chain.monadCode : chain.sourceCode,
       getBlockNumber: async () => 123n,
       getLogs: async () => chain.logs,
       readContract: async ({ address, functionName }: { address: string; functionName: string }) => {
@@ -38,8 +39,8 @@ vi.mock("viem", async (importOriginal) => {
 });
 
 import { getCrossChainCatalog, getFundedAssets } from "./catalog";
-import { parseInput, requestDepositExecution, signatureToAurora, submitSignature } from "./server";
-import { depositErrorMessage, parseStoredSession, quoteExpired } from "./session";
+import { isEoaCompatibleCode, parseInput, requestDepositExecution, signatureToAurora, submitSignature } from "./server";
+import { depositErrorMessage, isTerminalDeposit, parseStoredSession, quoteExpired } from "./session";
 import { getDepositStages } from "./progress";
 import { GET as statusGET } from "../../app/api/crosschain/status/route";
 import { POST as recoveryPOST } from "../../app/api/crosschain/recovery/route";
@@ -67,7 +68,8 @@ function reply(body: unknown, status = 200) {
 beforeEach(() => {
   process.env.AURORA_CROSSCHAIN_ENABLED = "true";
   process.env.AURORA_INTENTS_API_KEY = "test-key";
-  chain.code = undefined;
+  chain.sourceCode = undefined;
+  chain.monadCode = undefined;
   chain.balance = 0n;
   chain.shares = 0n;
   chain.logs = [];
@@ -193,10 +195,25 @@ describe("fixed vault execution", () => {
       .rejects.toThrow("cannot cover the vault deposit");
   });
 
-  it("rejects a contract wallet on source or Monad", async () => {
-    chain.code = "0x1234";
+  it("accepts EIP-7702 delegated EOAs but rejects deployed contract wallets", async () => {
+    const delegation = `0xef0100${"12".repeat(20)}` as `0x${string}`;
+    expect(isEoaCompatibleCode(delegation)).toBe(true);
+    expect(isEoaCompatibleCode(`0x${"12".repeat(20)}`)).toBe(false);
+    expect(isEoaCompatibleCode("0xef01001234")).toBe(false);
+    chain.sourceCode = delegation;
+    chain.monadCode = delegation;
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => init?.body
+      ? reply({ result: { quote: { minAmountOut: "9000000" }, details: { networkFee: "1000", intermediaryAddress: intermediary } } })
+      : reply(catalog)));
+    await expect(requestDepositExecution(parseInput({ account, sourceAssetId: sourceId, amount: "10000000" }), true)).resolves.toMatchObject({ depositAmount: "9000000" });
+
+    chain.sourceCode = "0x1234";
     await expect(requestDepositExecution(parseInput({ account, sourceAssetId: sourceId, amount: "10000000" }), true))
-      .rejects.toThrow("standard EVM wallets");
+      .rejects.toThrow("contract wallet on Base");
+    chain.sourceCode = delegation;
+    chain.monadCode = "0x1234";
+    await expect(requestDepositExecution(parseInput({ account, sourceAssetId: sourceId, amount: "10000000" }), true))
+      .rejects.toThrow("contract wallet on Monad");
   });
 });
 
@@ -209,6 +226,15 @@ describe("reload and expiry", () => {
     expect(parseStoredSession(raw, account)?.id).toBe("execution-1");
     expect(parseStoredSession(raw, otherAccount)).toBeNull();
     expect(parseStoredSession("bad-json", account)).toBeNull();
+  });
+
+  it("archives settled orders while keeping unconfirmed mints active", () => {
+    expect(isTerminalDeposit("SUCCESS", true)).toBe(true);
+    expect(isTerminalDeposit("SUCCESS", false)).toBe(false);
+    expect(isTerminalDeposit("OPERATION_FAILED", false)).toBe(true);
+    expect(isTerminalDeposit("DEPOSIT_FAILED", false)).toBe(true);
+    expect(isTerminalDeposit("EXPIRED", false)).toBe(true);
+    expect(isTerminalDeposit("DEPOSIT_PROCESSING", false)).toBe(false);
   });
 
   it("expires quotes at their deadline", () => {

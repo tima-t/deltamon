@@ -7,7 +7,7 @@ import { createPublicClient, erc20Abi, formatUnits, http, isAddress, parseUnits,
 import { ADDRESSES } from "@deltamon/shared";
 import { sourceChainById } from "@/lib/crosschain/chains";
 import type { FundedAsset } from "@/lib/crosschain/catalog";
-import { depositErrorMessage, parseStoredSession, quoteExpired, SESSION_KEY, type DepositSession } from "@/lib/crosschain/session";
+import { depositErrorMessage, isTerminalDeposit, parseStoredSession, quoteExpired, RECENT_SESSION_KEY, SESSION_KEY, type DepositSession } from "@/lib/crosschain/session";
 import { DepositJourney } from "./DepositJourney";
 
 interface Execution {
@@ -60,17 +60,24 @@ async function json<T>(url: string, body?: Record<string, unknown>, timeoutMs = 
   return result;
 }
 
-function restoreSession(account: Address): Session | null {
+function restoreSession(key: string, account: Address): Session | null {
   try {
-    return parseStoredSession(localStorage.getItem(SESSION_KEY), account);
+    return parseStoredSession(localStorage.getItem(key), account);
   } catch {
     return null;
   }
 }
 
-function saveSession(value: Session | null) {
-  if (value) localStorage.setItem(SESSION_KEY, JSON.stringify(value));
-  else localStorage.removeItem(SESSION_KEY);
+function saveSession(value: Session | null, key = SESSION_KEY) {
+  if (value) localStorage.setItem(key, JSON.stringify(value));
+  else localStorage.removeItem(key);
+}
+
+function mintConfirmedFor(status: StatusResponse, session: Session): boolean {
+  return Boolean(
+    status.mintTxHash ||
+    (status.execution.status === "SUCCESS" && status.shares && session.initialShares && BigInt(status.shares) > BigInt(session.initialShares)),
+  );
 }
 
 function short(address: string) {
@@ -101,6 +108,8 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
   const [amountText, setAmountText] = useState("");
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [recentSession, setRecentSession] = useState<Session | null>(null);
+  const restoredSessionId = useRef<string | null>(null);
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -154,7 +163,19 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
       setAmountText("");
       setQuote(null);
       setStatus(null);
-      setSession(restoreSession(address));
+      const active = restoreSession(SESSION_KEY, address);
+      const recent = restoreSession(RECENT_SESSION_KEY, address);
+      if (active?.terminalStatus && !active.recoveryId) {
+        saveSession(active, RECENT_SESSION_KEY);
+        saveSession(null);
+        setRecentSession(active);
+        setSession(null);
+        restoredSessionId.current = null;
+      } else {
+        setRecentSession(recent);
+        setSession(active);
+        restoredSessionId.current = active?.id ?? null;
+      }
       void refreshBalances(address);
     }, 0);
     return () => clearTimeout(timer);
@@ -168,7 +189,22 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
         const data = await json<StatusResponse>(
           `/api/crosschain/status?account=${address}&id=${encodeURIComponent(session!.id)}${session!.startingBlock ? `&startBlock=${session!.startingBlock}` : ""}`,
         );
-        if (active) setStatus(data);
+        if (!active) return;
+        const executionStatus = data.execution.status;
+        if (isTerminalDeposit(executionStatus, mintConfirmedFor(data, session!))) {
+          const settled = { ...session!, terminalStatus: executionStatus };
+          if (restoredSessionId.current === session!.id && !session!.recoveryId) {
+            saveSession(settled, RECENT_SESSION_KEY);
+            saveSession(null);
+            restoredSessionId.current = null;
+            setRecentSession(settled);
+            setSession(null);
+            setStatus(null);
+            return;
+          }
+          if (!session!.recoveryId) saveSession(settled);
+        }
+        setStatus(data);
       } catch (cause) {
         if (active) setError(cause instanceof Error ? cause.message : "Could not update deposit status");
       }
@@ -184,7 +220,17 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
     const poll = async () => {
       try {
         const data = await json<StatusResponse>(`/api/crosschain/status?account=${address}&id=${encodeURIComponent(session.recoveryId!)}`);
-        if (active) setRecoveryStatus(data.execution);
+        if (!active) return;
+        setRecoveryStatus(data.execution);
+        if (restoredSessionId.current === session.id && ["SUCCESS", "OPERATION_FAILED", "EXPIRED"].includes(data.execution.status ?? "")) {
+          const settled: Session = { ...session, terminalStatus: session.terminalStatus ?? "OPERATION_FAILED" };
+          saveSession(settled, RECENT_SESSION_KEY);
+          saveSession(null);
+          restoredSessionId.current = null;
+          setRecentSession(settled);
+          setSession(null);
+          setStatus(null);
+        }
       } catch (cause) {
         if (active) setError(cause instanceof Error ? cause.message : "Could not update recovery status");
       }
@@ -192,7 +238,7 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
     void poll();
     const timer = setInterval(() => void poll(), 8_000);
     return () => { active = false; clearInterval(timer); };
-  }, [address, session?.recoveryId]);
+  }, [address, session]);
 
   async function review() {
     if (!address || !selected || !canQuote) return;
@@ -376,7 +422,13 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
   }
 
   function clearSession() {
+    if (session && status && isTerminalDeposit(status.execution.status, mintConfirmedFor(status, session))) {
+      const settled = { ...session, terminalStatus: status.execution.status };
+      saveSession(settled, RECENT_SESSION_KEY);
+      setRecentSession(settled);
+    }
     saveSession(null);
+    restoredSessionId.current = null;
     setSession(null);
     setStatus(null);
     setQuote(null);
@@ -384,10 +436,7 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
     if (address) void refreshBalances(address);
   }
 
-  const mintConfirmed = Boolean(
-    status?.mintTxHash ||
-    (status?.execution.status === "SUCCESS" && status.shares && session?.initialShares && BigInt(status.shares) > BigInt(session.initialShares)),
-  );
+  const mintConfirmed = Boolean(status && session && mintConfirmedFor(status, session));
 
   return (
     <div className="space-y-4">
@@ -468,7 +517,8 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
               Refresh source transaction tracking
             </button>
           ) : null}
-          {["SUCCESS", "EXPIRED", "DEPOSIT_FAILED", "OPERATION_FAILED"].includes(status?.execution.status ?? "") ? (
+          {["SUCCESS", "EXPIRED", "DEPOSIT_FAILED", "OPERATION_FAILED"].includes(status?.execution.status ?? "") &&
+            (!session.recoveryId || ["SUCCESS", "OPERATION_FAILED", "EXPIRED"].includes(recoveryStatus?.status ?? "")) ? (
             <button type="button" onClick={clearSession} className="text-muted text-sm underline">Start another deposit</button>
           ) : null}
         </div>
@@ -482,6 +532,12 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
               </div>
               <button type="button" disabled={loadingBalances} onClick={() => void refreshBalances(address)} className="text-monad hover:text-monad-deep min-h-10 px-2 text-xs font-medium disabled:opacity-50">Refresh</button>
             </div>
+            {recentSession ? (
+              <div className="border-line bg-paper/40 flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-xs">
+                <p className="text-muted">{recentSession.terminalStatus === "SUCCESS" ? "Last deposit completed." : "Previous deposit needs attention."}</p>
+                <button type="button" onClick={() => { restoredSessionId.current = null; setStatus(null); setSession(recentSession); }} className="text-monad shrink-0 font-medium underline">View details</button>
+              </div>
+            ) : null}
             <div className="grid gap-2" role="group" aria-label="Choose USDC source">
               {monadBalance !== undefined && monadBalance > 0n ? (
                 <button type="button" aria-pressed={isMonadSelected} onClick={() => { setSelectedId("monad"); setAmountText(""); setQuote(null); }} className={`border-line flex min-h-15 items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-[border-color,background-color,scale] active:scale-[0.96] ${isMonadSelected ? "border-monad bg-monad/10" : "hover:border-monad/50"}`}>
