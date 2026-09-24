@@ -2,18 +2,27 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { formatUnits, parseUnits, type Address } from "viem";
 import {
   useAccount,
+  useBalance,
   useReadContract,
   useSwitchChain,
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { ADDRESSES, deltaMonVaultAbi, erc20Abi, getDeployment } from "@deltamon/shared";
+import {
+  ADDRESSES,
+  deltaMonVaultAbi,
+  erc20Abi,
+  getDeployment,
+  monadMainnet,
+} from "@deltamon/shared";
 import { describeRevert } from "@/lib/revert";
+import { assertContractGas } from "@/lib/nativeGas";
 import { CrossChainDepositPanel } from "./CrossChainDepositPanel";
+import { ReceiveFunds } from "./ReceiveFunds";
+import { useWalletEntry } from "./WalletEntry";
 
 const USDC_DECIMALS = 6;
 
@@ -34,7 +43,7 @@ function useVaultAddress(): Address | undefined {
 
 function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
   const { address, chainId, isConnected } = useAccount();
-  const { openConnectModal } = useConnectModal();
+  const { openEntry, isPasskey } = useWalletEntry();
   const { switchChainAsync, isPending: switchingNetwork } = useSwitchChain();
   const usdc = ADDRESSES[143].tokens.USDC as Address;
   const vault = useVaultAddress();
@@ -54,6 +63,11 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
     functionName: "balanceOf",
     args: address ? [address] : undefined,
     query: { enabled },
+  });
+  const { data: gasBalance, refetch: refetchGas } = useBalance({
+    address,
+    chainId: 143,
+    query: { enabled: Boolean(address && isPasskey), refetchInterval: 12_000 },
   });
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
     chainId: 143,
@@ -97,7 +111,7 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
   const { writeContractAsync, isPending, error, reset } = useWriteContract();
   const {
     isLoading: confirming,
-    isSuccess,
+    data: receipt,
     error: receiptError,
   } = useWaitForTransactionReceipt({
     chainId: 143,
@@ -118,14 +132,30 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
     maxDeposit !== undefined &&
     previewShares !== undefined;
   const canSubmit =
-    isConnected && vault && ready && amount > 0n && !overBalance && !overCap && !belowMin && !busy;
+    isConnected &&
+    vault &&
+    ready &&
+    amount > 0n &&
+    !overBalance &&
+    !overCap &&
+    !belowMin &&
+    !busy &&
+    (!isPasskey || (gasBalance !== undefined && gasBalance.value > 0n));
   const decimals = shareDecimals ?? 18;
 
   useEffect(() => {
-    if (!isSuccess || !hash || lastRefreshedHash.current === hash) return;
+    if (!receipt || receipt.status !== "success" || !hash || lastRefreshedHash.current === hash)
+      return;
     lastRefreshedHash.current = hash;
     void Promise.all([refetchBalance(), refetchAllowance()]);
-  }, [isSuccess, hash, refetchBalance, refetchAllowance]);
+    if (lastAction === "deposit") {
+      const timer = window.setTimeout(() => {
+        setInput("");
+        setReviewing(false);
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+  }, [receipt, hash, lastAction, refetchBalance, refetchAllowance]);
 
   async function submit() {
     if (!vault || !usdc || !address) return;
@@ -136,6 +166,13 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
     try {
       if (chainId !== 143) await switchChainAsync({ chainId: 143 });
       if (needsApproval) {
+        if (isPasskey)
+          await assertContractGas(monadMainnet, address, {
+            address: usdc,
+            abi: erc20Abi,
+            functionName: "approve",
+            args: [vault, amount],
+          });
         setLastAction("approve");
         setHash(
           await writeContractAsync({
@@ -148,6 +185,13 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
         );
         return;
       }
+      if (isPasskey)
+        await assertContractGas(monadMainnet, address, {
+          address: vault,
+          abi: deltaMonVaultAbi,
+          functionName: "deposit",
+          args: [amount, address],
+        });
       setLastAction("deposit");
       setHash(
         await writeContractAsync({
@@ -158,8 +202,6 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
           args: [amount, address],
         }),
       );
-      setInput("");
-      setReviewing(false);
     } catch (cause) {
       setActionError(describeRevert(cause));
     } finally {
@@ -168,7 +210,7 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
   }
 
   const label = !isConnected
-    ? "Connect a wallet to deposit"
+    ? "Get started to deposit"
     : !vault
       ? "Vault not deployed on this network yet"
       : needsApproval
@@ -177,6 +219,17 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
 
   return (
     <div>
+      {isPasskey && address && (balance === 0n || gasBalance?.value === 0n) ? (
+        <div className="mb-5">
+          <ReceiveFunds
+            address={address}
+            onRefresh={() => {
+              void refetchBalance();
+              void refetchGas();
+            }}
+          />
+        </div>
+      ) : null}
       <div className="flex items-baseline justify-between">
         {embedded ? (
           <span className="text-muted text-sm">Amount from Monad</span>
@@ -270,7 +323,7 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
         type="button"
         disabled={isConnected && !canSubmit}
         onClick={() =>
-          !isConnected ? openConnectModal?.() : !reviewing ? setReviewing(true) : void submit()
+          !isConnected ? openEntry() : !reviewing ? setReviewing(true) : void submit()
         }
         className="bg-monad hover:bg-monad-deep mt-4 w-full rounded-lg px-4 py-3 text-base font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
       >
@@ -279,7 +332,9 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
           : preparing
             ? "Preparing wallet…"
             : isPending
-              ? "Confirm in wallet…"
+              ? isPasskey
+                ? "Confirm with passkey…"
+                : "Confirm in wallet…"
               : confirming
                 ? "Confirming…"
                 : reviewing
@@ -291,8 +346,8 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
         <p className="text-muted mt-2 text-xs">Your wallet will switch to Monad first.</p>
       ) : null}
 
-      {isSuccess && hash ? (
-        <p className="text-long mt-3 text-sm">
+      {receipt?.status === "success" && hash ? (
+        <p role="status" className="text-long mt-3 text-sm">
           {lastAction === "approve"
             ? "Approved. You can deposit now."
             : "Deposited. sdMON is in your wallet."}{" "}
@@ -306,9 +361,11 @@ function MonadDepositPanel({ embedded = false }: { embedded?: boolean }) {
           </a>
         </p>
       ) : null}
-      {actionError || error || receiptError ? (
-        <p className="text-short mt-3 text-sm">
-          {actionError ?? describeRevert(receiptError ?? error)}
+      {actionError || error || receiptError || receipt?.status === "reverted" ? (
+        <p role="alert" className="text-short mt-3 text-sm">
+          {receipt?.status === "reverted"
+            ? "The transaction reverted onchain. Your deposit was not completed."
+            : (actionError ?? describeRevert(receiptError ?? error))}
         </p>
       ) : null}
 

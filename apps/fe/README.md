@@ -15,6 +15,25 @@ the shared deployment address.
 Browser-injected wallets work without `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`. Set a valid
 Reown project ID to also offer WalletConnect QR wallets; an empty ID disables that option.
 
+## Passkey wallets
+
+Set `NEXT_PUBLIC_PASSKEY_ENABLED=true` to show Mera passkey onboarding on `app.deltamon.xyz` or
+`localhost`. Other hosts cannot create or access DeltaMon passkeys. Keep the public flag off until a
+small funded passkey deposit and exit have been checked end to end. Mera currently requires a
+PRF-capable passkey provider; the UI offers the existing wallet path when PRF is unavailable.
+
+Each passkey derives its own EOA at `m/44'/60'/0'/0/0`. It does not unlock an existing wallet or move
+an existing vault position. The browser stores only the passkey credential metadata and public
+address. Signing requests reverify the passkey and release the in-memory key after each signature.
+The account menu offers an optional 24-word recovery phrase export. Losing the passkey without a
+synced copy or saved phrase can mean losing access to the wallet. Avoid changing the public passkey
+hostname after users fund accounts.
+
+A new passkey account needs USDC and native gas on Monad for a direct deposit, or USDC and source
+chain gas for an enabled Aurora route. The deposit area shows the receiving address, QR code, USDC
+contract, gas balance, and refresh control. Cross-chain deposits retain the existing
+`AURORA_CROSSCHAIN_ENABLED` gate and must pass a separate funded acceptance run before activation.
+
 ## Cross-chain deposits
 
 Add `AURORA_INTENTS_API_KEY` to `apps/fe/.env.local` or `apps/fe/.env`. The key is used only by the Next.js server. The feature is off by default. Run `node apps/fe/scripts/probe-aurora.mjs` from the repository root to dry-run Base USDC → Monad USDC with the fixed vault approval and deposit steps. This checks Aurora's live quote and step construction but sends no funds.

@@ -13,6 +13,8 @@ import {
 import { chainById, deltaMonVaultAbi, getDeployment, isSupportedChainId } from "@deltamon/shared";
 import { describeRevert } from "@/lib/revert";
 import { DEFAULT_CHAIN_ID } from "@/lib/wagmi";
+import { MERA_CONNECTOR_ID } from "@/lib/meraConnector";
+import { assertContractGas } from "@/lib/nativeGas";
 
 /** Typed as a plain Abi on purpose: the console addresses functions by name, not by literal type. */
 export const VAULT_ABI = deltaMonVaultAbi as Abi;
@@ -262,7 +264,7 @@ export function useVaultAction(
   vaultChainId: number,
   onConfirmed?: () => void,
 ) {
-  const { chainId: walletChainId } = useAccount();
+  const { address: accountAddress, chainId: walletChainId, connector } = useAccount();
   const publicClient = usePublicClient({ chainId: vaultChainId });
   const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync, isPending, reset } = useWriteContract();
@@ -309,6 +311,14 @@ export function useVaultAction(
         if (walletChainId !== vaultChainId) {
           await switchChainAsync({ chainId: vaultChainId });
         }
+        if (connector?.id === MERA_CONNECTOR_ID && accountAddress) {
+          await assertContractGas(chainById(vaultChainId), accountAddress, {
+            address: target,
+            abi: options?.abi ?? VAULT_ABI,
+            functionName,
+            args,
+          } as Parameters<typeof assertContractGas>[2]);
+        }
         const sent = await writeContractAsync({
           address: target,
           abi: options?.abi ?? VAULT_ABI,
@@ -323,7 +333,7 @@ export function useVaultAction(
         setPreparing(false);
       }
     },
-    [vault, vaultChainId, walletChainId, publicClient, switchChainAsync, writeContractAsync, reset],
+    [vault, vaultChainId, walletChainId, accountAddress, connector, publicClient, switchChainAsync, writeContractAsync, reset],
   );
 
   return {

@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount } from "wagmi";
 import { ThemeToggle } from "./ThemeToggle";
+import { useWalletEntry } from "./WalletEntry";
 
 export function SiteHeader() {
-  const { chain, isConnected } = useAccount();
+  const { address, chain, isConnected } = useAccount();
+  const { openEntry, openAccount, isPasskey } = useWalletEntry();
 
   return (
     <header className="site-header mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
@@ -27,33 +28,15 @@ export function SiteHeader() {
           {isConnected ? (chain?.name ?? "Connected") : "Monad"}
         </span>
         <ThemeToggle />
-        <ConnectButton.Custom>
-          {({ account, chain, mounted, openAccountModal, openChainModal, openConnectModal }) => {
-            const action =
-              !mounted || !account
-                ? openConnectModal
-                : chain?.unsupported
-                  ? openChainModal
-                  : openAccountModal;
-            const label =
-              !mounted || !account
-                ? "Connect Wallet"
-                : chain?.unsupported
-                  ? "Switch Network"
-                  : `${account.address.slice(0, 6)}…${account.address.slice(-4)}`;
-
-            return (
-              <button
-                type="button"
-                disabled={!mounted}
-                onClick={action}
-                className="button-primary rounded-lg px-3 py-2 text-xs font-semibold sm:text-sm disabled:cursor-wait disabled:opacity-70"
-              >
-                {label}
-              </button>
-            );
-          }}
-        </ConnectButton.Custom>
+        <button
+          type="button"
+          onClick={isConnected ? openAccount : openEntry}
+          className="button-primary rounded-lg px-3 py-2 text-xs font-semibold sm:text-sm"
+        >
+          {isConnected && address
+            ? `${isPasskey ? "Passkey · " : ""}${address.slice(0, 6)}…${address.slice(-4)}`
+            : "Get started"}
+        </button>
       </div>
     </header>
   );

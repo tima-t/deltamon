@@ -29,6 +29,13 @@ DeltaMon should feel like a precision instrument for understanding a vault. Help
 6. **Make recovery obvious.** Preserve the entered amount after a failed wallet or chain action. After success, update position data and reset only the completed input. For queued requests, show the request, funding deadline, claim/cancel actions, and current status.
 7. **Keep accessibility native.** Use semantic buttons, labels, `role="status"` for progress and success, `role="alert"` for failure, keyboard-visible focus, sufficient hit areas, and readable results with reduced motion.
 
+## Wallet entry and funding
+
+- Use **Get started** before an account is selected. Present **Continue with passkey** and **Connect existing wallet** as equal, clearly named choices. A new passkey opens a new EOA address and does not move an existing position.
+- Label the active address **Passkey wallet** or **Connected wallet**. Ask for passkey verification when an approval, deposit, authorization, or exit requires a signature; keep approval and deposit as separate onchain states.
+- For an empty passkey wallet, show the receiving address and QR code with the selected chain, exact USDC token contract, and required native gas. Keep the funding instructions next to the deposit action, and refresh balances without losing the selected route.
+- Offer recovery phrase export from the account menu only after a fresh passkey check. Explain that the phrase controls the funds, keep it visible only while requested, and never store it in app persistence.
+
 ## Review checklist for any user action
 
 - Can the user tell immediately that the click registered?
