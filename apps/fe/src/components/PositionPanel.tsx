@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { formatUnits, parseUnits, type Address } from "viem";
 import { useAccount, useReadContracts } from "wagmi";
 import { getDeployment, REDEMPTION_DEADLINE_HOURS } from "@deltamon/shared";
 import { redemptionPayout } from "@/lib/positionFeedback";
 import { VAULT_ABI, fmtShares, fmtUsdc, useVaultAction } from "@/lib/vault";
+import { useWalletEntry } from "./WalletEntry";
 
 const PAGE_SIZE = 64n;
 type PositionIntent = {
@@ -34,6 +34,7 @@ function PositionActionFeedback({
   payout: bigint | undefined;
 }) {
   const reduceMotion = useReducedMotion();
+  const { isPasskey } = useWalletEntry();
   if (!intent) return null;
 
   const phase = action.error
@@ -61,7 +62,9 @@ function PositionActionFeedback({
       : phase === "preparing"
         ? `Preparing ${actionName}`
         : phase === "wallet"
-          ? `Confirm ${actionName} in your wallet`
+          ? isPasskey
+            ? `Confirm ${actionName} with your passkey`
+            : `Confirm ${actionName} in your wallet`
           : phase === "chain"
             ? `${actionName.charAt(0).toUpperCase()}${actionName.slice(1)} submitted to Monad`
             : intent.kind === "redeem"
@@ -79,7 +82,9 @@ function PositionActionFeedback({
       : phase === "preparing"
         ? "Checking the vault and network before the wallet request. No position has changed yet."
         : phase === "wallet"
-          ? "Waiting for your wallet confirmation. No vault position has changed yet."
+          ? isPasskey
+            ? "Waiting for passkey verification. No vault position has changed yet."
+            : "Waiting for your wallet confirmation. No vault position has changed yet."
           : phase === "chain"
             ? "The transaction is on its way. Your position updates after onchain confirmation."
             : intent.kind === "redeem"
@@ -153,7 +158,7 @@ function PositionActionFeedback({
 
 export function PositionPanel() {
   const { address } = useAccount();
-  const { openConnectModal } = useConnectModal();
+  const { openEntry } = useWalletEntry();
   const vault = (process.env.NEXT_PUBLIC_VAULT_ADDRESS || getDeployment(143)?.vault) as
     Address | undefined;
   const [amountText, setAmountText] = useState("");
@@ -257,10 +262,10 @@ export function PositionPanel() {
       {!address ? (
         <button
           type="button"
-          onClick={() => openConnectModal?.()}
+          onClick={openEntry}
           className="button-primary mt-6 rounded-xl px-5 py-3 font-semibold"
         >
-          Connect wallet to view position
+          Get started to view position
         </button>
       ) : !vault ? (
         <p className="text-muted mt-6 text-sm">Vault address is not configured.</p>

@@ -1,14 +1,39 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { useConnectModal } from "@rainbow-me/rainbowkit";
-import { useAccount, useReadContract, useSignMessage, useSwitchChain, useWriteContract } from "wagmi";
-import { createPublicClient, erc20Abi, formatUnits, http, isAddress, parseUnits, type Address } from "viem";
+import {
+  useAccount,
+  useBalance,
+  useReadContract,
+  useSignMessage,
+  useSwitchChain,
+  useWriteContract,
+} from "wagmi";
+import {
+  createPublicClient,
+  erc20Abi,
+  formatUnits,
+  http,
+  isAddress,
+  parseUnits,
+  type Address,
+} from "viem";
 import { ADDRESSES } from "@deltamon/shared";
 import { sourceChainById } from "@/lib/crosschain/chains";
 import type { FundedAsset } from "@/lib/crosschain/catalog";
-import { depositErrorMessage, isTerminalDeposit, parseStoredSession, quoteExpired, RECENT_SESSION_KEY, SESSION_KEY, type DepositSession } from "@/lib/crosschain/session";
+import {
+  depositErrorMessage,
+  isTerminalDeposit,
+  parseStoredSession,
+  quoteExpired,
+  RECENT_SESSION_KEY,
+  SESSION_KEY,
+  type DepositSession,
+} from "@/lib/crosschain/session";
 import { DepositJourney } from "./DepositJourney";
+import { ReceiveFunds } from "./ReceiveFunds";
+import { useWalletEntry } from "./WalletEntry";
+import { assertContractGas } from "@/lib/nativeGas";
 
 interface Execution {
   id?: string;
@@ -49,9 +74,19 @@ interface StatusResponse {
   mintTxHash?: string | null;
 }
 
-async function json<T>(url: string, body?: Record<string, unknown>, timeoutMs = 30_000): Promise<T> {
+async function json<T>(
+  url: string,
+  body?: Record<string, unknown>,
+  timeoutMs = 30_000,
+): Promise<T> {
   const response = await fetch(url, {
-    ...(body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
+    ...(body
+      ? {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }
+      : {}),
     cache: "no-store",
     signal: AbortSignal.timeout(timeoutMs),
   });
@@ -76,7 +111,10 @@ function saveSession(value: Session | null, key = SESSION_KEY) {
 function mintConfirmedFor(status: StatusResponse, session: Session): boolean {
   return Boolean(
     status.mintTxHash ||
-    (status.execution.status === "SUCCESS" && status.shares && session.initialShares && BigInt(status.shares) > BigInt(session.initialShares)),
+    (status.execution.status === "SUCCESS" &&
+      status.shares &&
+      session.initialShares &&
+      BigInt(status.shares) > BigInt(session.initialShares)),
   );
 }
 
@@ -85,7 +123,8 @@ function short(address: string) {
 }
 
 function stage(status?: string, sourceTxHash?: string, mintConfirmed?: boolean) {
-  if (status === "SUCCESS") return mintConfirmed ? "Shares minted" : "Aurora settled; checking share mint";
+  if (status === "SUCCESS")
+    return mintConfirmed ? "Shares minted" : "Aurora settled; checking share mint";
   if (status === "OPERATION_FAILED") return "Vault deposit needs attention";
   if (status === "DEPOSIT_FAILED" || status === "EXPIRED") return "Transfer refunded or expired";
   if (status === "OPERATION_PROCESSING") return "Minting sdMON on Monad";
@@ -97,7 +136,7 @@ function stage(status?: string, sourceTxHash?: string, mintConfirmed?: boolean) 
 
 export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }) {
   const { address, chainId } = useAccount();
-  const { openConnectModal } = useConnectModal();
+  const { openEntry, isPasskey } = useWalletEntry();
   const { switchChainAsync } = useSwitchChain();
   const { signMessageAsync } = useSignMessage();
   const { writeContractAsync } = useWriteContract();
@@ -115,7 +154,11 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
   const [error, setError] = useState("");
   const [recoveryQuote, setRecoveryQuote] = useState<{ amount: string; fee: string } | null>(null);
   const [recoveryStatus, setRecoveryStatus] = useState<Execution | null>(null);
-  const { data: monadBalance, isLoading: loadingMonadBalance, refetch: refetchMonadBalance } = useReadContract({
+  const {
+    data: monadBalance,
+    isLoading: loadingMonadBalance,
+    refetch: refetchMonadBalance,
+  } = useReadContract({
     chainId: 143,
     address: ADDRESSES[143].tokens.USDC,
     abi: erc20Abi,
@@ -126,31 +169,59 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
 
   const isMonadSelected = selectedId === "monad";
   const selected = assets.find((asset) => asset.assetId === selectedId);
+  const { data: sourceGas } = useBalance({
+    address,
+    chainId: selected?.chainId ?? 143,
+    query: { enabled: Boolean(address && selected && isPasskey), refetchInterval: 12_000 },
+  });
+  const hasUsdc = Boolean(
+    (monadBalance !== undefined && monadBalance > 0n) ||
+    assets.some((asset) => asset.balance !== null && BigInt(asset.balance) > 0n),
+  );
   const amount = (() => {
     if (!selected || !/^\d+(\.\d+)?$/.test(amountText)) return 0n;
-    try { return parseUnits(amountText, selected.decimals); } catch { return 0n; }
+    try {
+      return parseUnits(amountText, selected.decimals);
+    } catch {
+      return 0n;
+    }
   })();
-  const overBalance = selected?.balance !== null && selected?.balance !== undefined && amount > BigInt(selected.balance);
+  const overBalance =
+    selected?.balance !== null &&
+    selected?.balance !== undefined &&
+    amount > BigInt(selected.balance);
   const canQuote = Boolean(address && selected && amount > 0n && !overBalance && !busy && !session);
 
-  const refreshBalances = useCallback(async (account: Address) => {
-    const request = ++balanceRequest.current;
-    setLoadingBalances(true);
-    setError("");
-    void refetchMonadBalance();
-    try {
-      const data = await json<{ assets: FundedAsset[] }>(`/api/crosschain/balances?address=${account}`, undefined, 15_000);
-      if (request === balanceRequest.current) setAssets(data.assets.filter((asset) => asset.chainId !== 143));
-    } catch (cause) {
-      if (request === balanceRequest.current) {
-        setError(cause instanceof Error && cause.name === "TimeoutError"
-          ? "Balance check timed out. Refresh to try again."
-          : cause instanceof Error ? cause.message : "Could not load USDC balances");
+  const refreshBalances = useCallback(
+    async (account: Address) => {
+      const request = ++balanceRequest.current;
+      setLoadingBalances(true);
+      setError("");
+      void refetchMonadBalance();
+      try {
+        const data = await json<{ assets: FundedAsset[] }>(
+          `/api/crosschain/balances?address=${account}`,
+          undefined,
+          15_000,
+        );
+        if (request === balanceRequest.current)
+          setAssets(data.assets.filter((asset) => asset.chainId !== 143));
+      } catch (cause) {
+        if (request === balanceRequest.current) {
+          setError(
+            cause instanceof Error && cause.name === "TimeoutError"
+              ? "Balance check timed out. Refresh to try again."
+              : cause instanceof Error
+                ? cause.message
+                : "Could not load USDC balances",
+          );
+        }
+      } finally {
+        if (request === balanceRequest.current) setLoadingBalances(false);
       }
-    } finally {
-      if (request === balanceRequest.current) setLoadingBalances(false);
-    }
-  }, [refetchMonadBalance]);
+    },
+    [refetchMonadBalance],
+  );
 
   useEffect(() => {
     if (!address) {
@@ -206,12 +277,16 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
         }
         setStatus(data);
       } catch (cause) {
-        if (active) setError(cause instanceof Error ? cause.message : "Could not update deposit status");
+        if (active)
+          setError(cause instanceof Error ? cause.message : "Could not update deposit status");
       }
     }
     void poll();
     const timer = setInterval(() => void poll(), 8_000);
-    return () => { active = false; clearInterval(timer); };
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
   }, [address, session]);
 
   useEffect(() => {
@@ -219,11 +294,19 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
     let active = true;
     const poll = async () => {
       try {
-        const data = await json<StatusResponse>(`/api/crosschain/status?account=${address}&id=${encodeURIComponent(session.recoveryId!)}`);
+        const data = await json<StatusResponse>(
+          `/api/crosschain/status?account=${address}&id=${encodeURIComponent(session.recoveryId!)}`,
+        );
         if (!active) return;
         setRecoveryStatus(data.execution);
-        if (restoredSessionId.current === session.id && ["SUCCESS", "OPERATION_FAILED", "EXPIRED"].includes(data.execution.status ?? "")) {
-          const settled: Session = { ...session, terminalStatus: session.terminalStatus ?? "OPERATION_FAILED" };
+        if (
+          restoredSessionId.current === session.id &&
+          ["SUCCESS", "OPERATION_FAILED", "EXPIRED"].includes(data.execution.status ?? "")
+        ) {
+          const settled: Session = {
+            ...session,
+            terminalStatus: session.terminalStatus ?? "OPERATION_FAILED",
+          };
           saveSession(settled, RECENT_SESSION_KEY);
           saveSession(null);
           restoredSessionId.current = null;
@@ -232,12 +315,16 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
           setStatus(null);
         }
       } catch (cause) {
-        if (active) setError(cause instanceof Error ? cause.message : "Could not update recovery status");
+        if (active)
+          setError(cause instanceof Error ? cause.message : "Could not update recovery status");
       }
     };
     void poll();
     const timer = setInterval(() => void poll(), 8_000);
-    return () => { active = false; clearInterval(timer); };
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
   }, [address, session]);
 
   async function review() {
@@ -246,7 +333,10 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
     setBusy(true);
     try {
       const result = await json<QuoteResponse>("/api/crosschain/execution", {
-        mode: "quote", account: address, sourceAssetId: selected.assetId, amount: amount.toString(),
+        mode: "quote",
+        account: address,
+        sourceAssetId: selected.assetId,
+        amount: amount.toString(),
       });
       setQuote(result);
     } catch (cause) {
@@ -264,13 +354,25 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
       throw new Error("This quote expired. Start a new deposit before sending USDC.");
     }
     if (!current.sourceTxHash) {
+      if (isPasskey)
+        await assertContractGas(chain, address, {
+          address: current.sourceToken,
+          abi: erc20Abi,
+          functionName: "transfer",
+          args: [current.depositAddress, BigInt(current.amount)],
+        });
       if (!execution.details?.messageSigned) {
-        if (!execution.details?.payload?.payload_json) throw new Error("Aurora signing payload unavailable");
-        if (execution.details.payload.standard !== "erc191") throw new Error("Unsupported wallet signature type");
-        const signature = await signMessageAsync({ message: execution.details.payload.payload_json });
+        if (!execution.details?.payload?.payload_json)
+          throw new Error("Aurora signing payload unavailable");
+        if (execution.details.payload.standard !== "erc191")
+          throw new Error("Unsupported wallet signature type");
+        const signature = await signMessageAsync({
+          message: execution.details.payload.payload_json,
+        });
         await json("/api/crosschain/signature", { account: address, id: current.id, signature });
       }
-      if (chainId !== current.sourceChainId) await switchChainAsync({ chainId: current.sourceChainId });
+      if (chainId !== current.sourceChainId)
+        await switchChainAsync({ chainId: current.sourceChainId });
       const txHash = await writeContractAsync({
         address: current.sourceToken,
         abi: erc20Abi,
@@ -287,7 +389,9 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
         const retry = { ...current, sourceTxHash: undefined };
         saveSession(retry);
         setSession(retry);
-        throw new Error("The USDC transfer reverted on the source chain. You can retry before the quote expires.");
+        throw new Error(
+          "The USDC transfer reverted on the source chain. You can retry before the quote expires.",
+        );
       }
       await json("/api/crosschain/source", { depositAddress: current.depositAddress, txHash });
       void refreshBalances(address);
@@ -350,16 +454,22 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
       if (session.sourceTxHash) {
         const chain = sourceChainById(session.sourceChainId);
         if (!chain) throw new Error("The source chain is unavailable");
-        const client = createPublicClient({ chain, transport: http(chain.rpcUrls.default.http[0]) });
+        const client = createPublicClient({
+          chain,
+          transport: http(chain.rpcUrls.default.http[0]),
+        });
         const receipt = await client.waitForTransactionReceipt({ hash: session.sourceTxHash });
         if (receipt.status !== "success") {
           const retry = { ...session, sourceTxHash: undefined };
           saveSession(retry);
           setSession(retry);
-          throw new Error("The source USDC transfer reverted. You can retry before the quote expires.");
+          throw new Error(
+            "The source USDC transfer reverted. You can retry before the quote expires.",
+          );
         }
         await json("/api/crosschain/source", {
-          depositAddress: session.depositAddress, txHash: session.sourceTxHash,
+          depositAddress: session.depositAddress,
+          txHash: session.sourceTxHash,
         });
       } else {
         await authorizeAndSend(session, status.execution);
@@ -377,12 +487,16 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
     setError("");
     try {
       const result = await json<{ amount: string; fee: string }>("/api/crosschain/recovery", {
-        mode: "quote", account: address, id: session.id,
+        mode: "quote",
+        account: address,
+        id: session.id,
       });
       setRecoveryQuote(result);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not quote recovery");
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function startRecovery() {
@@ -390,11 +504,21 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
     setBusy(true);
     setError("");
     try {
-      const result = await json<{ execution: Execution; amount: string }>("/api/crosschain/recovery", {
-        mode: "create", account: address, id: session.id, minAcceptedAmount: recoveryQuote.amount,
-      });
+      const result = await json<{ execution: Execution; amount: string }>(
+        "/api/crosschain/recovery",
+        {
+          mode: "create",
+          account: address,
+          id: session.id,
+          minAcceptedAmount: recoveryQuote.amount,
+        },
+      );
       const execution = result.execution;
-      if (!execution.id || !execution.details?.payload?.payload_json || execution.details.payload.standard !== "erc191") {
+      if (
+        !execution.id ||
+        !execution.details?.payload?.payload_json ||
+        execution.details.payload.standard !== "erc191"
+      ) {
         throw new Error("Aurora did not return a recovery signing payload");
       }
       const updated = { ...session, recoveryId: execution.id };
@@ -405,7 +529,9 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
       setRecoveryStatus(execution);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not start recovery");
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function resumeRecovery() {
@@ -413,16 +539,29 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
     setBusy(true);
     setError("");
     try {
-      if (recoveryStatus.details.payload.standard !== "erc191") throw new Error("Unsupported recovery signature type");
-      const signature = await signMessageAsync({ message: recoveryStatus.details.payload.payload_json });
-      await json("/api/crosschain/signature", { account: address, id: session.recoveryId, signature });
+      if (recoveryStatus.details.payload.standard !== "erc191")
+        throw new Error("Unsupported recovery signature type");
+      const signature = await signMessageAsync({
+        message: recoveryStatus.details.payload.payload_json,
+      });
+      await json("/api/crosschain/signature", {
+        account: address,
+        id: session.recoveryId,
+        signature,
+      });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not authorize recovery");
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   }
 
   function clearSession() {
-    if (session && status && isTerminalDeposit(status.execution.status, mintConfirmedFor(status, session))) {
+    if (
+      session &&
+      status &&
+      isTerminalDeposit(status.execution.status, mintConfirmedFor(status, session))
+    ) {
       const settled = { ...session, terminalStatus: status.execution.status };
       saveSession(settled, RECENT_SESSION_KEY);
       setRecentSession(settled);
@@ -444,117 +583,366 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
         <div className="space-y-4">
           <div>
             <h3 className="text-lg font-semibold">Choose a source</h3>
-            <p className="text-muted mt-1 text-sm">Connect your wallet to find your USDC and choose an amount.</p>
+            <p className="text-muted mt-1 text-sm">
+              Connect your wallet to find your USDC and choose an amount.
+            </p>
           </div>
-          <button type="button" onClick={() => openConnectModal?.()} className="bg-monad hover:bg-monad-deep w-full rounded-lg px-4 py-3 font-medium text-white transition-[background-color,scale] active:scale-[0.96]">
-            Connect wallet
+          <button
+            type="button"
+            onClick={openEntry}
+            className="bg-monad hover:bg-monad-deep w-full rounded-lg px-4 py-3 font-medium text-white transition-[background-color,scale] active:scale-[0.96]"
+          >
+            Get started
           </button>
         </div>
       ) : session ? (
         <div className="border-line bg-paper/40 space-y-4 rounded-xl border p-4 sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-muted text-xs font-semibold uppercase tracking-[0.16em]">{mintConfirmed ? "Deposit complete" : ["OPERATION_FAILED", "DEPOSIT_FAILED", "EXPIRED"].includes(status?.execution.status ?? "") ? "Deposit needs attention" : "Deposit in progress"}</p>
-              <p role="status" aria-live="polite" className="mt-1 text-lg font-semibold text-balance">{stage(status?.execution.status, session.sourceTxHash, mintConfirmed)}</p>
+              <p className="text-muted text-xs font-semibold uppercase tracking-[0.16em]">
+                {mintConfirmed
+                  ? "Deposit complete"
+                  : ["OPERATION_FAILED", "DEPOSIT_FAILED", "EXPIRED"].includes(
+                        status?.execution.status ?? "",
+                      )
+                    ? "Deposit needs attention"
+                    : "Deposit in progress"}
+              </p>
+              <p
+                role="status"
+                aria-live="polite"
+                className="mt-1 text-lg font-semibold text-balance"
+              >
+                {stage(status?.execution.status, session.sourceTxHash, mintConfirmed)}
+              </p>
             </div>
-            <span className="text-muted shrink-0 rounded-full border border-line px-2.5 py-1 font-mono text-[11px]">{short(session.account)}</span>
+            <span className="text-muted shrink-0 rounded-full border border-line px-2.5 py-1 font-mono text-[11px]">
+              {short(session.account)}
+            </span>
           </div>
-          <DepositJourney status={status?.execution.status} sourceName={session.sourceName} sourceTxSent={Boolean(session.sourceTxHash)} mintConfirmed={mintConfirmed} />
+          <DepositJourney
+            status={status?.execution.status}
+            sourceName={session.sourceName}
+            sourceTxSent={Boolean(session.sourceTxHash)}
+            mintConfirmed={mintConfirmed}
+          />
           <p className="text-muted flex items-center gap-2 text-xs">
-            {!mintConfirmed && !["OPERATION_FAILED", "DEPOSIT_FAILED", "EXPIRED"].includes(status?.execution.status ?? "") ? <span aria-hidden="true" className="deposit-live-dot bg-long inline-block size-1.5 rounded-full" /> : null}
-            {mintConfirmed ? "sdMON arrived" : "Status updates automatically"}. Shares go to {short(session.account)} on Monad.
+            {!mintConfirmed &&
+            !["OPERATION_FAILED", "DEPOSIT_FAILED", "EXPIRED"].includes(
+              status?.execution.status ?? "",
+            ) ? (
+              <span
+                aria-hidden="true"
+                className="deposit-live-dot bg-long inline-block size-1.5 rounded-full"
+              />
+            ) : null}
+            {mintConfirmed ? "sdMON arrived" : "Status updates automatically"}. Shares go to{" "}
+            {short(session.account)} on Monad.
           </p>
           <div className="border-line grid grid-cols-2 gap-x-3 gap-y-2 border-t pt-4 text-sm">
             <span className="text-muted">Source amount</span>
-            <span className="text-right tabular-nums">{formatUnits(BigInt(session.amount), session.sourceDecimals ?? 6)} USDC</span>
+            <span className="text-right tabular-nums">
+              {formatUnits(BigInt(session.amount), session.sourceDecimals ?? 6)} USDC
+            </span>
             <span className="text-muted">Funding address · {session.sourceName} USDC</span>
-            <span className="truncate text-right font-mono text-xs" title={session.depositAddress}>{short(session.depositAddress)}</span>
-            {session.sourceTxHash ? <><span className="text-muted">Source transaction</span><a className="text-monad text-right font-mono text-xs underline" href={`${sourceChainById(session.sourceChainId)?.blockExplorers?.default.url}/tx/${session.sourceTxHash}`} target="_blank" rel="noreferrer">{short(session.sourceTxHash)}</a></> : null}
-            {status?.execution.destinationChainTxHashes?.[0] ? <><span className="text-muted">Monad transaction</span><a className="text-monad text-right font-mono text-xs underline" href={`https://monadvision.com/tx/${status.execution.destinationChainTxHashes[0]}`} target="_blank" rel="noreferrer">{short(status.execution.destinationChainTxHashes[0])}</a></> : null}
-            {status?.mintTxHash ? <><span className="text-muted">Monad mint transaction</span><a className="text-monad text-right font-mono text-xs underline" href={`https://monadvision.com/tx/${status.mintTxHash}`} target="_blank" rel="noreferrer">{short(status.mintTxHash)}</a></> : null}
+            <span className="truncate text-right font-mono text-xs" title={session.depositAddress}>
+              {short(session.depositAddress)}
+            </span>
+            {session.sourceTxHash ? (
+              <>
+                <span className="text-muted">Source transaction</span>
+                <a
+                  className="text-monad text-right font-mono text-xs underline"
+                  href={`${sourceChainById(session.sourceChainId)?.blockExplorers?.default.url}/tx/${session.sourceTxHash}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {short(session.sourceTxHash)}
+                </a>
+              </>
+            ) : null}
+            {status?.execution.destinationChainTxHashes?.[0] ? (
+              <>
+                <span className="text-muted">Monad transaction</span>
+                <a
+                  className="text-monad text-right font-mono text-xs underline"
+                  href={`https://monadvision.com/tx/${status.execution.destinationChainTxHashes[0]}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {short(status.execution.destinationChainTxHashes[0])}
+                </a>
+              </>
+            ) : null}
+            {status?.mintTxHash ? (
+              <>
+                <span className="text-muted">Monad mint transaction</span>
+                <a
+                  className="text-monad text-right font-mono text-xs underline"
+                  href={`https://monadvision.com/tx/${status.mintTxHash}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {short(status.mintTxHash)}
+                </a>
+              </>
+            ) : null}
           </div>
           <p className="text-muted text-xs leading-5 text-pretty">
-            The funding address is supplied by Aurora for this {session.sourceName} USDC route. It is separate from your wallet, the vault, and your Monad intermediary account. Send only USDC on {session.sourceName} for this quote; do not reuse the address for another deposit.
+            The funding address is supplied by Aurora for this {session.sourceName} USDC route. It
+            is separate from your wallet, the vault, and your Monad intermediary account. Send only
+            USDC on {session.sourceName} for this quote; do not reuse the address for another
+            deposit.
           </p>
           {status?.execution.status === "SUCCESS" ? (
-            <p className={mintConfirmed ? "text-long text-sm" : "text-muted text-sm"}>{status.mintTxHash ? "Vault Deposit event confirmed." : mintConfirmed ? "sdMON balance increased." : "Aurora reports success. Checking the vault mint."} {status.shares ? `Your wallet holds ${Number(formatUnits(BigInt(status.shares), 18)).toLocaleString(undefined, { maximumFractionDigits: 4 })} sdMON.` : ""}</p>
+            <p className={mintConfirmed ? "text-long text-sm" : "text-muted text-sm"}>
+              {status.mintTxHash
+                ? "Vault Deposit event confirmed."
+                : mintConfirmed
+                  ? "sdMON balance increased."
+                  : "Aurora reports success. Checking the vault mint."}{" "}
+              {status.shares
+                ? `Your wallet holds ${Number(formatUnits(BigInt(status.shares), 18)).toLocaleString(undefined, { maximumFractionDigits: 4 })} sdMON.`
+                : ""}
+            </p>
           ) : null}
           {status?.execution.status === "OPERATION_FAILED" ? (
-            <p className="text-short text-sm">USDC reached Monad, but the vault call failed. {status.intermediaryBalance ? `${formatUnits(BigInt(status.intermediaryBalance), 6)} USDC remains in your Aurora intermediary account.` : "Check the intermediary account before retrying."}</p>
+            <p className="text-short text-sm">
+              USDC reached Monad, but the vault call failed.{" "}
+              {status.intermediaryBalance
+                ? `${formatUnits(BigInt(status.intermediaryBalance), 6)} USDC remains in your Aurora intermediary account.`
+                : "Check the intermediary account before retrying."}
+            </p>
           ) : null}
           {status?.intermediaryBalance && BigInt(status.intermediaryBalance) > 0n ? (
             <div className="border-line space-y-2 border-t pt-3 text-sm">
-              <p>{formatUnits(BigInt(status.intermediaryBalance), 6)} USDC remains in your wallet-controlled Aurora intermediary account on Monad.</p>
-              <p className="text-muted text-xs leading-5">{status.execution.status === "SUCCESS"
-                ? "A route can deliver more than its quoted minimum, and this balance may include earlier leftovers. It will be included automatically in your next deposit from another chain. You can also withdraw it now for an execution fee."
-                : "The vault call did not use this USDC. You can authorize a transfer back to your wallet on Monad."}</p>
+              <p>
+                {formatUnits(BigInt(status.intermediaryBalance), 6)} USDC remains in your
+                wallet-controlled Aurora intermediary account on Monad.
+              </p>
+              <p className="text-muted text-xs leading-5">
+                {status.execution.status === "SUCCESS"
+                  ? "A route can deliver more than its quoted minimum, and this balance may include earlier leftovers. It will be included automatically in your next deposit from another chain. You can also withdraw it now for an execution fee."
+                  : "The vault call did not use this USDC. You can authorize a transfer back to your wallet on Monad."}
+              </p>
               {session.recoveryId ? (
                 <>
-                  <p className={recoveryStatus?.status === "SUCCESS" ? "text-long" : "text-muted"}>Recovery: {recoveryStatus?.status === "SUCCESS" ? "USDC returned to your connected address on Monad." : (recoveryStatus?.status ?? "waiting for status")}</p>
-                  {recoveryStatus?.details?.messageSigned === false && recoveryStatus.details.payload?.payload_json ? <button type="button" disabled={busy} onClick={() => void resumeRecovery()} className="border-line w-full rounded-lg border px-3 py-2 font-medium disabled:opacity-50">Sign recovery authorization</button> : null}
-                  {["SUCCESS", "OPERATION_FAILED", "EXPIRED"].includes(recoveryStatus?.status ?? "") ? <button type="button" onClick={() => { const retry = { ...session, recoveryId: undefined }; saveSession(retry); setSession(retry); setRecoveryStatus(null); setRecoveryQuote(null); }} className="border-line w-full rounded-lg border px-3 py-2 font-medium">Review remaining USDC</button> : null}
+                  <p className={recoveryStatus?.status === "SUCCESS" ? "text-long" : "text-muted"}>
+                    Recovery:{" "}
+                    {recoveryStatus?.status === "SUCCESS"
+                      ? "USDC returned to your connected address on Monad."
+                      : (recoveryStatus?.status ?? "waiting for status")}
+                  </p>
+                  {recoveryStatus?.details?.messageSigned === false &&
+                  recoveryStatus.details.payload?.payload_json ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void resumeRecovery()}
+                      className="border-line w-full rounded-lg border px-3 py-2 font-medium disabled:opacity-50"
+                    >
+                      Sign recovery authorization
+                    </button>
+                  ) : null}
+                  {["SUCCESS", "OPERATION_FAILED", "EXPIRED"].includes(
+                    recoveryStatus?.status ?? "",
+                  ) ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const retry = { ...session, recoveryId: undefined };
+                        saveSession(retry);
+                        setSession(retry);
+                        setRecoveryStatus(null);
+                        setRecoveryQuote(null);
+                      }}
+                      className="border-line w-full rounded-lg border px-3 py-2 font-medium"
+                    >
+                      Review remaining USDC
+                    </button>
+                  ) : null}
                 </>
               ) : recoveryQuote ? (
                 <>
-                  <p className="text-muted">Recover about {formatUnits(BigInt(recoveryQuote.amount), 6)} USDC to {short(session.account)} on Monad. Estimated execution fee: {formatUnits(BigInt(recoveryQuote.fee), 6)} USDC.</p>
-                  <button type="button" disabled={busy} onClick={() => void startRecovery()} className="bg-monad w-full rounded-lg px-3 py-2 font-medium text-white disabled:opacity-50">Authorize recovery</button>
+                  <p className="text-muted">
+                    Recover about {formatUnits(BigInt(recoveryQuote.amount), 6)} USDC to{" "}
+                    {short(session.account)} on Monad. Estimated execution fee:{" "}
+                    {formatUnits(BigInt(recoveryQuote.fee), 6)} USDC.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void startRecovery()}
+                    className="bg-monad w-full rounded-lg px-3 py-2 font-medium text-white disabled:opacity-50"
+                  >
+                    Authorize recovery
+                  </button>
                 </>
               ) : (
-                <button type="button" disabled={busy} onClick={() => void reviewRecovery()} className="border-line w-full rounded-lg border px-3 py-2 font-medium disabled:opacity-50">{status.execution.status === "SUCCESS" ? "Review withdrawal instead" : "Review USDC recovery"}</button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void reviewRecovery()}
+                  className="border-line w-full rounded-lg border px-3 py-2 font-medium disabled:opacity-50"
+                >
+                  {status.execution.status === "SUCCESS"
+                    ? "Review withdrawal instead"
+                    : "Review USDC recovery"}
+                </button>
               )}
             </div>
           ) : null}
-          {status?.execution.status === "EXPIRED" || status?.execution.status === "DEPOSIT_FAILED" ? (
-            <p className="text-short text-sm">Aurora reports this transfer as expired or failed. Check its refund status before starting another deposit.</p>
+          {status?.execution.status === "EXPIRED" ||
+          status?.execution.status === "DEPOSIT_FAILED" ? (
+            <p className="text-short text-sm">
+              Aurora reports this transfer as expired or failed. Check its refund status before
+              starting another deposit.
+            </p>
           ) : null}
-          {!session.sourceTxHash && !["SUCCESS", "EXPIRED", "DEPOSIT_FAILED", "OPERATION_FAILED"].includes(status?.execution.status ?? "") ? (
-            <button type="button" disabled={busy || !status} onClick={() => void continueDeposit()} className="bg-monad hover:bg-monad-deep w-full rounded-lg px-4 py-2.5 font-medium text-white disabled:opacity-50">
+          {!session.sourceTxHash &&
+          !["SUCCESS", "EXPIRED", "DEPOSIT_FAILED", "OPERATION_FAILED"].includes(
+            status?.execution.status ?? "",
+          ) ? (
+            <button
+              type="button"
+              disabled={busy || !status}
+              onClick={() => void continueDeposit()}
+              className="bg-monad hover:bg-monad-deep w-full rounded-lg px-4 py-2.5 font-medium text-white disabled:opacity-50"
+            >
               {busy ? "Waiting for wallet…" : "Continue in wallet"}
             </button>
           ) : null}
           {session.sourceTxHash && status?.execution.status !== "SUCCESS" ? (
-            <button type="button" disabled={busy} onClick={() => void continueDeposit()} className="border-line w-full rounded-lg border px-3 py-2 text-sm disabled:opacity-50">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void continueDeposit()}
+              className="border-line w-full rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+            >
               Refresh source transaction tracking
             </button>
           ) : null}
-          {["SUCCESS", "EXPIRED", "DEPOSIT_FAILED", "OPERATION_FAILED"].includes(status?.execution.status ?? "") &&
-            (!session.recoveryId || ["SUCCESS", "OPERATION_FAILED", "EXPIRED"].includes(recoveryStatus?.status ?? "")) ? (
-            <button type="button" onClick={clearSession} className="text-muted text-sm underline">Start another deposit</button>
+          {["SUCCESS", "EXPIRED", "DEPOSIT_FAILED", "OPERATION_FAILED"].includes(
+            status?.execution.status ?? "",
+          ) &&
+          (!session.recoveryId ||
+            ["SUCCESS", "OPERATION_FAILED", "EXPIRED"].includes(recoveryStatus?.status ?? "")) ? (
+            <button type="button" onClick={clearSession} className="text-muted text-sm underline">
+              Start another deposit
+            </button>
           ) : null}
         </div>
       ) : (
         <>
+          {isPasskey && (!hasUsdc || (selected && sourceGas?.value === 0n)) ? (
+            <ReceiveFunds
+              key={selected?.chainId ?? 143}
+              address={address}
+              sources={assets}
+              selectedChainId={selected?.chainId ?? 143}
+              onRefresh={() => void refreshBalances(address)}
+            />
+          ) : null}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold">Choose a source</h3>
                 <p className="text-muted mt-0.5 text-xs">Choose where your USDC is held.</p>
               </div>
-              <button type="button" disabled={loadingBalances} onClick={() => void refreshBalances(address)} className="text-monad hover:text-monad-deep min-h-10 px-2 text-xs font-medium disabled:opacity-50">Refresh</button>
+              <button
+                type="button"
+                disabled={loadingBalances}
+                onClick={() => void refreshBalances(address)}
+                className="text-monad hover:text-monad-deep min-h-10 px-2 text-xs font-medium disabled:opacity-50"
+              >
+                Refresh
+              </button>
             </div>
             {recentSession ? (
               <div className="border-line bg-paper/40 flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-xs">
-                <p className="text-muted">{recentSession.terminalStatus === "SUCCESS" ? "Last deposit completed." : "Previous deposit needs attention."}</p>
-                <button type="button" onClick={() => { restoredSessionId.current = null; setStatus(null); setSession(recentSession); }} className="text-monad shrink-0 font-medium underline">View details</button>
+                <p className="text-muted">
+                  {recentSession.terminalStatus === "SUCCESS"
+                    ? "Last deposit completed."
+                    : "Previous deposit needs attention."}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    restoredSessionId.current = null;
+                    setStatus(null);
+                    setSession(recentSession);
+                  }}
+                  className="text-monad shrink-0 font-medium underline"
+                >
+                  View details
+                </button>
               </div>
             ) : null}
             <div className="grid gap-2" role="group" aria-label="Choose USDC source">
-              {monadBalance !== undefined && monadBalance > 0n ? (
-                <button type="button" aria-pressed={isMonadSelected} onClick={() => { setSelectedId("monad"); setAmountText(""); setQuote(null); }} className={`border-line flex min-h-15 items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-[border-color,background-color,scale] active:scale-[0.96] ${isMonadSelected ? "border-monad bg-monad/10" : "hover:border-monad/50"}`}>
-                  <span aria-hidden="true" className="bg-monad/15 text-monad flex size-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold">M</span>
+              {monadBalance !== undefined && (monadBalance > 0n || isPasskey) ? (
+                <button
+                  type="button"
+                  aria-pressed={isMonadSelected}
+                  onClick={() => {
+                    setSelectedId("monad");
+                    setAmountText("");
+                    setQuote(null);
+                  }}
+                  className={`border-line flex min-h-15 items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-[border-color,background-color,scale] active:scale-[0.96] ${isMonadSelected ? "border-monad bg-monad/10" : "hover:border-monad/50"}`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="bg-monad/15 text-monad flex size-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold"
+                  >
+                    M
+                  </span>
                   <span className="min-w-0 flex-1 text-sm font-medium">Monad</span>
-                  <span className="text-right text-sm font-semibold tabular-nums">{Number(formatUnits(monadBalance, 6)).toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-muted text-xs font-normal">USDC</span></span>
+                  <span className="text-right text-sm font-semibold tabular-nums">
+                    {Number(formatUnits(monadBalance, 6)).toLocaleString(undefined, {
+                      maximumFractionDigits: 2,
+                    })}{" "}
+                    <span className="text-muted text-xs font-normal">USDC</span>
+                  </span>
                 </button>
               ) : null}
               {assets.map((asset) => (
-                <button key={asset.assetId} type="button" disabled={asset.balance === null} aria-pressed={selectedId === asset.assetId} onClick={() => { setSelectedId(asset.assetId); setAmountText(""); setQuote(null); }} className={`border-line flex min-h-15 items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-[border-color,background-color,scale] active:scale-[0.96] ${selectedId === asset.assetId ? "border-monad bg-monad/10" : "hover:border-monad/50"} disabled:opacity-50`}>
-                  <span aria-hidden="true" className="bg-paper text-muted flex size-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold">{asset.chainName.slice(0, 1)}</span>
+                <button
+                  key={asset.assetId}
+                  type="button"
+                  disabled={asset.balance === null}
+                  aria-pressed={selectedId === asset.assetId}
+                  onClick={() => {
+                    setSelectedId(asset.assetId);
+                    setAmountText("");
+                    setQuote(null);
+                  }}
+                  className={`border-line flex min-h-15 items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-[border-color,background-color,scale] active:scale-[0.96] ${selectedId === asset.assetId ? "border-monad bg-monad/10" : "hover:border-monad/50"} disabled:opacity-50`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="bg-paper text-muted flex size-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold"
+                  >
+                    {asset.chainName.slice(0, 1)}
+                  </span>
                   <span className="min-w-0 flex-1 text-sm font-medium">{asset.chainName}</span>
-                  <span className="text-right text-sm font-semibold tabular-nums">{asset.balance === null ? asset.error : `${Number(formatUnits(BigInt(asset.balance), asset.decimals)).toLocaleString(undefined, { maximumFractionDigits: 2 })} USDC`}</span>
+                  <span className="text-right text-sm font-semibold tabular-nums">
+                    {asset.balance === null
+                      ? asset.error
+                      : `${Number(formatUnits(BigInt(asset.balance), asset.decimals)).toLocaleString(undefined, { maximumFractionDigits: 2 })} USDC`}
+                  </span>
                 </button>
               ))}
-              {!loadingBalances && !loadingMonadBalance && assets.length === 0 && (!monadBalance || monadBalance === 0n) ? <p className="text-muted py-3 text-sm">No USDC balances found on supported chains.</p> : null}
-              {loadingBalances || loadingMonadBalance ? <p className="text-muted py-2 text-xs">Checking USDC balances…</p> : null}
+              {!loadingBalances &&
+              !loadingMonadBalance &&
+              assets.length === 0 &&
+              (!monadBalance || monadBalance === 0n) ? (
+                <p className="text-muted py-3 text-sm">
+                  No USDC balances found on supported chains.
+                </p>
+              ) : null}
+              {loadingBalances || loadingMonadBalance ? (
+                <p className="text-muted py-2 text-xs">Checking USDC balances…</p>
+              ) : null}
             </div>
           </div>
           {isMonadSelected ? <div className="border-line border-t pt-4">{monadPanel}</div> : null}
@@ -562,35 +950,100 @@ export function CrossChainDepositPanel({ monadPanel }: { monadPanel: ReactNode }
             <label className="block">
               <span className="text-muted text-sm">Amount from {selected.chainName}</span>
               <div className="border-line mt-1 flex items-center rounded-lg border px-3">
-                <input inputMode="decimal" value={amountText} onChange={(event) => { setAmountText(event.target.value.replace(/[^0-9.]/g, "")); setQuote(null); }} placeholder="0.00" className="w-full bg-transparent py-3 text-2xl tabular-nums outline-none" />
-                <button type="button" onClick={() => { setAmountText(formatUnits(BigInt(selected.balance ?? "0"), selected.decimals)); setQuote(null); }} className="text-monad pr-2 text-xs font-semibold">MAX</button>
+                <input
+                  inputMode="decimal"
+                  value={amountText}
+                  onChange={(event) => {
+                    setAmountText(event.target.value.replace(/[^0-9.]/g, ""));
+                    setQuote(null);
+                  }}
+                  placeholder="0.00"
+                  className="w-full bg-transparent py-3 text-2xl tabular-nums outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAmountText(formatUnits(BigInt(selected.balance ?? "0"), selected.decimals));
+                    setQuote(null);
+                  }}
+                  className="text-monad pr-2 text-xs font-semibold"
+                >
+                  MAX
+                </button>
                 <span className="text-muted text-sm">USDC</span>
               </div>
             </label>
           ) : null}
           {overBalance ? <p className="text-short text-sm">Amount exceeds your balance.</p> : null}
           {selected && !quote ? (
-            <button type="button" disabled={!canQuote} onClick={() => void review()} className="bg-monad hover:bg-monad-deep w-full rounded-lg px-4 py-3 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">
+            <button
+              type="button"
+              disabled={!canQuote}
+              onClick={() => void review()}
+              className="bg-monad hover:bg-monad-deep w-full rounded-lg px-4 py-3 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
               {busy ? "Getting quote…" : "Review deposit"}
             </button>
           ) : null}
           {quote ? (
             <div className="border-monad/40 bg-monad/5 space-y-2 rounded-lg border p-4 text-sm">
               <p className="font-semibold">Review your deposit</p>
-              <p className="text-muted">Send {amountText} USDC on {selected?.chainName}. The vault will receive {formatUnits(BigInt(quote.depositAmount), 6)} USDC on Monad.</p>
-              {BigInt(quote.reusedUsdc) > 0n ? <p className="text-muted">This includes {formatUnits(BigInt(quote.reusedUsdc), 6)} USDC already in your Monad intermediary account. It will join this deposit in the same wallet-authorized vault call.</p> : null}
-              <p className="text-muted">About {Number(formatUnits(BigInt(quote.minShares), 18)).toLocaleString(undefined, { maximumFractionDigits: 4 })} sdMON goes to {short(address)} on Monad. The vault share price may change before settlement.</p>
-              {quote.execution.details?.networkFee ? <p className="text-muted">Estimated Monad execution fee: {formatUnits(BigInt(quote.execution.details.networkFee), 6)} USDC, already accounted for in Aurora’s minimum output.</p> : null}
-              {quote.execution.quote?.deadline ? <p className="text-muted">Quote expires {new Date(quote.execution.quote.deadline).toLocaleString()}.</p> : null}
-              <p className="text-muted">You will sign an authorization and send USDC on {selected?.chainName}. Source-chain gas is required; no Monad gas is needed.</p>
-              <button type="button" disabled={busy} onClick={() => void start()} className="bg-monad hover:bg-monad-deep w-full rounded-lg px-4 py-3 font-medium text-white disabled:opacity-50">
-                {busy ? "Preparing wallet…" : "Confirm and deposit"}
+              <p className="text-muted">
+                Send {amountText} USDC on {selected?.chainName}. The vault will receive{" "}
+                {formatUnits(BigInt(quote.depositAmount), 6)} USDC on Monad.
+              </p>
+              {BigInt(quote.reusedUsdc) > 0n ? (
+                <p className="text-muted">
+                  This includes {formatUnits(BigInt(quote.reusedUsdc), 6)} USDC already in your
+                  Monad intermediary account. It will join this deposit in the same
+                  wallet-authorized vault call.
+                </p>
+              ) : null}
+              <p className="text-muted">
+                About{" "}
+                {Number(formatUnits(BigInt(quote.minShares), 18)).toLocaleString(undefined, {
+                  maximumFractionDigits: 4,
+                })}{" "}
+                sdMON goes to {short(address)} on Monad. The vault share price may change before
+                settlement.
+              </p>
+              {quote.execution.details?.networkFee ? (
+                <p className="text-muted">
+                  Estimated Monad execution fee:{" "}
+                  {formatUnits(BigInt(quote.execution.details.networkFee), 6)} USDC, already
+                  accounted for in Aurora’s minimum output.
+                </p>
+              ) : null}
+              {quote.execution.quote?.deadline ? (
+                <p className="text-muted">
+                  Quote expires {new Date(quote.execution.quote.deadline).toLocaleString()}.
+                </p>
+              ) : null}
+              <p className="text-muted">
+                You will sign an authorization and send USDC on {selected?.chainName}. Source-chain
+                gas is required; no Monad gas is needed.
+              </p>
+              <button
+                type="button"
+                disabled={busy || (isPasskey && (!sourceGas || sourceGas.value === 0n))}
+                onClick={() => void start()}
+                className="bg-monad hover:bg-monad-deep w-full rounded-lg px-4 py-3 font-medium text-white disabled:opacity-50"
+              >
+                {busy
+                  ? isPasskey
+                    ? "Preparing passkey…"
+                    : "Preparing wallet…"
+                  : "Confirm and deposit"}
               </button>
             </div>
           ) : null}
         </>
       )}
-      {error ? <p role="alert" className="text-short text-sm">{error}</p> : null}
+      {error ? (
+        <p role="alert" className="text-short text-sm">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

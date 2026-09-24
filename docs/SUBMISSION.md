@@ -11,6 +11,7 @@ Required: "a working product with a public project profile: a demo, a short writ
 - [ ] Frontend deployed (Vercel) and pointing at a hosted backend
 - [ ] Keeper running against the deployed vault (dry-run log or tx history to show)
 - [ ] 2–3 minute demo video: deposit → rebalance → price move → withdraw
+- [ ] Passkey demo on app.deltamon.xyz: create or recover a Mera wallet → fund → deposit → exit; show the existing wallet choice
 - [ ] Short write-up (problem, mechanism, what's on-chain, what's next)
 - [ ] Project profile on hackathon.monad.xyz with repo link
 - [ ] README explains trust model and risks plainly

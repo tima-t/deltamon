@@ -1,20 +1,26 @@
-import { getDefaultConfig } from "@rainbow-me/rainbowkit";
+import { connectorsForWallets, getDefaultWallets } from "@rainbow-me/rainbowkit";
 import { injectedWallet } from "@rainbow-me/rainbowkit/wallets";
-import { http } from "wagmi";
+import { createConfig, http } from "wagmi";
 import { monadMainnet, monadTestnet } from "@deltamon/shared";
 import { walletChains } from "@/lib/crosschain/chains";
+import { meraConnector } from "@/lib/meraConnector";
 
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim();
 
-export const wagmiConfig = getDefaultConfig({
-  appName: "DeltaMon",
-  appDescription: "Delta-neutral vaults on Monad",
-  projectId: projectId || "",
-  // A placeholder project ID makes Reown reject configuration requests with 403.
-  // Browser-injected EVM wallets still work without WalletConnect credentials.
-  wallets: projectId ? undefined : [{ groupName: "Available", wallets: [injectedWallet] }],
-  chains: [...walletChains, monadTestnet],
-  transports: Object.fromEntries([...walletChains, monadTestnet].map((chain) => [chain.id, http()])),
+const appName = "DeltaMon";
+const chains = [...walletChains, monadTestnet] as const;
+const wallets = projectId
+  ? getDefaultWallets({ appName, projectId }).wallets
+  : [{ groupName: "Available", wallets: [injectedWallet] }];
+
+export const wagmiConfig = createConfig({
+  // RainbowKit only lists external wallets; the entry dialog owns passkey onboarding.
+  connectors: [
+    ...connectorsForWallets(wallets, { appName, projectId: projectId || "" }),
+    meraConnector,
+  ],
+  chains,
+  transports: Object.fromEntries(chains.map((chain) => [chain.id, http()])) as Record<(typeof chains)[number]["id"], ReturnType<typeof http>>,
   ssr: true,
 });
 
