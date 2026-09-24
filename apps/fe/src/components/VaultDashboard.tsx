@@ -89,6 +89,9 @@ export function VaultDashboard() {
         </section>
       ) : null}
       <div className="grid gap-6 pb-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,.95fr)]">
+        <div id="deposit" className="min-w-0">
+          <DepositPanel />
+        </div>
         {stats ? (
           <HoldingsPanel stats={stats} />
         ) : (
@@ -99,9 +102,6 @@ export function VaultDashboard() {
             </p>
           </div>
         )}
-        <div id="deposit" className="min-w-0">
-          <DepositPanel />
-        </div>
       </div>
       <section id="position" className="pb-16">
         <PositionPanel />

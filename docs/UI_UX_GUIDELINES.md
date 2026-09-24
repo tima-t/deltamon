@@ -35,6 +35,7 @@ DeltaMon should feel like a precision instrument for understanding a vault. Help
 - Label the active address **Passkey wallet** or **Connected wallet**. Ask for passkey verification when an approval, deposit, authorization, or exit requires a signature; keep approval and deposit as separate onchain states.
 - For an empty passkey wallet, show the receiving address and QR code with the selected chain, exact USDC token contract, and required native gas. Keep the funding instructions next to the deposit action, and refresh balances without losing the selected route.
 - Offer recovery phrase export from the account menu only after a fresh passkey check. Explain that the phrase controls the funds, keep it visible only while requested, and never store it in app persistence.
+- Place the deposit flow before vault composition in the dashboard reading order: left then right on desktop, first then second on mobile.
 
 ## Review checklist for any user action
 
