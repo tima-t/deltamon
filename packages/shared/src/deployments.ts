@@ -18,13 +18,13 @@ export interface Deployment {
 
 export const DEPLOYMENTS: Partial<Record<number, Deployment>> = {
   143: {
-    vault: "0x4ce4FA54196F132D928F1ae76db074C14E0203a3",
-    spotVenue: "0x06b78F0f747f3cf2D086f4EeCD30c3e89321c562",
-    oracle: "0x4dFB13DA673bcCfAD237EA6d90d5B1525aBF287F",
+    vault: "0x9165D1698B7Bd11E702a36874c3047331B7fA213",
+    spotVenue: "0xCedB2Fb595a748e19172aa8B7261F6976C49f170",
+    oracle: "0xb606682137e747D8E79398870407E60A5C603611",
     admin: "0x6f69cf4Be38aFEA938F73a88f10991Da4b5E2A7B",
     deployer: "0x6f69cf4Be38aFEA938F73a88f10991Da4b5E2A7B",
     keeper: "0x6f69cf4Be38aFEA938F73a88f10991Da4b5E2A7B",
-    deployedAtBlock: 105316612,
+    deployedAtBlock: 107645440,
   },
 };
 
