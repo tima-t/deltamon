@@ -22,17 +22,23 @@ const optionalX402 = [
   "@x402/svm/exact/v1/client",
 ];
 
+// @metamask/sdk imports React Native's async storage for its RN transport. It is guarded at runtime
+// and never reached in a browser, but the import is static, so a web build still has to resolve it.
+const optionalNative = ["@react-native-async-storage/async-storage"];
+
+const unresolvable = [...optionalX402, ...optionalNative];
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   transpilePackages: ["@deltamon/shared"],
   turbopack: {
-    resolveAlias: Object.fromEntries(optionalX402.map((m) => [m, "./src/lib/x402-stub.ts"])),
+    resolveAlias: Object.fromEntries(unresolvable.map((m) => [m, "./src/lib/x402-stub.ts"])),
   },
   webpack(config) {
     config.resolve ??= {};
     config.resolve.alias = {
       ...config.resolve.alias,
-      ...Object.fromEntries(optionalX402.map((module) => [module, false])),
+      ...Object.fromEntries(unresolvable.map((module) => [module, false])),
     };
     return config;
   },

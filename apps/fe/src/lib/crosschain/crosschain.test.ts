@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// server.ts resolves the vault once at import time, from the env or the shared deployment. Pin it
+// here, above the imports, so these tests assert against a fixture and survive a redeploy.
+const VAULT = vi.hoisted(() => {
+  const address = "0x4ce4FA54196F132D928F1ae76db074C14E0203a3";
+  process.env.NEXT_PUBLIC_VAULT_ADDRESS = address;
+  return address;
+});
+
 const chain = vi.hoisted(() => ({
   sourceCode: undefined as `0x${string}` | undefined,
   monadCode: undefined as `0x${string}` | undefined,
@@ -26,7 +34,7 @@ vi.mock("viem", async (importOriginal) => {
         if (functionName === "balanceOf") {
           if (chain.hangBalance) return new Promise<bigint>(() => {});
           if (chain.failBalance) throw new Error("RPC unavailable");
-          return address.toLowerCase() === "0x4ce4fa54196f132d928f1ae76db074c14e0203a3" ? chain.shares : chain.balance;
+          return address.toLowerCase() === VAULT.toLowerCase() ? chain.shares : chain.balance;
         }
         if (functionName === "minDeposit") return chain.minimum;
         if (functionName === "maxDeposit") return chain.maximum;
@@ -124,7 +132,7 @@ describe("fixed vault execution", () => {
     expect(result.depositAmount).toBe("9000000");
     expect(result.reusedUsdc).toBe("0");
     const steps = posted?.steps as Array<{ parameters: string[] }>;
-    expect(steps[0]?.parameters).toEqual(["0x4ce4FA54196F132D928F1ae76db074C14E0203a3", "9000000"]);
+    expect(steps[0]?.parameters).toEqual([VAULT, "9000000"]);
     expect(steps[1]?.parameters).toEqual(["9000000", account]);
   });
 
