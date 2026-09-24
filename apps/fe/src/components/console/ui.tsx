@@ -3,22 +3,50 @@
 import { useState, type ReactNode } from "react";
 import { parseField, parseSignedUsdc, type FieldKind } from "@/lib/vault";
 
-export function Card({
-  title,
-  subtitle,
-  children,
-}: {
+interface CardProps {
   title: string;
   subtitle?: string;
+  /** Fold the body behind its heading. A plain <details>, so the open state survives re-renders. */
+  collapsible?: boolean;
   children: ReactNode;
-}) {
-  return (
-    <section className="border-line bg-surface rounded-xl border p-5">
+}
+
+export function Card({ title, subtitle, collapsible = false, children }: CardProps) {
+  const heading = (
+    <div className="min-w-0">
       <h3 className="text-lg font-semibold">{title}</h3>
       {subtitle ? <p className="text-muted mt-1 text-sm">{subtitle}</p> : null}
-      <div className="mt-4 space-y-4">{children}</div>
-    </section>
+    </div>
   );
+
+  if (!collapsible) {
+    return (
+      <section className="border-line bg-surface rounded-xl border p-5">
+        {heading}
+        <div className="mt-4 space-y-4">{children}</div>
+      </section>
+    );
+  }
+
+  return (
+    <details className="border-line bg-surface group rounded-xl border p-5">
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
+        {heading}
+        <span
+          aria-hidden="true"
+          className="text-muted shrink-0 pt-1 text-sm transition-transform group-open:rotate-90"
+        >
+          ▸
+        </span>
+      </summary>
+      <div className="mt-4 space-y-4">{children}</div>
+    </details>
+  );
+}
+
+/** A Card that starts folded, for tabs where several sit side by side. */
+export function CollapsibleCard(props: Omit<CardProps, "collapsible">) {
+  return <Card {...props} collapsible />;
 }
 
 export function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {

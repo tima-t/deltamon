@@ -9,7 +9,7 @@ const risks = [
   ],
   [
     "Liquidity and exits",
-    "Instant USDC exits depend on idle cash. If there is not enough, you can queue a redemption; the admin has 36 hours to fund it before allocation actions freeze.",
+    "Exits are paid out of the vault's idle USDC and nothing else. When the book is deployed and idle cash runs short, you can only redeem what is available and wait for the admin to unwind the rest. Nothing in the contract forces that unwind.",
   ],
   [
     "Oracles and contracts",

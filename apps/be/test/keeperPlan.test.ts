@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planPerpMark, planQueue, type PerpMarkInput } from "../src/services/keeperPlan.js";
+import { planPerpMark, type PerpMarkInput } from "../src/services/keeperPlan.js";
 
 const USDC = 1_000_000n;
 const T0 = 1_726_000_000n;
@@ -79,41 +79,5 @@ describe("planPerpMark", () => {
     const loss = planPerpMark({ ...base, book: bookAt(300n) });
     expect(loss).toMatchObject({ kind: "report", pnl: -500n * USDC });
     expect(loss.kind === "report" && loss.alerts[0]).toContain("admin must mark it");
-  });
-});
-
-describe("planQueue", () => {
-  const DEADLINE = 129_600n;
-  const entry = (id: bigint, gross: bigint | null, settled = false) => ({
-    id,
-    requestedAt: 1_000n,
-    settled,
-    gross,
-  });
-
-  it("pays oldest first as far as the idle USDC reaches, then reports the shortfall", () => {
-    const plan = planQueue([entry(0n, 400n), entry(1n, 500n), entry(2n, 50n)], 600n, DEADLINE);
-    expect(plan.claims).toEqual([0n]);
-    expect(plan.shortfall).toEqual({ id: 1n, needed: 300n, dueAt: 130_600n });
-  });
-
-  it("never skips ahead to a smaller later request", () => {
-    expect(planQueue([entry(0n, 900n), entry(1n, 10n)], 100n, DEADLINE).claims).toEqual([]);
-  });
-
-  it("asks to advance past a settled head and pays what follows", () => {
-    expect(planQueue([entry(0n, null, true), entry(1n, 100n)], 100n, DEADLINE)).toMatchObject({
-      advance: true,
-      claims: [1n],
-      shortfall: null,
-    });
-  });
-
-  it("settles nothing while the oracle cannot price a request", () => {
-    expect(planQueue([entry(0n, null)], 1_000n, DEADLINE)).toMatchObject({
-      advance: false,
-      claims: [],
-      shortfall: null,
-    });
   });
 });

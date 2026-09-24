@@ -55,10 +55,6 @@ export const VAULT_READS = [
   "owner",
   "pendingOwner",
   "keeper",
-  "queueHead",
-  "redemptionCount",
-  "queuedShares",
-  "hasOverdueRedemptions",
   "maxSwapSlippageBps",
   "stableParityBandBps",
   "maxValidatorCommission",
@@ -70,7 +66,6 @@ export const VAULT_READS = [
   "ausd",
   "CONFIG_TIMELOCK",
   "FEE_TIMELOCK",
-  "REDEMPTION_DEADLINE",
 ] as const;
 
 export type VaultReadName = (typeof VAULT_READS)[number];

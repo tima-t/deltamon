@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { formatUnits, isAddress, type Address } from "viem";
-import { useReadContracts } from "wagmi";
+import { formatUnits, isAddress, parseUnits, type Address } from "viem";
+import { useReadContract, useReadContracts } from "wagmi";
 import {
   VAULT_ABI,
   addr,
@@ -10,12 +10,12 @@ import {
   bool,
   fmtUsdc,
   int,
-  readyAtText,
-  timelockReady,
+  shortAddr,
   untilText,
   type VaultState,
 } from "@/lib/vault";
-import { ActionForm, Card, Pill } from "./ui";
+// Five sections here, so each one folds and you open the one you need.
+import { ActionForm, CollapsibleCard as Card, Pill } from "./ui";
 
 interface Props {
   vault: Address;
@@ -27,52 +27,66 @@ interface Props {
 
 export function AdminPanel({ vault, chainId, state, busy, run }: Props) {
   const [manager, setManager] = useState("");
+  const [fundAmount, setFundAmount] = useState("");
   const managerIsAddress = isAddress(manager);
 
-  const { data: managerData } = useReadContracts({
+  // Everyone the vault has ever cleared, in one read, then their state one row at a time.
+  const { data: listed } = useReadContract({
+    address: vault,
+    abi: VAULT_ABI,
+    functionName: "perpManagers",
+    chainId,
+    query: { refetchInterval: 12_000 },
+  });
+  const known: Address[] = Array.isArray(listed) ? (listed as Address[]) : [];
+
+  const { data: rows } = useReadContracts({
     allowFailure: true,
-    contracts: [
-      {
-        address: vault,
-        abi: VAULT_ABI,
-        functionName: "isPerpManager",
-        args: [manager as Address],
-        chainId,
-      },
-      {
-        address: vault,
-        abi: VAULT_ABI,
-        functionName: "perpManagerEffectiveAt",
-        args: [manager as Address],
-        chainId,
-      },
+    contracts: known.flatMap((m) => [
+      { address: vault, abi: VAULT_ABI, functionName: "isPerpManager", args: [m], chainId },
       {
         address: vault,
         abi: VAULT_ABI,
         functionName: "perpManagerOutstanding",
-        args: [manager as Address],
+        args: [m],
         chainId,
       },
-    ],
-    query: { enabled: managerIsAddress, refetchInterval: 12_000 },
+    ]),
+    query: { enabled: known.length > 0, refetchInterval: 12_000 },
   });
 
-  const managerActive = managerData?.[0]?.status === "success" && managerData[0].result === true;
-  const managerEffectiveAt =
-    managerData?.[1]?.status === "success" && typeof managerData[1].result === "bigint"
-      ? managerData[1].result
-      : 0n;
-  const managerOutstanding =
-    managerData?.[2]?.status === "success" && typeof managerData[2].result === "bigint"
-      ? managerData[2].result
-      : 0n;
+  const resultAt = (k: number): unknown => {
+    const entry = rows?.[k];
+    return entry && entry.status === "success" ? entry.result : undefined;
+  };
+  const managers = known.map((address, i) => {
+    const outstanding = resultAt(i * 2 + 1);
+    return {
+      address,
+      active: resultAt(i * 2) === true,
+      outstanding: typeof outstanding === "bigint" ? outstanding : 0n,
+    };
+  });
+  const selected = managers.find((m) => m.address.toLowerCase() === manager.toLowerCase());
 
   const usdc = addr(state.asset);
   const ausd = addr(state.ausd);
   const commission = big(state.maxValidatorCommission);
 
+  const amountLooksNumeric = /^\d+(\.\d+)?$/.test(fundAmount.trim());
+  function fund(token: Address | undefined) {
+    if (!token || !managerIsAddress || !amountLooksNumeric) return;
+    run(
+      "sendFundPerpManager",
+      [manager as Address, token, parseUnits(fundAmount.trim(), 6)],
+      `fund ${shortAddr(manager)}`,
+    );
+  }
+
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    // items-start: without it a grid row stretches both cards to match the taller one, so opening
+    // one leaves a tall empty box beside it.
+    <div className="grid items-start gap-5 lg:grid-cols-2">
       <Card title="Allocate" subtitle="Kuru's MON book is thin: swap a few hundred USDC at a time.">
         <ActionForm
           title="USDC → MON"
@@ -90,26 +104,19 @@ export function AdminPanel({ vault, chainId, state, busy, run }: Props) {
           onRun={(v) => run("swapMonForUsdc", [v.amount, 0n], "swap MON for USDC")}
         />
         <ActionForm
-          title="USDC ↔ AUSD"
-          note="AUSD cannot be bought on Kuru today; both routes revert at any size."
-          fields={[
-            { name: "amount", label: "Amount", kind: "usdc", placeholder: "100" },
-            {
-              name: "direction",
-              label: "1 = USDC→AUSD, 0 = AUSD→USDC",
-              kind: "int",
-              defaultValue: "1",
-            },
-          ]}
+          title="USDC → AUSD"
+          note="Kuru's AUSD books are empty, so this goes through the stable pool its own front end uses. The vault floors it against parity."
+          fields={[{ name: "amount", label: "USDC in", kind: "usdc", placeholder: "100" }]}
           button="Swap"
           busy={busy}
-          onRun={(v) =>
-            run(
-              v.direction === 1n ? "swapUsdcForAusd" : "swapAusdForUsdc",
-              [v.amount, 0n],
-              "swap stablecoins",
-            )
-          }
+          onRun={(v) => run("swapUsdcForAusd", [v.amount, 0n], "swap USDC for AUSD")}
+        />
+        <ActionForm
+          title="AUSD → USDC"
+          fields={[{ name: "amount", label: "AUSD in", kind: "usdc", placeholder: "100" }]}
+          button="Swap"
+          busy={busy}
+          onRun={(v) => run("swapAusdForUsdc", [v.amount, 0n], "swap AUSD for USDC")}
         />
       </Card>
 
@@ -154,85 +161,134 @@ export function AdminPanel({ vault, chainId, state, busy, run }: Props) {
 
       <Card
         title="Perp managers"
-        subtitle="Custodial: what you send cannot be pulled back. Adding one waits three days."
+        subtitle="Custodial: what you send cannot be pulled back. Adding and removing take effect immediately."
       >
-        <label className="block">
-          <span className="text-muted text-xs">Manager address</span>
-          <input
-            value={manager}
-            placeholder="0x…"
-            onChange={(e) => setManager(e.target.value.trim())}
-            className="border-line focus:border-monad mt-1 w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none"
-          />
-        </label>
-        {managerIsAddress ? (
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            {managerActive ? (
-              <Pill tone="good">active</Pill>
-            ) : (
-              <Pill tone="flat">not a manager</Pill>
-            )}
-            <Pill tone="flat">{untilText(managerEffectiveAt)}</Pill>
-            {managerEffectiveAt > 0n && !timelockReady(managerEffectiveAt) ? (
-              <span className="text-muted">activate from {readyAtText(managerEffectiveAt)}</span>
-            ) : null}
-            <span className="text-muted">holds {fmtUsdc(managerOutstanding)} of vault value</span>
+        {managers.length === 0 ? (
+          <p className="text-muted text-sm">No managers yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-muted text-left">
+                <tr>
+                  <th className="py-2 pr-3 font-normal">Manager</th>
+                  <th className="py-2 pr-3 font-normal">State</th>
+                  <th className="py-2 pr-3 font-normal">Holds</th>
+                  <th className="py-2 pr-3 font-normal"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {managers.map((m) => (
+                  <tr key={m.address} className="border-line border-t">
+                    <td className="py-2 pr-3 font-mono">
+                      <button
+                        type="button"
+                        onClick={() => setManager(m.address)}
+                        className="underline-offset-2 hover:underline"
+                        title="Use this address below"
+                      >
+                        {shortAddr(m.address)}
+                      </button>
+                    </td>
+                    <td className="py-2 pr-3">
+                      {m.active ? (
+                        <Pill tone="good">active</Pill>
+                      ) : (
+                        <Pill tone="flat">removed</Pill>
+                      )}
+                    </td>
+                    <td className="py-2 pr-3 tabular-nums">{fmtUsdc(m.outstanding)}</td>
+                    <td className="py-2 pr-3">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          run(
+                            "controlPerpManagers",
+                            [m.address, !m.active],
+                            `${m.active ? "remove" : "restore"} ${shortAddr(m.address)}`,
+                          )
+                        }
+                        className="border-line hover:border-ink rounded-md border px-2 py-1 disabled:opacity-50"
+                      >
+                        {m.active ? "Remove" : "Add back"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        ) : null}
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={busy || !managerIsAddress}
-            onClick={() =>
-              run("controlPerpManagers", [manager as Address, true], "propose a perp manager")
-            }
-            className="border-line hover:border-ink rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
-          >
-            Propose
-          </button>
-          <button
-            type="button"
-            disabled={busy || !timelockReady(managerEffectiveAt)}
-            onClick={() => run("applyPerpManager", [manager as Address], "activate a perp manager")}
-            className="border-line hover:border-ink rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
-          >
-            Activate
-          </button>
-          <button
-            type="button"
-            disabled={busy || !managerIsAddress}
-            onClick={() =>
-              run("controlPerpManagers", [manager as Address, false], "remove a perp manager")
-            }
-            className="border-line hover:border-ink rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
-          >
-            Remove now
-          </button>
+        )}
+
+        <div className="border-line rounded-lg border p-4">
+          <div className="font-medium">Add or fund a manager</div>
+          <p className="text-muted mt-1 text-sm">
+            {selected
+              ? selected.active
+                ? "This address is a manager and can be funded now."
+                : "This address is listed but not active. Add it back before funding."
+              : "Paste an address to clear it, or pick one from the table above."}
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-muted text-xs">Manager address</span>
+              <input
+                value={manager}
+                placeholder="0x…"
+                onChange={(e) => setManager(e.target.value.trim())}
+                className="border-line focus:border-monad mt-1 w-full rounded-md border bg-transparent px-3 py-2 font-mono text-sm outline-none"
+              />
+            </label>
+            <label className="block">
+              <span className="text-muted text-xs">Amount to send</span>
+              <input
+                value={fundAmount}
+                placeholder="1000"
+                onChange={(e) => setFundAmount(e.target.value.trim())}
+                className="border-line focus:border-monad mt-1 w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none"
+              />
+            </label>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={busy || !managerIsAddress || selected?.active === true}
+              onClick={() =>
+                run("controlPerpManagers", [manager as Address, true], "add a perp manager")
+              }
+              className="border-line hover:border-ink rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
+            >
+              Add manager
+            </button>
+            <button
+              type="button"
+              disabled={busy || !selected?.active || !amountLooksNumeric || !usdc}
+              onClick={() => fund(usdc)}
+              className="border-line hover:border-ink rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
+            >
+              Send USDC
+            </button>
+            <button
+              type="button"
+              disabled={busy || !selected?.active || !amountLooksNumeric || !ausd}
+              onClick={() => fund(ausd)}
+              className="border-line hover:border-ink rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
+            >
+              Send AUSD
+            </button>
+          </div>
+          <p className="text-muted mt-2 text-xs">
+            Both tokens are accepted. Keep the book under the ceiling
+            {` (${int(state.maxPerpAllocationBps) / 100}% of the vault)`}, and make sure their book
+            feed is live first, or deposits pause six hours later.
+          </p>
         </div>
-        <ActionForm
-          title="Fund the manager"
-          note="Keep the perp book under the ceiling, and make sure their book feed is live first."
-          fields={[
-            { name: "amount", label: "Amount", kind: "usdc", placeholder: "1000" },
-            { name: "token", label: "1 = USDC, 0 = AUSD", kind: "int", defaultValue: "1" },
-          ]}
-          button="Send"
-          busy={busy}
-          disabled={!managerIsAddress || !managerActive}
-          onRun={(v) =>
-            run(
-              "sendFundPerpManager",
-              [manager as Address, v.token === 1n ? usdc : ausd, v.amount],
-              "fund a perp manager",
-            )
-          }
-        />
       </Card>
 
       <Card title="Limits, fee and risk">
         <ActionForm
           title="Deposit limits"
-          note="The 50,000 default is well above what Kuru can unwind inside 36 hours."
+          note="The 50,000 default is well above what Kuru can unwind in a sitting, so keep the cap in proportion to how fast you can bring USDC back."
           key={`limits-${String(state.depositCap)}-${String(state.minDeposit)}`}
           fields={[
             {

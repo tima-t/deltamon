@@ -11,19 +11,14 @@ import {
   type Hash,
   type WalletClient,
 } from "viem";
-import { deltaMonVaultAbi, REDEMPTION_DEADLINE_HOURS, type KeeperStatus } from "@deltamon/shared";
+import { deltaMonVaultAbi, type KeeperStatus } from "@deltamon/shared";
 import { env } from "../config.js";
 import { getKeeperWallet, publicClient } from "../chain.js";
 import { logger } from "../lib/logger.js";
 import { fetchPerpBook, type PerpBook } from "./perpBook.js";
-import { planPerpMark, planQueue, type QueueEntry } from "./keeperPlan.js";
+import { planPerpMark } from "./keeperPlan.js";
 
 const abi = deltaMonVaultAbi;
-/** How far past the queue head one tick looks. Matches the vault's own scan limit. */
-const QUEUE_WINDOW = 64n;
-/** Steps per advanceQueue call. Each is one storage read, so this stays far inside the gas limit. */
-const ADVANCE_STEPS = 2_000n;
-const DEADLINE_SEC = BigInt(REDEMPTION_DEADLINE_HOURS * 3600);
 const WITHDRAW_SLOTS = Array.from({ length: 256 }, (_, i) => i);
 
 interface VaultState {
@@ -34,10 +29,9 @@ interface VaultState {
   reportedAt: bigint;
   maxAgeSec: bigint;
   bandBps: bigint;
-  overdue: boolean;
   oracleLive: boolean;
-  queueHead: bigint;
-  redemptionCount: bigint;
+  totalAssets: bigint;
+  totalSupply: bigint;
   liquidity: bigint;
   assetDecimals: number;
   keeper: Address;
@@ -59,10 +53,8 @@ interface TickResult {
  *  1. Mark the perp book from PERP_BOOK_URL when the mark is stale, due, or the book has moved.
  *  2. Claim staking rewards from each of VALIDATOR_IDS, often, so no claim is worth sandwiching.
  *  3. Claim unbonded MON that has matured.
- *  4. Move the queue head past settled requests, then settle queued redemptions oldest first, as
- *     far as the idle USDC reaches.
- * It also raises alerts for what only the admin can fix: an overdue queue, an oracle outage, a
- * stale mark, a loss past the keeper's band.
+ * It also raises alerts for what only the admin can fix: no idle USDC left for exits, an oracle
+ * outage, a stale mark, a loss past the keeper's band.
  *
  * Without KEEPER_PRIVATE_KEY it runs dry: it simulates every call and logs what it would send.
  */
@@ -129,9 +121,9 @@ export class Keeper {
       wallet?.account?.address ?? (isAddressEqual(s.keeper, zeroAddress) ? s.owner : s.keeper);
     const authorised = isAddressEqual(caller, s.keeper) || isAddressEqual(caller, s.owner);
 
-    if (s.overdue) {
+    if (s.totalSupply > 0n && s.liquidity === 0n) {
       result.alerts.push(
-        "a queued redemption is past its deadline, or the queue head needs advancing; admin allocation is frozen",
+        "no idle USDC left: holders cannot redeem until the admin unwinds part of the book",
       );
     }
     if (!s.oracleLive) {
@@ -152,7 +144,6 @@ export class Keeper {
       ],
       ["claim rewards", () => (authorised ? this.claimRewards(s, wallet, caller) : none())],
       ["claim unbonded MON", () => this.claimUnbonded(s, wallet, caller)],
-      ["service queue", () => this.serviceQueue(s, wallet, caller, result.alerts)],
     ];
     for (const [name, run] of steps) {
       try {
@@ -288,93 +279,6 @@ export class Keeper {
     }
     return lines;
   }
-
-  private async serviceQueue(
-    s: VaultState,
-    wallet: WalletClient | null,
-    caller: Address,
-    alerts: string[],
-  ): Promise<string[]> {
-    if (s.queueHead >= s.redemptionCount) return [];
-    const lines: string[] = [];
-    const end =
-      s.queueHead + QUEUE_WINDOW < s.redemptionCount
-        ? s.queueHead + QUEUE_WINDOW
-        : s.redemptionCount;
-    const ids: bigint[] = [];
-    for (let id = s.queueHead; id < end; id++) ids.push(id);
-
-    const rows = await publicClient.multicall({
-      allowFailure: false,
-      contracts: ids.map(
-        (id) => ({ address: s.vault, abi, functionName: "redemptions", args: [id] }) as const,
-      ),
-    });
-    // previewRedeem needs a price, so while the oracle is down nothing can be settled.
-    const grosses: (bigint | null)[] = s.oracleLive
-      ? await publicClient.multicall({
-          allowFailure: false,
-          contracts: rows.map(
-            ([, shares]) =>
-              ({ address: s.vault, abi, functionName: "previewRedeem", args: [shares] }) as const,
-          ),
-        })
-      : rows.map(() => null);
-    const entries: QueueEntry[] = rows.map(([, , , requestedAt, settled], i) => ({
-      id: ids[i] ?? 0n,
-      requestedAt,
-      settled,
-      gross: grosses[i] ?? null,
-    }));
-    const plan = planQueue(entries, s.liquidity, DEADLINE_SEC);
-
-    if (plan.advance) {
-      const call = {
-        address: s.vault,
-        abi,
-        functionName: "advanceQueue",
-        args: [ADVANCE_STEPS],
-      } as const;
-      if (!wallet?.account) {
-        await publicClient.simulateContract({ ...call, account: caller });
-        lines.push("dry-run: would advance the queue head");
-      } else {
-        const { request } = await publicClient.simulateContract({
-          ...call,
-          account: wallet.account,
-        });
-        lines.push(
-          `advanced the queue head in ${await confirm(await wallet.writeContract(request))}`,
-        );
-      }
-    }
-
-    for (const id of plan.claims) {
-      const call = { address: s.vault, abi, functionName: "claimRedemption", args: [id] } as const;
-      if (!wallet?.account) {
-        const { result } = await publicClient.simulateContract({ ...call, account: caller });
-        lines.push(
-          `dry-run: would settle redemption ${id} for ${formatUnits(result, s.assetDecimals)}`,
-        );
-        continue;
-      }
-      const { result, request } = await publicClient.simulateContract({
-        ...call,
-        account: wallet.account,
-      });
-      const hash = await confirm(await wallet.writeContract(request));
-      lines.push(`settled redemption ${id} for ${formatUnits(result, s.assetDecimals)} in ${hash}`);
-    }
-
-    if (plan.shortfall) {
-      const due = new Date(Number(plan.shortfall.dueAt) * 1000).toISOString();
-      const needed = formatUnits(plan.shortfall.needed, s.assetDecimals);
-      alerts.push(
-        `queued redemption ${plan.shortfall.id} needs ${needed} more idle USDC; due by ${due}`,
-      );
-    }
-    return lines;
-  }
 }
 
 async function readState(vault: Address): Promise<VaultState> {
@@ -389,10 +293,9 @@ async function readState(vault: Address): Promise<VaultState> {
         { ...c, functionName: "perpReportedAt" },
         { ...c, functionName: "perpReportMaxAge" },
         { ...c, functionName: "perpPnlBandBps" },
-        { ...c, functionName: "hasOverdueRedemptions" },
         { ...c, functionName: "oracleIsLive" },
-        { ...c, functionName: "queueHead" },
-        { ...c, functionName: "redemptionCount" },
+        { ...c, functionName: "totalAssets" },
+        { ...c, functionName: "totalSupply" },
         { ...c, functionName: "availableLiquidity" },
         { ...c, functionName: "keeper" },
         { ...c, functionName: "owner" },
@@ -406,10 +309,9 @@ async function readState(vault: Address): Promise<VaultState> {
     reportedAt,
     maxAge,
     bandBps,
-    overdue,
     oracleLive,
-    queueHead,
-    redemptionCount,
+    totalAssets,
+    totalSupply,
     liquidity,
     keeper,
     owner,
@@ -428,10 +330,9 @@ async function readState(vault: Address): Promise<VaultState> {
     reportedAt,
     maxAgeSec: BigInt(maxAge),
     bandBps: BigInt(bandBps),
-    overdue,
     oracleLive,
-    queueHead,
-    redemptionCount,
+    totalAssets,
+    totalSupply,
     liquidity,
     assetDecimals,
     keeper,

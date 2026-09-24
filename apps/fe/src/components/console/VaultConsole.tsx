@@ -26,11 +26,10 @@ import {
 } from "@/lib/vault";
 import { AdminPanel } from "./AdminPanel";
 import { KeeperPanel } from "./KeeperPanel";
-import { QueuePanel } from "./QueuePanel";
 import { UserPanel } from "./UserPanel";
 import { Card, Pill, Stat, TxBanner } from "./ui";
 
-type Tab = "overview" | "deposit" | "queue" | "admin" | "keeper";
+type Tab = "overview" | "deposit" | "admin" | "keeper";
 
 export function VaultConsole() {
   const {
@@ -96,10 +95,15 @@ export function VaultConsole() {
     query: { enabled: Boolean(ausd && vault) },
   });
 
+  const bookValue = big(state.totalAssets);
+  const exitCoverage =
+    bookValue === 0n
+      ? undefined
+      : Number((big(state.availableLiquidity) * 10_000n) / bookValue) / 100;
+
   const tabs: { id: Tab; label: string; show: boolean }[] = [
     { id: "overview", label: "Overview", show: true },
     { id: "deposit", label: "Deposit & withdraw", show: true },
-    { id: "queue", label: "Queue", show: true },
     { id: "admin", label: "Admin", show: isOwner },
     { id: "keeper", label: "Keeper", show: isKeeper || isOwner },
   ];
@@ -290,15 +294,17 @@ export function VaultConsole() {
                   hint={`marked ${agoText(big(state.perpReportedAt))}`}
                 />
                 <Stat
-                  label="Queue"
+                  label="Exit coverage"
                   value={
-                    bool(state.hasOverdueRedemptions) ? (
-                      <Pill tone="warn">needs attention</Pill>
+                    exitCoverage === undefined ? (
+                      "—"
+                    ) : exitCoverage >= 10 ? (
+                      <Pill tone="good">{exitCoverage}% payable</Pill>
                     ) : (
-                      <Pill tone="good">healthy</Pill>
+                      <Pill tone="warn">{exitCoverage}% payable</Pill>
                     )
                   }
-                  hint={`${big(state.redemptionCount).toString()} requests`}
+                  hint="share of the book redeemable right now"
                 />
                 <Stat label="Admin" value={shortAddr(owner)} />
                 <Stat label="Keeper" value={shortAddr(keeper)} />
@@ -320,10 +326,6 @@ export function VaultConsole() {
 
         {vault && tab === "deposit" ? (
           <UserPanel vault={vault} chainId={chainId} state={state} busy={busy} run={action.run} />
-        ) : null}
-
-        {vault && tab === "queue" ? (
-          <QueuePanel vault={vault} chainId={chainId} state={state} busy={busy} run={action.run} />
         ) : null}
 
         {vault && tab === "admin" && isOwner ? (

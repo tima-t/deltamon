@@ -60,7 +60,7 @@ export function UserPanel({ vault, chainId, state, busy, run }: Props) {
   const allowance = value(4);
 
   const minDeposit = big(state.minDeposit);
-  const queuedOnly = shares - maxRedeem;
+  const waitingOnLiquidity = shares - maxRedeem;
 
   return (
     <div className="grid gap-5 lg:grid-cols-2">
@@ -99,8 +99,9 @@ export function UserPanel({ vault, chainId, state, busy, run }: Props) {
             hint="Limited by the vault's idle USDC"
           />
           <Stat
-            label="Needs the queue"
-            value={`${fmtShares(queuedOnly > 0n ? queuedOnly : 0n)} sdMON`}
+            label="Waiting on liquidity"
+            value={`${fmtShares(waitingOnLiquidity > 0n ? waitingOnLiquidity : 0n)} sdMON`}
+            hint="Redeemable once the admin brings USDC back"
           />
         </div>
 
@@ -119,14 +120,6 @@ export function UserPanel({ vault, chainId, state, busy, run }: Props) {
           button="Redeem"
           busy={busy}
           onRun={(v) => run("redeem", [v.shares, address, address], "redeem sdMON")}
-        />
-        <ActionForm
-          title="Queue a redemption"
-          note="For anything the idle USDC cannot cover. The admin has 36 hours to fund it, then every allocation function freezes."
-          fields={[{ name: "shares", label: "sdMON", kind: "shares", placeholder: "1000" }]}
-          button="Request"
-          busy={busy}
-          onRun={(v) => run("requestRedeem", [v.shares], "queue a redemption")}
         />
         <ActionForm
           title="Exit in kind"
