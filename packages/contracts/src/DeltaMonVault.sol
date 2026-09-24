@@ -27,14 +27,16 @@ import {IMonadStaking} from "./interfaces/external/IMonadStaking.sol";
 ///      - Swaps are floored against the Chainlink MON/USD feed, so the admin cannot pick a bad
 ///        minimum output and trade the vault's money away to themselves on the order book.
 ///      - Staking only reaches validators whose commission is under a configured cap.
-///      - Anything that widens the admin's reach waits three days: a new perp manager, a higher perp
-///        ceiling, looser risk limits, a new venue or oracle, a higher fee. That is longer than the
-///        redemption deadline, so a depositor who objects can always be paid out before it lands.
-///      - While a redemption request is past its deadline, every allocation function is frozen.
+///      - Anything that widens the admin's reach waits three days: a higher perp ceiling, looser
+///        risk limits, a new venue or oracle, a higher fee. That is longer than the redemption
+///        deadline, so a depositor who objects can always be paid out before it lands.
 ///
 ///      What the admin CAN do, and depositors should know:
-///      - Perp managers are custodial. Funding one is an ordinary transfer to an address the vault
-///        cannot claw back from, bounded by the perp ceiling.
+///      - Withdrawals are paid out of idle USDC and nothing else. There is no redemption queue and
+///        no deadline: if the book is deployed, a holder waits until the admin brings enough back.
+///      - Perp managers are custodial, and adding one takes effect immediately. Funding one is an
+///        ordinary transfer to an address the vault cannot claw back from. What bounds it is the
+///        perp ceiling, and raising that still waits three days.
 ///      - The perp book's value is reported, not measured, within a band.
 contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -48,20 +50,14 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
     uint256 public constant BPS = 10_000;
     uint256 public constant MAX_PERFORMANCE_FEE_BPS = 1000; // 10 %
     uint256 public constant MAX_SWAP_SLIPPAGE_BPS = 500;
-    /// @notice A queued redemption must be funded within this window.
-    uint256 public constant REDEMPTION_DEADLINE = 36 hours;
-    /// @notice Fee increases wait this long. Decreases apply at once. Longer than the redemption
-    ///         deadline, so a depositor who objects can queue and be paid before the rise lands.
+    /// @notice Fee increases wait this long; decreases apply at once. It gives a depositor who
+    ///         objects three days to redeem, as far as the idle USDC reaches.
     uint256 public constant FEE_TIMELOCK = 3 days;
-    /// @notice Changing the swap venue or the oracle waits this long. It is deliberately longer
-    ///         than the redemption deadline so a depositor who dislikes the new one can leave first.
+    /// @notice Changing the swap venue or the oracle waits this long, for the same reason.
     uint256 public constant VENUE_TIMELOCK = 3 days;
-    /// @notice Adding a perp manager, raising the perp ceiling and loosening risk limits wait this
-    ///         long, for the same reason. Removing a manager and tightening anything apply at once.
+    /// @notice Raising the perp ceiling and loosening risk limits wait this long. Adding or removing
+    ///         a manager, and tightening anything, apply at once.
     uint256 public constant CONFIG_TIMELOCK = 3 days;
-    /// @notice The most queue entries one call will step over. Keeps every queue operation's gas
-    ///         bounded, so no run of settled requests behind the head can make it unsettleable.
-    uint256 public constant MAX_QUEUE_SCAN = 64;
     /// @notice Gas the oracle is given when checking whether it is live. The caller must supply it
     ///         in full, so nobody can fake an outage by starving the call.
     uint256 public constant ORACLE_CALL_GAS = 500_000;
@@ -126,8 +122,11 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
     /// @notice Externally owned addresses cleared to run the short leg with vault funds.
     /// @dev A manager is CUSTODIAL over what it is sent. The vault cannot compel a return.
     mapping(address => bool) public isPerpManager;
-    /// @notice When a proposed manager may be activated. Zero when nothing is pending.
-    mapping(address => uint64) public perpManagerEffectiveAt;
+    /// @dev Every address ever cleared as a manager, so a front end can list them in one read.
+    ///      Removing a manager clears the flag above but keeps the entry here, because a removed
+    ///      manager may still hold value it has to return.
+    address[] private _knownPerpManagers;
+    mapping(address => bool) private _seenPerpManager;
     /// @notice Per manager, value sent minus value returned, in asset units.
     mapping(address => uint256) public perpManagerOutstanding;
     /// @notice Sum of the above across every manager.
@@ -145,20 +144,6 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
 
     uint256 public accruedFees;
 
-    struct Redemption {
-        address owner;
-        uint256 shares;
-        uint256 basis;
-        uint64 requestedAt;
-        bool settled;
-        /// @dev The fee in force when the request was made. It caps the fee charged at settlement.
-        uint16 feeBps;
-    }
-
-    Redemption[] public redemptions;
-    uint256 public queueHead;
-    uint256 public queuedShares;
-
     // ───────────────────────────── events ─────────────────────────────
 
     event Swapped(address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut);
@@ -168,15 +153,11 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
     event StakingRewardsClaimed(uint64 indexed validatorId, uint256 monReceived);
     event PerpPnlReported(int256 pnl, uint256 deployed);
     event PerpMarkInvalidated(int256 pnl);
-    event PerpManagerProposed(address indexed manager, uint64 effectiveAt);
     event PerpManagerSet(address indexed manager, bool allowed);
     event SentToPerpManager(address indexed manager, address indexed token, uint256 amount, uint256 outstanding);
     event ReturnedByPerpManager(address indexed manager, address indexed token, uint256 amount, uint256 outstanding);
     event MaxPerpAllocationProposed(uint16 bps, uint64 effectiveAt);
     event MaxPerpAllocationUpdated(uint16 bps);
-    event RedemptionRequested(uint256 indexed id, address indexed owner, uint256 shares);
-    event RedemptionClaimed(uint256 indexed id, address indexed owner, uint256 assetsOut, uint256 fee);
-    event RedemptionCancelled(uint256 indexed id, address indexed owner, uint256 shares);
     event RedeemedInKind(
         address indexed owner,
         address indexed receiver,
@@ -202,12 +183,8 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
     error InvalidBps();
     error NotWhitelisted(address account);
     error BelowMinDeposit(uint256 assets, uint256 minimum);
-    error BelowMinRedemption(uint256 shares, uint256 minimum);
     error InsufficientLiquidity(uint256 needed, uint256 available);
     error NothingToClaim();
-    error NotRequestOwner();
-    error AlreadySettled();
-    error RedemptionsOverdue();
     error StalePerpReport();
     error PnlOutOfBand();
     error ValidatorCommissionTooHigh(uint256 commission, uint256 maximum);
@@ -296,6 +273,9 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
 
     function perpReportIsStale() public view returns (bool) {
         if (perpDeployed() == 0) return false;
+        // Zero means never marked, or invalidated by a return above what a manager was sent. Say so
+        // outright rather than leaning on the clock having passed the max age.
+        if (perpReportedAt == 0) return true;
         return block.timestamp > uint256(perpReportedAt) + perpReportMaxAge;
     }
 
@@ -342,27 +322,6 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         return convertToAssets(10 ** decimals());
     }
 
-    /// @notice True once the oldest unsettled request has passed its deadline. Freezes the admin.
-    /// @dev Looks at most MAX_QUEUE_SCAN entries past the head. If every one of them is settled and
-    ///      more remain, it cannot prove the queue healthy and answers true; anyone can then call
-    ///      `advanceQueue` to move the head on. Erring the other way would let a long run of settled
-    ///      requests hide an overdue one from the freeze.
-    function hasOverdueRedemptions() public view returns (bool) {
-        uint256 i = queueHead;
-        uint256 n = redemptions.length;
-        uint256 end = _scanEnd(i, n, MAX_QUEUE_SCAN);
-        while (i < end && redemptions[i].settled) {
-            i++;
-        }
-        if (i == n) return false;
-        if (i == end) return true;
-        return block.timestamp > uint256(redemptions[i].requestedAt) + REDEMPTION_DEADLINE;
-    }
-
-    function redemptionCount() external view returns (uint256) {
-        return redemptions.length;
-    }
-
     // ───────────────────────────── ERC-4626 limits ─────────────────────────────
 
     function maxDeposit(address receiver) public view override returns (uint256) {
@@ -377,7 +336,7 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         return assets == 0 ? 0 : _convertToShares(assets, Math.Rounding.Floor);
     }
 
-    /// @notice Only what the idle USDC can actually pay. Anything more has to go through the queue.
+    /// @notice Only what the idle USDC can actually pay. The rest waits for the admin to unwind.
     function maxRedeem(address owner) public view override returns (uint256) {
         uint256 bal = balanceOf(owner);
         uint256 liquidity = availableLiquidity();
@@ -419,7 +378,8 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
 
     // ───────────────────────────── depositor: out ─────────────────────────────
 
-    /// @notice Redeem immediately. Reverts when the vault has no free USDC, use `requestRedeem` then.
+    /// @notice Redeem out of idle USDC. Capped by `availableLiquidity`, so it reverts when the book
+    ///         is deployed and the admin has not brought enough back yet.
     function redeem(uint256 shares, address receiver, address owner)
         public
         override
@@ -433,7 +393,7 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         uint256 basis = _takeBasis(owner, shares);
         if (msg.sender != owner) _spendAllowance(owner, msg.sender, shares);
         _burn(owner, shares);
-        (assetsOut,) = _settle(shares, gross, basis, owner, receiver, performanceFeeBps);
+        (assetsOut,) = _settle(shares, gross, basis, owner, receiver);
     }
 
     function withdraw(uint256 assets, address receiver, address owner)
@@ -450,76 +410,7 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         uint256 basis = _takeBasis(owner, shares);
         if (msg.sender != owner) _spendAllowance(owner, msg.sender, shares);
         _burn(owner, shares);
-        _settle(shares, gross, basis, owner, receiver, performanceFeeBps);
-    }
-
-    /// @notice Queue a redemption. The admin has 36 hours to make the USDC available, after which
-    ///         every allocation function on this vault freezes until the queue is cleared.
-    /// @dev A request must be worth at least one whole share, which makes queue spam cost something.
-    ///      A holder below that can still queue their whole balance, so nobody is shut out.
-    function requestRedeem(uint256 shares) external nonReentrant returns (uint256 id) {
-        uint256 bal = balanceOf(msg.sender);
-        if (shares == 0 || shares > bal) revert ERC4626ExceededMaxRedeem(msg.sender, shares, bal);
-        uint256 minShares = 10 ** decimals();
-        if (shares < minShares && shares != bal) revert BelowMinRedemption(shares, minShares);
-
-        uint256 basis = _takeBasis(msg.sender, shares);
-        _transfer(msg.sender, address(this), shares);
-        queuedShares += shares;
-
-        id = redemptions.length;
-        redemptions.push(
-            Redemption({
-                owner: msg.sender,
-                shares: shares,
-                basis: basis,
-                requestedAt: uint64(block.timestamp),
-                settled: false,
-                feeBps: performanceFeeBps
-            })
-        );
-        emit RedemptionRequested(id, msg.sender, shares);
-    }
-
-    /// @notice Settle a queued redemption once the USDC is there. Anyone may trigger it.
-    function claimRedemption(uint256 id) external nonReentrant returns (uint256 assetsOut) {
-        Redemption storage r = redemptions[id];
-        if (r.settled) revert AlreadySettled();
-
-        uint256 gross = previewRedeem(r.shares);
-        uint256 available = availableLiquidity();
-        if (gross > available) revert InsufficientLiquidity(gross, available);
-
-        r.settled = true;
-        queuedShares -= r.shares;
-        _burn(address(this), r.shares);
-        // The fee the request was queued under caps what it pays, so a rise that landed while it
-        // waited never reaches it.
-        uint256 feeBps = Math.min(r.feeBps, performanceFeeBps);
-        uint256 fee;
-        (assetsOut, fee) = _settle(r.shares, gross, r.basis, r.owner, r.owner, feeBps);
-        _advanceQueue(MAX_QUEUE_SCAN);
-        emit RedemptionClaimed(id, r.owner, assetsOut, fee);
-    }
-
-    /// @notice Take a queued request back. Shares and cost basis return to the owner.
-    function cancelRedemption(uint256 id) external nonReentrant {
-        Redemption storage r = redemptions[id];
-        if (r.settled) revert AlreadySettled();
-        if (r.owner != msg.sender) revert NotRequestOwner();
-
-        r.settled = true;
-        queuedShares -= r.shares;
-        costBasis[r.owner] += r.basis;
-        _transfer(address(this), r.owner, r.shares);
-        _advanceQueue(MAX_QUEUE_SCAN);
-        emit RedemptionCancelled(id, r.owner, r.shares);
-    }
-
-    /// @notice Step the queue head past settled requests, at most `maxSteps` of them. Permissionless.
-    function advanceQueue(uint256 maxSteps) external returns (uint256) {
-        _advanceQueue(maxSteps);
-        return queueHead;
+        _settle(shares, gross, basis, owner, receiver);
     }
 
     /// @notice Exit without a price. While the oracle cannot price MON, take your share of what the
@@ -562,7 +453,6 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         nonReentrant
         onlyOwner
         whenNotPaused
-        notOverdue
         returns (uint256)
     {
         uint256 floorOut = assetsToMon(usdcIn).mulDiv(BPS - maxSwapSlippageBps, BPS);
@@ -579,7 +469,6 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         nonReentrant
         onlyOwner
         whenNotPaused
-        notOverdue
         returns (uint256)
     {
         uint256 floorOut = usdcIn.mulDiv(BPS - stableParityBandBps, BPS);
@@ -608,7 +497,7 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
     // ───────────────────────────── admin: staking ─────────────────────────────
 
     /// @notice Delegate MON to a validator. Wrapped MON is unwrapped first as the precompile is native.
-    function stake(uint64 validatorId, uint256 monAmount) external nonReentrant onlyOwner whenNotPaused notOverdue {
+    function stake(uint64 validatorId, uint256 monAmount) external nonReentrant onlyOwner whenNotPaused {
         _requireCommissionInRange(validatorId);
         uint256 native = address(this).balance;
         if (native < monAmount) wmon.withdraw(monAmount - native);
@@ -679,31 +568,29 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
 
     // ───────────────────────────── admin: perp managers ─────────────────────────────
 
-    /// @notice Propose a perp manager, or remove one.
-    /// @dev Adding waits CONFIG_TIMELOCK and is completed by `applyPerpManager`, because a manager is
-    ///      custodial over whatever it is sent. Removal is immediate and also cancels a pending add,
-    ///      so a rogue one can be cut off at once. Their outstanding balance is kept so the books stay
-    ///      honest and they can still return what they hold.
+    /// @notice Add or remove a perp manager. Both take effect immediately.
+    /// @dev A manager is custodial over whatever it is sent, so this is the one lever here that is
+    ///      deliberately not timelocked. What bounds the exposure is the perp ceiling, and raising
+    ///      that still waits CONFIG_TIMELOCK. Removing a manager keeps their outstanding balance on
+    ///      the books, so the accounting stays honest and they can still return what they hold.
     function controlPerpManagers(address manager, bool allowed) external onlyOwner {
         if (manager == address(0)) revert ZeroAddress();
-        if (allowed) {
-            uint64 effectiveAt = uint64(block.timestamp + CONFIG_TIMELOCK);
-            perpManagerEffectiveAt[manager] = effectiveAt;
-            emit PerpManagerProposed(manager, effectiveAt);
-            return;
+        isPerpManager[manager] = allowed;
+        if (allowed && !_seenPerpManager[manager]) {
+            _seenPerpManager[manager] = true;
+            _knownPerpManagers.push(manager);
         }
-        isPerpManager[manager] = false;
-        delete perpManagerEffectiveAt[manager];
-        emit PerpManagerSet(manager, false);
+        emit PerpManagerSet(manager, allowed);
     }
 
-    function applyPerpManager(address manager) external onlyOwner {
-        uint64 effectiveAt = perpManagerEffectiveAt[manager];
-        if (effectiveAt == 0) revert NoChangePending();
-        if (block.timestamp < effectiveAt) revert TimelockActive(effectiveAt);
-        delete perpManagerEffectiveAt[manager];
-        isPerpManager[manager] = true;
-        emit PerpManagerSet(manager, true);
+    /// @notice Every address ever cleared as a manager, live or not. Read it alongside
+    ///         `isPerpManager` and `perpManagerOutstanding` to see who is active and who still owes.
+    function perpManagers() external view returns (address[] memory) {
+        return _knownPerpManagers;
+    }
+
+    function perpManagerCount() external view returns (uint256) {
+        return _knownPerpManagers.length;
     }
 
     /// @notice Send USDC or AUSD to a whitelisted manager so they can run the position on Perpl.
@@ -715,7 +602,6 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         nonReentrant
         onlyOwner
         whenNotPaused
-        notOverdue
     {
         if (!isPerpManager[manager]) revert NotAPerpManager(manager);
         _requireSupportedToken(token);
@@ -823,7 +709,7 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
     // ───────────────────────────── admin: fees and config ─────────────────────────────
 
     /// @notice The only assets the admin can move out, and only what depositors' profits accrued.
-    function withdrawFees(address to, uint256 amount) external nonReentrant onlyOwner notOverdue {
+    function withdrawFees(address to, uint256 amount) external nonReentrant onlyOwner {
         if (to == address(0)) revert ZeroAddress();
         accruedFees -= amount;
         IERC20(asset()).safeTransfer(to, amount);
@@ -979,11 +865,6 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
 
     // ───────────────────────────── internals ─────────────────────────────
 
-    modifier notOverdue() {
-        if (hasOverdueRedemptions()) revert RedemptionsOverdue();
-        _;
-    }
-
     modifier onlyKeeperOrOwner() {
         if (msg.sender != keeper && msg.sender != owner()) revert NotKeeperOrOwner(msg.sender);
         _;
@@ -999,16 +880,16 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
 
     /// @dev Prices the shares, charges the fee on profit above the holder's own entry, pays the rest.
     /// @param gross must be priced BEFORE the shares are burnt, or the burn inflates the result.
-    function _settle(uint256 shares, uint256 gross, uint256 basis, address owner, address receiver, uint256 feeBps)
+    function _settle(uint256 shares, uint256 gross, uint256 basis, address owner, address receiver)
         internal
         returns (uint256 assetsOut, uint256 fee)
     {
         uint256 available = availableLiquidity();
         if (gross > available) revert InsufficientLiquidity(gross, available);
 
-        if (gross > basis && feeBps > 0) {
+        if (gross > basis && performanceFeeBps > 0) {
             uint256 profit = gross - basis;
-            fee = profit.mulDiv(feeBps, BPS);
+            fee = profit.mulDiv(performanceFeeBps, BPS);
             accruedFees += fee;
             emit PerformanceFeeCharged(owner, profit, fee);
         }
@@ -1023,22 +904,8 @@ contract DeltaMonVault is ERC4626, Ownable2Step, Pausable, ReentrancyGuard {
         return STAKING;
     }
 
-    function _advanceQueue(uint256 maxSteps) internal {
-        uint256 i = queueHead;
-        uint256 end = _scanEnd(i, redemptions.length, maxSteps);
-        while (i < end && redemptions[i].settled) {
-            i++;
-        }
-        queueHead = i;
-    }
-
-    /// @dev Where a walk of at most `steps` entries from `start` must stop, without overflowing.
-    function _scanEnd(uint256 start, uint256 length, uint256 steps) internal pure returns (uint256) {
-        return length - start > steps ? start + steps : length;
-    }
-
     /// @dev Cost basis follows the shares when they move between holders, so a recipient is never
-    ///      taxed on someone else's principal. Escrow moves are handled by the queue functions.
+    ///      taxed on someone else's principal.
     function _update(address from, address to, uint256 value) internal override {
         if (from != address(0) && to != address(0) && from != address(this) && to != address(this)) {
             uint256 bal = balanceOf(from);

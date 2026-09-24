@@ -99,19 +99,6 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
-    "name": "MAX_QUEUE_SCAN",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "MAX_SWAP_SLIPPAGE_BPS",
     "inputs": [],
     "outputs": [
@@ -126,19 +113,6 @@ export const deltaMonVaultAbi = [
   {
     "type": "function",
     "name": "ORACLE_CALL_GAS",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "REDEMPTION_DEADLINE",
     "inputs": [],
     "outputs": [
       {
@@ -197,25 +171,6 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
-    "name": "advanceQueue",
-    "inputs": [
-      {
-        "name": "maxSteps",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "allowance",
     "inputs": [
       {
@@ -249,19 +204,6 @@ export const deltaMonVaultAbi = [
     "type": "function",
     "name": "applyPerformanceFee",
     "inputs": [],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "applyPerpManager",
-    "inputs": [
-      {
-        "name": "manager",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
@@ -401,41 +343,9 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
-    "name": "cancelRedemption",
-    "inputs": [
-      {
-        "name": "id",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "cancelVenueChange",
     "inputs": [],
     "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "claimRedemption",
-    "inputs": [
-      {
-        "name": "id",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "assetsOut",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
     "stateMutability": "nonpayable"
   },
   {
@@ -615,19 +525,6 @@ export const deltaMonVaultAbi = [
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "hasOverdueRedemptions",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
       }
     ],
     "stateMutability": "view"
@@ -1160,6 +1057,19 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
+    "name": "perpManagerCount",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "perpManagerDeployed",
     "inputs": [],
     "outputs": [
@@ -1191,25 +1101,6 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
-    "name": "perpManagerEffectiveAt",
-    "inputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint64",
-        "internalType": "uint64"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "perpManagerOutstanding",
     "inputs": [
       {
@@ -1223,6 +1114,19 @@ export const deltaMonVaultAbi = [
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "perpManagers",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address[]",
+        "internalType": "address[]"
       }
     ],
     "stateMutability": "view"
@@ -1414,32 +1318,6 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
-    "name": "queueHead",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "queuedShares",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "redeem",
     "inputs": [
       {
@@ -1503,63 +1381,6 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "function",
-    "name": "redemptionCount",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "redemptions",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "owner",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "shares",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "basis",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "requestedAt",
-        "type": "uint64",
-        "internalType": "uint64"
-      },
-      {
-        "name": "settled",
-        "type": "bool",
-        "internalType": "bool"
-      },
-      {
-        "name": "feeBps",
-        "type": "uint16",
-        "internalType": "uint16"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "renounceOwnership",
     "inputs": [],
     "outputs": [],
@@ -1576,25 +1397,6 @@ export const deltaMonVaultAbi = [
       }
     ],
     "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "requestRedeem",
-    "inputs": [
-      {
-        "name": "shares",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "id",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
     "stateMutability": "nonpayable"
   },
   {
@@ -2397,25 +2199,6 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "event",
-    "name": "PerpManagerProposed",
-    "inputs": [
-      {
-        "name": "manager",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "effectiveAt",
-        "type": "uint64",
-        "indexed": false,
-        "internalType": "uint64"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
     "name": "PerpManagerSet",
     "inputs": [
       {
@@ -2501,87 +2284,6 @@ export const deltaMonVaultAbi = [
       },
       {
         "name": "ausdOut",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "RedemptionCancelled",
-    "inputs": [
-      {
-        "name": "id",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
-      },
-      {
-        "name": "owner",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "shares",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "RedemptionClaimed",
-    "inputs": [
-      {
-        "name": "id",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
-      },
-      {
-        "name": "owner",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "assetsOut",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "fee",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "RedemptionRequested",
-    "inputs": [
-      {
-        "name": "id",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
-      },
-      {
-        "name": "owner",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "shares",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -2898,31 +2600,10 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "error",
-    "name": "AlreadySettled",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "BelowMinDeposit",
     "inputs": [
       {
         "name": "assets",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "minimum",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
-  },
-  {
-    "type": "error",
-    "name": "BelowMinRedemption",
-    "inputs": [
-      {
-        "name": "shares",
         "type": "uint256",
         "internalType": "uint256"
       },
@@ -3189,11 +2870,6 @@ export const deltaMonVaultAbi = [
   },
   {
     "type": "error",
-    "name": "NotRequestOwner",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "NotWhitelisted",
     "inputs": [
       {
@@ -3254,11 +2930,6 @@ export const deltaMonVaultAbi = [
   {
     "type": "error",
     "name": "PnlOutOfBand",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "RedemptionsOverdue",
     "inputs": []
   },
   {

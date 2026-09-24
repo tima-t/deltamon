@@ -234,87 +234,6 @@ contract DeltaMonVaultTest is Test {
 
     // ───────────────────────────── redemption queue ─────────────────────────────
 
-    function test_queuedRedemptionPaysAfterAdminFrees() public {
-        _deposit(alice, 1000e6);
-        _buyMon(900e6);
-        assertEq(vault.availableLiquidity(), 100e6);
-
-        uint256 shares = vault.balanceOf(alice);
-        assertLt(vault.maxRedeem(alice), shares);
-
-        vm.prank(alice);
-        uint256 id = vault.requestRedeem(shares);
-        assertEq(vault.balanceOf(alice), 0);
-
-        vm.expectPartialRevert(DeltaMonVault.InsufficientLiquidity.selector);
-        vault.claimRedemption(id);
-
-        uint256 monHeld = wmon.balanceOf(address(vault));
-        vm.prank(admin);
-        vault.swapMonForUsdc(monHeld, 0);
-
-        vault.claimRedemption(id);
-        assertApproxEqRel(usdc.balanceOf(alice), START, 1e12);
-        assertEq(vault.totalSupply(), 0);
-    }
-
-    function test_overdueQueueFreezesAdminAllocation() public {
-        _deposit(alice, 1000e6);
-        _buyMon(900e6);
-        uint256 shares = vault.balanceOf(alice);
-        vm.prank(alice);
-        uint256 id = vault.requestRedeem(shares);
-
-        assertFalse(vault.hasOverdueRedemptions());
-        skip(37 hours);
-        assertTrue(vault.hasOverdueRedemptions());
-
-        vm.startPrank(admin);
-        vm.expectRevert(DeltaMonVault.RedemptionsOverdue.selector);
-        vault.swapUsdcForMon(1e6, 0);
-        vm.expectRevert(DeltaMonVault.RedemptionsOverdue.selector);
-        vault.stake(VAL, 1e18);
-        vm.expectRevert(DeltaMonVault.RedemptionsOverdue.selector);
-        vault.withdrawFees(treasury, 0);
-        vm.expectRevert(DeltaMonVault.RedemptionsOverdue.selector);
-        vault.swapUsdcForAusd(1e6, 0);
-
-        // Unwinding towards the queue stays allowed.
-        vault.swapMonForUsdc(wmon.balanceOf(address(vault)), 0);
-        vm.stopPrank();
-
-        vault.claimRedemption(id);
-        assertFalse(vault.hasOverdueRedemptions());
-    }
-
-    function test_cancelRedemptionRestoresSharesAndBasis() public {
-        _deposit(alice, 1000e6);
-        _buyMon(900e6);
-        uint256 shares = vault.balanceOf(alice);
-
-        vm.prank(alice);
-        uint256 id = vault.requestRedeem(shares);
-        assertEq(vault.costBasis(alice), 0);
-
-        vm.prank(alice);
-        vault.cancelRedemption(id);
-        assertEq(vault.balanceOf(alice), shares);
-        assertApproxEqAbs(vault.costBasis(alice), 1000e6, 2);
-        assertFalse(vault.hasOverdueRedemptions());
-    }
-
-    function test_onlyOwnerCancelsOwnRequest() public {
-        _deposit(alice, 1000e6);
-        _buyMon(900e6);
-        uint256 shares = vault.balanceOf(alice);
-        vm.prank(alice);
-        uint256 id = vault.requestRedeem(shares);
-
-        vm.prank(bob);
-        vm.expectRevert(DeltaMonVault.NotRequestOwner.selector);
-        vault.cancelRedemption(id);
-    }
-
     // ───────────────────────────── swap guards ─────────────────────────────
 
     function test_oracleFloorBlocksBadSwap() public {
@@ -451,32 +370,6 @@ contract DeltaMonVaultTest is Test {
         _deposit(bob, 100e6);
     }
 
-    function test_queuedExitSurvivesASilentAdmin() public {
-        _deposit(alice, 1000e6);
-        _fundManager(400e6);
-        _buyMon(550e6);
-
-        uint256 shares = vault.balanceOf(alice);
-        vm.prank(alice);
-        uint256 id = vault.requestRedeem(shares);
-
-        // Admin goes quiet, then unwinds enough to cover the queue but still never reports.
-        skip(40 hours);
-        assertTrue(vault.perpReportIsStale());
-        assertTrue(vault.hasOverdueRedemptions());
-
-        uint256 monHeld = wmon.balanceOf(address(vault));
-        vm.prank(admin);
-        vault.swapMonForUsdc(monHeld, 0);
-        vm.startPrank(perpManager);
-        usdc.approve(address(vault), 400e6);
-        vault.perpManagerDeposit(address(usdc), 400e6);
-        vm.stopPrank();
-
-        vault.claimRedemption(id); // must not depend on the admin speaking up
-        assertApproxEqRel(usdc.balanceOf(alice), START, 1e15);
-    }
-
     function test_reentrantVenueCannotMintAgainstADeflatedBook() public {
         _deposit(alice, 1000e6);
         address attacker = makeAddr("attacker");
@@ -536,13 +429,9 @@ contract DeltaMonVaultTest is Test {
 
     address perpManager = makeAddr("perpManager");
 
-    /// @dev Adding a manager is timelocked, so this proposes, waits it out, then applies.
     function _whitelistManager() internal {
         vm.prank(admin);
         vault.controlPerpManagers(perpManager, true);
-        skip(vault.CONFIG_TIMELOCK());
-        vm.prank(admin);
-        vault.applyPerpManager(perpManager);
     }
 
     function test_onlyWhitelistedManagerCanBeFunded() public {
@@ -715,20 +604,6 @@ contract DeltaMonVaultTest is Test {
         assertEq(vault.perpManagerDeployed(), 0);
     }
 
-    function test_fundingAManagerIsFrozenWhileRedemptionsAreOverdue() public {
-        _deposit(alice, 1000e6);
-        _whitelistManager();
-        _buyMon(900e6);
-        uint256 shares = vault.balanceOf(alice);
-        vm.prank(alice);
-        vault.requestRedeem(shares);
-        skip(37 hours);
-
-        vm.prank(admin);
-        vm.expectRevert(DeltaMonVault.RedemptionsOverdue.selector);
-        vault.sendFundPerpManager(perpManager, address(usdc), 1e6);
-    }
-
     // ───────────────────────────── access and config ─────────────────────────────
 
     function test_whitelistModeTogglesDynamically() public {
@@ -768,8 +643,8 @@ contract DeltaMonVaultTest is Test {
         vm.expectPartialRevert(DeltaMonVault.FeeTimelockActive.selector);
         vault.applyPerformanceFee();
 
-        // Still locked after the redemption deadline, so a depositor who objects is out first.
-        skip(vault.REDEMPTION_DEADLINE() + 1);
+        // A day and a half in, it is still locked.
+        skip(36 hours);
         vm.prank(admin);
         vm.expectPartialRevert(DeltaMonVault.FeeTimelockActive.selector);
         vault.applyPerformanceFee();
@@ -952,9 +827,6 @@ contract DeltaMonVaultTest is Test {
         vm.startPrank(admin);
         vault.controlPerpManagers(perpManager, true);
         vault.controlPerpManagers(second, true);
-        skip(vault.CONFIG_TIMELOCK());
-        vault.applyPerpManager(perpManager);
-        vault.applyPerpManager(second);
         vault.sendFundPerpManager(perpManager, address(usdc), 400e6);
         vault.sendFundPerpManager(second, address(usdc), 100e6);
         vault.reportPerpPnl(200e6); // the gain sits with the first manager
@@ -982,90 +854,60 @@ contract DeltaMonVaultTest is Test {
         _deposit(bob, 100e6);
     }
 
-    function test_aLongSettledRunCannotMakeTheHeadUnsettleable() public {
+    function test_managersAreAddedAndRemovedAtOnce() public {
         _deposit(alice, 1000e6);
-        uint256 aliceShares = vault.balanceOf(alice);
-        vm.prank(alice);
-        uint256 head = vault.requestRedeem(aliceShares);
+        address second = makeAddr("secondManager");
 
-        // A griefer queues and cancels hundreds of requests behind Alice's.
-        _deposit(bob, 10e6);
-        uint256 unit = 10 ** vault.decimals();
-        vm.startPrank(bob);
-        for (uint256 i; i < 300; i++) {
-            vault.cancelRedemption(vault.requestRedeem(unit));
-        }
+        vm.startPrank(admin);
+        vault.controlPerpManagers(perpManager, true);
+        assertTrue(vault.isPerpManager(perpManager));
+        vault.sendFundPerpManager(perpManager, address(usdc), 100e6); // usable in the same block
+        vault.controlPerpManagers(second, true);
         vm.stopPrank();
 
-        vm.cool(address(vault));
-        uint256 gasBefore = gasleft();
-        vault.claimRedemption(head);
-        assertLt(gasBefore - gasleft(), 500_000); // bounded however long the run behind it grows
+        // The list keeps everyone ever cleared, so a console can show who still owes value.
+        address[] memory listed = vault.perpManagers();
+        assertEq(listed.length, 2);
+        assertEq(listed[0], perpManager);
+        assertEq(listed[1], second);
+        assertEq(vault.perpManagerCount(), 2);
 
-        // The head moved on as far as one call may. The rest is anyone's to clear.
-        assertEq(vault.queueHead(), vault.MAX_QUEUE_SCAN());
-        assertTrue(vault.hasOverdueRedemptions()); // cannot prove the queue healthy yet
-        vault.advanceQueue(1000);
-        assertEq(vault.queueHead(), vault.redemptionCount());
-        assertFalse(vault.hasOverdueRedemptions());
-    }
-
-    function test_queueRequestsHaveAFloorExceptForAWholeBalance() public {
-        _deposit(alice, 1000e6);
-        uint256 unit = 10 ** vault.decimals();
-        vm.prank(alice);
-        vm.expectPartialRevert(DeltaMonVault.BelowMinRedemption.selector);
-        vault.requestRedeem(unit - 1);
-
-        // A holder whose whole position is under the floor can still queue all of it.
-        vm.prank(alice);
-        vault.transfer(bob, 1);
-        vm.prank(bob);
-        vault.requestRedeem(1);
-        assertEq(vault.queuedShares(), 1);
-    }
-
-    function test_addingAPerpManagerIsTimelocked() public {
-        _deposit(alice, 1000e6);
-        vm.prank(admin);
-        vault.controlPerpManagers(perpManager, true);
-        assertFalse(vault.isPerpManager(perpManager));
-
-        vm.prank(admin);
-        vm.expectPartialRevert(DeltaMonVault.TimelockActive.selector);
-        vault.applyPerpManager(perpManager);
-        vm.prank(admin);
-        vm.expectPartialRevert(DeltaMonVault.NotAPerpManager.selector);
-        vault.sendFundPerpManager(perpManager, address(usdc), 100e6);
-
-        // Removal applies at once and withdraws a pending add too.
         vm.prank(admin);
         vault.controlPerpManagers(perpManager, false);
-        skip(vault.CONFIG_TIMELOCK());
+        assertFalse(vault.isPerpManager(perpManager));
+        assertEq(vault.perpManagers().length, 2); // still listed, and still owes what it holds
+        assertEq(vault.perpManagerOutstanding(perpManager), 100e6);
+
+        // Re-adding the same address does not duplicate the entry.
         vm.prank(admin);
-        vm.expectRevert(DeltaMonVault.NoChangePending.selector);
-        vault.applyPerpManager(perpManager);
+        vault.controlPerpManagers(perpManager, true);
+        assertEq(vault.perpManagerCount(), 2);
+
+        vm.prank(admin);
+        vm.expectRevert(DeltaMonVault.ZeroAddress.selector);
+        vault.controlPerpManagers(address(0), true);
     }
 
-    function test_adminCannotReachTheBookInOneBlock() public {
+    /// @dev Managers are immediate now, so the ceiling is the only thing standing between the admin
+    ///      and the book. This pins down how much that still holds back.
+    function test_thePerpCeilingStillBoundsANewManager() public {
         _deposit(alice, 1000e6);
         _deposit(bob, 1000e6);
 
         vm.startPrank(admin);
-        vault.controlPerpManagers(admin, true);
-        vault.setMaxPerpAllocation(10_000);
-        vm.expectPartialRevert(DeltaMonVault.NotAPerpManager.selector);
-        vault.sendFundPerpManager(admin, address(usdc), 2000e6);
-        vm.stopPrank();
-        assertEq(vault.maxPerpAllocationBps(), 5000); // the raise is only pending
-        assertEq(vault.pendingMaxPerpAllocationBps(), 10_000);
+        vault.controlPerpManagers(admin, true); // live in the same block
+        vm.expectPartialRevert(DeltaMonVault.PerpAllocationTooHigh.selector);
+        vault.sendFundPerpManager(admin, address(usdc), 1500e6); // more than half the book
+        vault.sendFundPerpManager(admin, address(usdc), 1000e6); // exactly the ceiling
+        assertEq(usdc.balanceOf(admin), 1000e6);
 
-        // Both proposals are public and outlast the redemption deadline, so anyone can leave first.
-        assertGt(vault.CONFIG_TIMELOCK(), vault.REDEMPTION_DEADLINE());
-        uint256 aliceShares = vault.balanceOf(alice);
-        vm.prank(alice);
-        vault.redeem(aliceShares, alice, alice);
-        assertEq(usdc.balanceOf(admin), 0);
+        // Raising the ceiling still waits, and that wait outlasts the redemption deadline.
+        vault.setMaxPerpAllocation(10_000);
+        assertEq(vault.maxPerpAllocationBps(), 5000);
+        assertEq(vault.pendingMaxPerpAllocationBps(), 10_000);
+        vm.expectPartialRevert(DeltaMonVault.TimelockActive.selector);
+        vault.applyMaxPerpAllocation();
+        vm.stopPrank();
     }
 
     function test_raisingThePerpCeilingIsTimelockedLoweringIsNot() public {
@@ -1110,32 +952,6 @@ contract DeltaMonVaultTest is Test {
         vm.expectRevert(DeltaMonVault.RenounceDisabled.selector);
         vault.renounceOwnership();
         assertEq(vault.owner(), admin);
-    }
-
-    function test_aFeeRiseCannotReachARequestQueuedBeforeIt() public {
-        assertGt(vault.FEE_TIMELOCK(), vault.REDEMPTION_DEADLINE());
-        vm.prank(admin);
-        vault.proposePerformanceFee(100); // 1 %, a cut, so it applies at once
-        _deposit(alice, 1000e6);
-        _buyMon(900e6);
-        oracle.setPrice(address(wmon), MON_PRICE * 2); // MON doubles
-
-        uint256 shares = vault.balanceOf(alice);
-        vm.prank(alice);
-        uint256 id = vault.requestRedeem(shares);
-
-        vm.prank(admin);
-        vault.proposePerformanceFee(1000);
-        skip(vault.FEE_TIMELOCK());
-        vm.prank(admin);
-        vault.applyPerformanceFee();
-        assertEq(vault.performanceFeeBps(), 1000);
-
-        uint256 monHeld = wmon.balanceOf(address(vault));
-        vm.prank(admin);
-        vault.swapMonForUsdc(monHeld, 0);
-        vault.claimRedemption(id);
-        assertApproxEqRel(vault.accruedFees(), 9e6, 0.01e18); // the 1 % it was queued under
     }
 
     function test_keeperMarksTheBookAndClaimsRewardsAndNothingElse() public {
@@ -1244,5 +1060,39 @@ contract DeltaMonVaultTest is Test {
         }
         assertEq(vault.balanceOf(alice), shares);
         assertTrue(vault.oracleIsLive());
+    }
+
+    // ───────────────────────────── withdrawals ─────────────────────────────
+
+    /// @dev There is no queue: an exit is whatever the idle USDC can pay, and the rest waits for the
+    ///      admin to unwind. This pins both halves of that down.
+    function test_redeemIsCappedByIdleUsdcAndWaitsForTheAdmin() public {
+        _deposit(alice, 1000e6);
+        _buyMon(900e6); // leaves 100 USDC idle
+
+        uint256 shares = vault.balanceOf(alice);
+        assertLt(vault.maxRedeem(alice), shares);
+        assertApproxEqAbs(vault.maxWithdraw(alice), 100e6, 2);
+
+        // More than the idle USDC is refused outright, with nothing to fall back on.
+        vm.prank(alice);
+        vm.expectPartialRevert(ERC4626.ERC4626ExceededMaxRedeem.selector);
+        vault.redeem(shares, alice, alice);
+
+        // What the idle USDC covers goes through at once.
+        uint256 redeemable = vault.maxRedeem(alice);
+        vm.prank(alice);
+        uint256 out = vault.redeem(redeemable, alice, alice);
+        assertApproxEqAbs(out, 100e6, 2);
+
+        // Once the admin unwinds, the rest follows.
+        uint256 monHeld = wmon.balanceOf(address(vault));
+        vm.prank(admin);
+        vault.swapMonForUsdc(monHeld, 0);
+        uint256 rest = vault.balanceOf(alice);
+        vm.prank(alice);
+        vault.redeem(rest, alice, alice);
+        assertEq(vault.balanceOf(alice), 0);
+        assertApproxEqRel(usdc.balanceOf(alice), START, 1e15);
     }
 }

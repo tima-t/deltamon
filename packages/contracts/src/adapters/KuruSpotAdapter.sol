@@ -7,15 +7,24 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ISpotVenue} from "../interfaces/ISpotVenue.sol";
 import {IKuruRouter} from "../interfaces/external/IKuruRouter.sol";
 import {IKuruOrderBook} from "../interfaces/external/IKuruOrderBook.sol";
+import {IStableSwap} from "../interfaces/external/IStableSwap.sol";
 import {IWMON} from "../interfaces/external/IWMON.sol";
 
 /// @title KuruSpotAdapter
-/// @notice Executes spot swaps through Kuru's on-chain CLOB router (`anyToAnySwap`).
+/// @notice Executes spot swaps for the vault. MON goes through Kuru's on-chain CLOB router
+///         (`anyToAnySwap`); a pair may instead be pointed at one Curve-style stable pool.
 /// @dev Kuru markets quote native MON as address(0). Callers always deal in WMON: the adapter
 ///      unwraps before selling MON and wraps whatever native MON the router pays out.
 ///      Routes are registered per (tokenIn, tokenOut) as an ordered list of markets; buy/sell
 ///      direction and native flags are derived from each market's params, so a mis-registered
 ///      route reverts instead of trading the wrong way.
+///
+///      The stable route exists because Kuru's AUSD order books are empty: both the direct
+///      AUSD/USDC book and the two-hop route through MON revert at every size. The liquidity Kuru's
+///      own front end uses for that pair sits in a StableSwap pool, so a pair can be registered
+///      against one such pool instead. A stable route takes precedence over a market route, and
+///      `setStableRoute` checks the pool's own `coins` before accepting the indices, so a wrong
+///      index cannot be registered.
 contract KuruSpotAdapter is ISpotVenue, Ownable {
     using SafeERC20 for IERC20;
 
@@ -24,9 +33,17 @@ contract KuruSpotAdapter is ISpotVenue, Ownable {
     IKuruRouter public immutable router;
     IWMON public immutable wmon;
 
+    struct StableRoute {
+        address pool;
+        int128 i;
+        int128 j;
+    }
+
     mapping(bytes32 => address[]) private _routes;
+    mapping(bytes32 => StableRoute) private _stableRoutes;
 
     event RouteSet(address indexed tokenIn, address indexed tokenOut, address[] markets);
+    event StableRouteSet(address indexed tokenIn, address indexed tokenOut, address pool, int128 i, int128 j);
     event Swapped(
         address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut, address indexed to
     );
@@ -37,6 +54,7 @@ contract KuruSpotAdapter is ISpotVenue, Ownable {
     error RouteMismatch(address market, address token);
     error RouteEndsAtWrongToken(address expected, address actual);
     error InsufficientOutput(uint256 received, uint256 minimum);
+    error StablePoolMismatch(address pool, address token);
 
     constructor(address router_, address wmon_, address owner_) Ownable(owner_) {
         if (router_ == address(0) || wmon_ == address(0)) revert ZeroAddress();
@@ -60,8 +78,28 @@ contract KuruSpotAdapter is ISpotVenue, Ownable {
         emit RouteSet(tokenIn, tokenOut, markets);
     }
 
+    /// @notice Point a pair at one StableSwap pool, for books Kuru's CLOB cannot fill.
+    /// @dev The pool's own `coins` must agree with the indices, so `i` really is tokenIn and `j`
+    ///      really is tokenOut. Pass the zero pool to clear the route.
+    function setStableRoute(address tokenIn, address tokenOut, address pool, int128 i, int128 j) external onlyOwner {
+        if (pool == address(0)) {
+            delete _stableRoutes[routeKey(tokenIn, tokenOut)];
+            emit StableRouteSet(tokenIn, tokenOut, address(0), 0, 0);
+            return;
+        }
+        if (i < 0 || j < 0) revert StablePoolMismatch(pool, tokenIn);
+        if (IStableSwap(pool).coins(uint256(uint128(i))) != tokenIn) revert StablePoolMismatch(pool, tokenIn);
+        if (IStableSwap(pool).coins(uint256(uint128(j))) != tokenOut) revert StablePoolMismatch(pool, tokenOut);
+        _stableRoutes[routeKey(tokenIn, tokenOut)] = StableRoute({pool: pool, i: i, j: j});
+        emit StableRouteSet(tokenIn, tokenOut, pool, i, j);
+    }
+
     function getRoute(address tokenIn, address tokenOut) external view returns (address[] memory) {
         return _routes[routeKey(tokenIn, tokenOut)];
+    }
+
+    function getStableRoute(address tokenIn, address tokenOut) external view returns (StableRoute memory) {
+        return _stableRoutes[routeKey(tokenIn, tokenOut)];
     }
 
     /// @notice The exact router call a swap would make, for off-chain inspection.
@@ -81,18 +119,40 @@ contract KuruSpotAdapter is ISpotVenue, Ownable {
         external
         returns (uint256 amountOut)
     {
-        address[] memory markets = _routes[routeKey(tokenIn, tokenOut)];
-        if (markets.length == 0) revert RouteNotSet(tokenIn, tokenOut);
+        bytes32 key = routeKey(tokenIn, tokenOut);
+        StableRoute memory stable = _stableRoutes[key];
+        address[] memory markets = _routes[key];
+        if (stable.pool == address(0) && markets.length == 0) revert RouteNotSet(tokenIn, tokenOut);
 
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
-        amountOut = _execute(markets, _kuruToken(tokenIn), _kuruToken(tokenOut), amountIn, minAmountOut);
-        if (tokenOut == address(wmon)) wmon.deposit{value: amountOut}();
+        if (stable.pool != address(0)) {
+            amountOut = _executeStable(stable, tokenIn, tokenOut, amountIn, minAmountOut);
+        } else {
+            amountOut = _execute(markets, _kuruToken(tokenIn), _kuruToken(tokenOut), amountIn, minAmountOut);
+            if (tokenOut == address(wmon)) wmon.deposit{value: amountOut}();
+        }
         IERC20(tokenOut).safeTransfer(to, amountOut);
 
         emit Swapped(tokenIn, tokenOut, amountIn, amountOut, to);
     }
 
     // ───────────────────────────── internals ─────────────────────────────
+
+    /// @dev Swaps through a StableSwap pool, believing the balance rather than the return value.
+    function _executeStable(
+        StableRoute memory route,
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn,
+        uint256 minAmountOut
+    ) internal returns (uint256 amountOut) {
+        uint256 before = IERC20(tokenOut).balanceOf(address(this));
+        IERC20(tokenIn).forceApprove(route.pool, amountIn);
+        IStableSwap(route.pool).exchange(route.i, route.j, amountIn, minAmountOut);
+        amountOut = IERC20(tokenOut).balanceOf(address(this)) - before;
+        IERC20(tokenIn).forceApprove(route.pool, 0);
+        if (amountOut < minAmountOut) revert InsufficientOutput(amountOut, minAmountOut);
+    }
 
     /// @dev Unwraps or approves the debit side, calls the router, measures what was credited.
     function _execute(address[] memory markets, address debit, address credit, uint256 amountIn, uint256 minAmountOut)

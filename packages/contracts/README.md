@@ -5,7 +5,7 @@ Foundry project. Solidity 0.8.28, OpenZeppelin 5.
 | Contract                                  | Role                                                                           |
 | ----------------------------------------- | ------------------------------------------------------------------------------ |
 | `src/DeltaMonVault.sol`                   | The live vault: USDC in, sdMON out, multisig admin, keeper. See docs/VAULT.md |
-| `src/adapters/KuruSpotAdapter.sol`        | Spot swaps via Kuru router `anyToAnySwap`                                      |
+| `src/adapters/KuruSpotAdapter.sol`        | Spot swaps: Kuru `anyToAnySwap`, or a StableSwap pool per pair (AUSD)        |
 | `src/oracles/ChainlinkOracle.sol`         | Chainlink adapter with LST/MON × MON/USD chaining                              |
 | `src/SdMonVault.sol`                      | Earlier automatic 60/40 variant, kept for reference                            |
 | `src/DeltaVault.sol`                      | Earlier ERC-4626 vault with a pluggable strategy, kept for reference           |

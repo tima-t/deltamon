@@ -6,6 +6,7 @@ import {KuruSpotAdapter} from "../src/adapters/KuruSpotAdapter.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
 import {MockOracle} from "./mocks/MockOracle.sol";
 import {MockWMON, MockKuruOrderBook, MockKuruRouter} from "./mocks/MockKuru.sol";
+import {MockStablePool} from "./mocks/MockStablePool.sol";
 
 contract KuruSpotAdapterTest is Test {
     MockERC20 usdc;
@@ -107,5 +108,67 @@ contract KuruSpotAdapterTest is Test {
         vm.prank(trader);
         vm.expectPartialRevert(KuruSpotAdapter.RouteNotSet.selector);
         adapter.swapExactIn(address(usdc), address(usdc), 1, 0, trader);
+    }
+
+    // ───────────────────────────── stable pool routes ─────────────────────────────
+
+    /// @dev coins(0) is AUSD and coins(1) is USDC, matching the live pool's ordering.
+    function _stablePool() internal returns (MockStablePool pool, MockERC20 ausd) {
+        ausd = new MockERC20("AUSD", "AUSD", 6);
+        pool = new MockStablePool(address(ausd), address(usdc));
+        ausd.mint(address(pool), 1_000_000e6);
+        usdc.mint(address(pool), 1_000_000e6);
+    }
+
+    function test_stableRouteSwapsThroughThePool() public {
+        (MockStablePool pool, MockERC20 ausd) = _stablePool();
+        vm.prank(owner);
+        adapter.setStableRoute(address(usdc), address(ausd), address(pool), 1, 0);
+
+        usdc.mint(trader, 100e6);
+        vm.startPrank(trader);
+        usdc.approve(address(adapter), 100e6);
+        uint256 out = adapter.swapExactIn(address(usdc), address(ausd), 100e6, 99e6, trader);
+        vm.stopPrank();
+
+        assertEq(out, 100e6);
+        assertEq(ausd.balanceOf(trader), 100e6);
+        assertEq(usdc.balanceOf(address(pool)), 1_000_100e6);
+        assertEq(usdc.allowance(address(adapter), address(pool)), 0); // approval handed back
+    }
+
+    function test_stableRouteRespectsTheFloor() public {
+        (MockStablePool pool, MockERC20 ausd) = _stablePool();
+        pool.setFeeBps(100); // a percent worse than parity
+        vm.prank(owner);
+        adapter.setStableRoute(address(usdc), address(ausd), address(pool), 1, 0);
+
+        usdc.mint(trader, 100e6);
+        vm.startPrank(trader);
+        usdc.approve(address(adapter), 100e6);
+        vm.expectRevert("MockStablePool: slippage");
+        adapter.swapExactIn(address(usdc), address(ausd), 100e6, 99_500_000, trader);
+        vm.stopPrank();
+    }
+
+    function test_stableRouteRejectsIndicesThePoolDisagreesWith() public {
+        (MockStablePool pool, MockERC20 ausd) = _stablePool();
+        vm.prank(owner);
+        vm.expectPartialRevert(KuruSpotAdapter.StablePoolMismatch.selector);
+        adapter.setStableRoute(address(usdc), address(ausd), address(pool), 0, 1); // the wrong way round
+    }
+
+    function test_stableRouteCanBeCleared() public {
+        (MockStablePool pool, MockERC20 ausd) = _stablePool();
+        vm.startPrank(owner);
+        adapter.setStableRoute(address(usdc), address(ausd), address(pool), 1, 0);
+        assertEq(adapter.getStableRoute(address(usdc), address(ausd)).pool, address(pool));
+        adapter.setStableRoute(address(usdc), address(ausd), address(0), 0, 0);
+        assertEq(adapter.getStableRoute(address(usdc), address(ausd)).pool, address(0));
+        vm.stopPrank();
+
+        vm.prank(trader);
+        vm.expectPartialRevert(KuruSpotAdapter.RouteNotSet.selector);
+        adapter.swapExactIn(address(usdc), address(ausd), 1e6, 0, trader);
     }
 }

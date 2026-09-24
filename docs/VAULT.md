@@ -6,19 +6,20 @@ reach waits three days, longer than it takes a depositor to leave.
 
 ## Roles
 
-|                   | Can do                                                                                  | Cannot do                                                 |
-| ----------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Depositor         | deposit, redeem, queue a redemption, cancel it, redeem in kind while the oracle is down | nothing else                                              |
-| Admin, a multisig | swap, stake, fund perp managers, fee and risk settings, pause                           | skip a timelock, renounce ownership                       |
-| Keeper, a hot key | mark the perp book inside the band, claim staking rewards                               | trade, stake, fund a manager, change settings, move funds |
+|                   | Can do                                                                     | Cannot do                                                 |
+| ----------------- | -------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Depositor         | deposit, redeem against idle USDC, redeem in kind while the oracle is down | nothing else                                              |
+| Admin, a multisig | swap, stake, fund perp managers, fee and risk settings, pause              | skip a timelock, renounce ownership                       |
+| Keeper, a hot key | mark the perp book inside the band, claim staking rewards                  | trade, stake, fund a manager, change settings, move funds |
 
 The admin surface is a fixed list of named functions. There is no generic call or delegatecall
 anywhere in the contract, so no other protocol is reachable even if the admin wants one.
 
 One thing depositors should understand plainly: perp managers are custodial. Funding one is a
 real transfer to an address the vault cannot claw back from, so the admin, by choosing managers,
-can put up to the perp ceiling at risk. What the vault guarantees is that adding a manager, or
-raising the ceiling, is announced three days before it can take effect.
+can put up to the perp ceiling at risk. Adding a manager takes effect immediately, at the owner's
+request, so the ceiling is the only thing holding that back. Raising the ceiling is still announced
+three days before it can take effect.
 
 ## What the admin can call
 
@@ -27,7 +28,7 @@ raising the ceiling, is announced three days before it can take effect.
 | `swapUsdcForMon` / `swapMonForUsdc`                      | Kuru only, floored against Chainlink MON/USD                          |
 | `swapUsdcForAusd` / `swapAusdForUsdc`                    | Kuru only, floored against a parity band                              |
 | `stake` / `unstake`                                      | Monad's staking precompile, validator commission capped               |
-| `controlPerpManagers` / `applyPerpManager`               | adding a manager waits three days; removing one is immediate          |
+| `controlPerpManagers`                                    | adds or removes a perp manager, both with immediate effect            |
 | `sendFundPerpManager`                                    | USDC or AUSD to a listed manager, inside the perp ceiling             |
 | `setMaxPerpAllocation` / `applyMaxPerpAllocation`        | raising the ceiling waits three days; lowering it is immediate        |
 | `setRiskParams` / `applyRiskParams`                      | loosening any limit waits three days; tightening is immediate         |
@@ -37,8 +38,7 @@ raising the ceiling, is announced three days before it can take effect.
 | `setKeeper`, `setLimits`, `setWhitelistEnabled`, `pause` | immediate; none of them widen what the admin can reach                |
 | `withdrawFees`                                           | the fee accrued on depositors' profits, and nothing else              |
 
-`claimUnstaked`, `claimRedemption` and `advanceQueue` are permissionless, since they can only
-bring funds back into the vault or pay a depositor what is theirs. `renounceOwnership` is
+`claimUnstaked` is permissionless, since it can only bring funds back into the vault. `renounceOwnership` is
 disabled: with no owner, nothing could unwind MON, unstake or recall the perp book.
 
 ## The performance fee
@@ -58,22 +58,26 @@ fee          = profit * performanceFeeBps / 10000
 paid out     = gross - fee
 ```
 
-The fee is capped at ten percent. Raising it waits three days, longer than the redemption
-deadline, and lowering it takes effect at once. A queued redemption is charged at most the fee in
-force when it was requested, so a rise that lands while it waits never reaches it.
+The fee is capped at ten percent. Raising it waits three days, and lowering it takes effect at
+once, so a holder who dislikes a rise has three days to leave before it can reach them.
 
 ## Withdrawals
 
-Redeem instantly whenever idle USDC covers it. Otherwise queue the request. The admin has 36 hours
-to make the USDC available. Past that deadline every allocation function freezes, so the admin can
-only unwind towards the queue until it clears. Cancelling a queued request returns the shares and
-the cost basis untouched. The keeper settles queued requests oldest first as soon as the idle USDC
-covers them, and anyone else may too.
+A holder redeems out of the vault's idle USDC, and out of nothing else. `maxRedeem` and
+`maxWithdraw` report exactly what that idle USDC can pay right now, so `availableLiquidity` is the
+whole story: while it covers the exit the redemption settles in the same transaction, and while it
+does not, `redeem` reverts with `ERC4626ExceededMaxRedeem` and the holder waits.
 
-A request must be worth at least one whole share, unless it is the holder's whole balance. No
-queue operation walks more than 64 entries in one call, so a run of settled requests can never
-make the oldest one too expensive to settle. If the head falls behind, `advanceQueue` moves it on,
-and until it does the vault treats the queue as overdue rather than risk hiding a late request.
+There is no queue, no request to file, and no deadline. Nothing in the contract compels the admin
+to bring USDC back, so a fully deployed book means holders wait on the admin's judgement to unwind.
+That is a deliberate trade for a first version: it keeps the exit path one function call with no
+standing state to grief, at the cost of the guarantee a deadline used to give. The console and the
+keeper both surface how much of the book is payable right now, and the keeper raises an alert the
+moment idle USDC hits zero while shares are outstanding.
+
+Partial exits work the way they should: redeem what the vault can pay today, keep the rest, and
+redeem again once the admin unwinds. Cost basis follows the shares, so splitting an exit over
+several transactions costs the same fee as doing it in one.
 
 ### When the oracle is down
 
@@ -125,13 +129,14 @@ short leg is run by a person or bot rather than by the contract. The vault no lo
 account of its own: the functions that opened one and moved its collateral were removed once this
 route was chosen, since carrying two paths to the same exposure only widened the surface to audit.
 
-| Function                                      | Who     | What it does                                                         |
-| --------------------------------------------- | ------- | -------------------------------------------------------------------- |
-| `controlPerpManagers(manager, true)`          | admin   | proposes a manager; `applyPerpManager` activates it after three days |
-| `controlPerpManagers(manager, false)`         | admin   | removes a manager at once, and cancels a pending add                 |
-| `sendFundPerpManager(manager, token, amount)` | admin   | sends USDC or AUSD to a listed manager                               |
-| `perpManagerDeposit(token, amount)`           | manager | returns USDC or AUSD, minting no shares                              |
-| `setMaxPerpAllocation(bps)`                   | admin   | ceiling on the whole perp book; a raise waits three days             |
+| Function                                      | Who     | What it does                                             |
+| --------------------------------------------- | ------- | -------------------------------------------------------- |
+| `controlPerpManagers(manager, true)`          | admin   | clears a manager, effective immediately                  |
+| `controlPerpManagers(manager, false)`         | admin   | removes a manager, effective immediately                 |
+| `perpManagers()`                              | anyone  | every address ever cleared, so a front end can list them |
+| `sendFundPerpManager(manager, token, amount)` | admin   | sends USDC or AUSD to a listed manager                   |
+| `perpManagerDeposit(token, amount)`           | manager | returns USDC or AUSD, minting no shares                  |
+| `setMaxPerpAllocation(bps)`                   | admin   | ceiling on the whole perp book; a raise waits three days |
 
 **Read this part carefully, because it changes the trust model.** `sendFundPerpManager` is a real
 transfer to an externally owned address. Once it lands, only that address can move it, and the vault
@@ -142,10 +147,11 @@ Five things bound it rather than eliminate it.
 
 - The perp book cannot exceed `maxPerpAllocationBps` of the vault, fifty percent by default, and the
   ceiling is measured after the value leaves so it is never double counted.
-- Adding a manager and raising the ceiling both wait three days, longer than the redemption
-  deadline, so a depositor who distrusts a new manager can be out before it can be funded.
+- Raising the ceiling waits three days, so a depositor who dislikes where the book is heading has
+  time to be out before more of it is committed, as long as the idle USDC covers them. Adding a
+  manager is immediate, so that wait bounds how much can go out, not who ends up holding it.
 - Only USDC and AUSD can be sent. Nothing else in the vault is reachable this way.
-- Funding is frozen while the vault is paused and while a redemption request is past its deadline.
+- Funding is frozen while the vault is paused.
 - What a manager holds stays on the books as `perpManagerOutstanding`, so the share price keeps
   counting it and a loss has to be marked through `reportPerpPnl` for the number to fall.
 
@@ -258,8 +264,8 @@ Four things were found and fixed while reviewing this for a real deployment.
 
 **The venue and the oracle were a drain path.** Both are trusted by the swap code, so an admin who
 pointed them at contracts they controlled could have taken the book. Changing either now goes through
-`proposeVenue` and waits three days, which is deliberately longer than the redemption deadline so a
-depositor who dislikes the proposal can leave first. `cancelVenueChange` withdraws a proposal.
+`proposeVenue` and waits three days, so a depositor who dislikes the proposal has time to leave
+first. `cancelVenueChange` withdraws a proposal.
 
 **The vault believed the venue's own report of what it paid.** A swap now measures the balance before
 and after and reverts with `VenueShortchanged` if less arrived than the oracle floor demanded. A test
@@ -284,9 +290,8 @@ have become reachable the moment the venue changed. Every function that moves a 
 external call is now guarded, and a test drives a venue that reenters `deposit` mid-swap.
 
 **A silent admin could trap every depositor.** Exits were gated on a fresh perp mark, so an admin who
-simply stopped calling `reportPerpPnl` froze `redeem`, `withdraw` and `claimRedemption` after six
-hours, no matter how much idle USDC sat in the vault. The overdue freeze did nothing about it,
-because it never gated the exits. Deposits are still gated, since nobody is harmed by being unable to
+simply stopped calling `reportPerpPnl` froze `redeem` and `withdraw` after six hours, no matter how
+much idle USDC sat in the vault. Deposits are still gated, since nobody is harmed by being unable to
 buy in, but exits now always proceed and price against a conservative mark instead: once the report
 goes stale an unconfirmed gain is dropped while a reported loss still counts, so whoever leaves
 cannot take more than their share from those who stay.
@@ -313,18 +318,21 @@ is reported again.
 **The redemption queue could be bricked.** Settling the oldest request walked every settled entry
 behind it in one call. A griefer who queued and cancelled a few tens of thousands of requests behind
 someone else's could push that walk past Monad's 30M gas limit, locking the victim's shares and
-freezing the admin for good. Every walk is now capped at 64 entries, `advanceQueue` clears the rest in
-steps, and a request must be worth at least one whole share.
+freezing the admin for good. Capping the walk fixed it at the time; the queue has since been removed
+outright, so there is no unbounded walk and no standing state left to grief.
 
 **The admin could take the liquid book in one block.** Listing themselves as a perp manager and
 raising the ceiling to 100 % were both instant. The oracle and the Kuru adapter were owned by the
-admin's wallet with instant setters, which also got around the venue timelock. Adding a manager,
-raising the ceiling and loosening any risk limit now wait three days, the deploy script renounces the
-oracle and the adapter, the vault is handed to a multisig, and ownership cannot be renounced.
+admin's wallet with instant setters, which also got around the venue timelock. Raising the ceiling
+and loosening any risk limit now wait three days, the deploy script renounces the oracle and the
+adapter, the vault is handed to a multisig, and ownership cannot be renounced. The three day wait on
+adding a manager was removed afterwards at the owner's request, so for that one the ceiling is the
+only thing standing in the way.
 
 **A fee rise could land on a request queued to avoid it.** The fee timelock was one day and the
-redemption deadline 36 hours. The timelock is now three days, and a queued request is charged at most
-the fee in force when it was made.
+redemption deadline 36 hours, so a rise could reach a request that was filed to escape it. The
+timelock is now three days. With the queue gone there is nothing left waiting for a fee to land on:
+an exit is charged the fee in force in the block it settles.
 
 **Anyone could sandwich a reward claim.** Rewards count only once claimed, and the claim was
 permissionless, so a bot could deposit, claim and redeem in one transaction. Only the keeper or the
@@ -334,7 +342,7 @@ admin can claim now.
 even with idle USDC on hand. `redeemInKind` now opens while the oracle is down.
 
 **Nothing ran the vault's upkeep.** The backend keeper still drove the earlier vault. It now marks the
-perp book, claims rewards and unbonded MON, advances the queue and settles redemptions for this one.
+perp book and claims rewards and unbonded MON for this one, and alerts when the idle USDC runs out.
 
 ## Kuru's MON book is thin on the sell side
 
@@ -355,10 +363,12 @@ in hundreds of USDC rather than thousands.
 
 **A fresh delegation only activates at the next epoch boundary.** Unstaking in the same epoch
 reverts with `insufficient stake`. Worst case from stake to withdrawable is roughly one epoch to
-activate plus one to unbond, so about eleven to seventeen hours. That fits inside the 36 hour
-redemption deadline, but the admin should not stake money that is already spoken for.
+activate plus one to unbond, so about eleven to seventeen hours. Nothing forces that unwind, so the
+admin should not stake money depositors are likely to want back sooner.
 
-**AUSD cannot be bought on Kuru today.** Perpl takes AUSD as collateral, and both the direct
-AUSD/USDC book and the two hop route through MON revert at every size, down to 50 USDC. The Perpl
-leg therefore needs another way to source AUSD before it can run unattended. The swap functions and
-the Perpl rails are built and tested, so only the sourcing step is missing.
+**AUSD comes from a stable pool, not from Kuru's books.** Perpl takes AUSD as collateral, and Kuru's
+AUSD order books are empty: the direct AUSD/USDC book reverts with `MarketStateError`, the two hop
+route through MON with `InsufficientLiquidity`, at every size. The liquidity Kuru's own front end
+uses for that pair sits in a Curve-style StableSwap pool holding about 1.5M, so the adapter routes
+USDC/AUSD there instead. A fork test buys and sells it back through the vault: 500 USDC in,
+500.07 AUSD out, 499.95 USDC back, so roughly two basis points for the round trip.

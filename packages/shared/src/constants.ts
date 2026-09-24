@@ -3,9 +3,6 @@ export const BPS = 10_000;
 /** Target net APY the product is designed around (basis points). */
 export const TARGET_APY_BPS = 1_500;
 
-/** Admin-directed vault: a queued redemption must be funded within this window. */
-export const REDEMPTION_DEADLINE_HOURS = 36;
-
 /** Performance fee ceiling, charged on profit above each depositor's own cost basis. */
 export const MAX_PERFORMANCE_FEE_BPS = 1_000;
 

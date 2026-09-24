@@ -8,6 +8,7 @@ import {KuruSpotAdapter} from "../src/adapters/KuruSpotAdapter.sol";
 import {ChainlinkOracle} from "../src/oracles/ChainlinkOracle.sol";
 import {ISpotVenue} from "../src/interfaces/ISpotVenue.sol";
 import {IPriceOracle} from "../src/interfaces/IPriceOracle.sol";
+import {IStableSwap} from "../src/interfaces/external/IStableSwap.sol";
 import {IWMON} from "../src/interfaces/external/IWMON.sol";
 
 /// @notice Deploys the vault stack. The broadcasting key deploys and configures everything, locks the
@@ -21,7 +22,7 @@ contract DeployDeltaMon is Script {
         address ausd;
         address kuruRouter;
         address kuruMonUsdc;
-        address kuruAusdUsdc;
+        address stablePoolAusdUsdc;
         address chainlinkMonUsd;
         address owner;
         address keeper;
@@ -37,7 +38,7 @@ contract DeployDeltaMon is Script {
         p.ausd = vm.envAddress("AUSD");
         p.kuruRouter = vm.envAddress("KURU_ROUTER");
         p.kuruMonUsdc = vm.envAddress("KURU_MARKET_MON_USDC");
-        p.kuruAusdUsdc = vm.envOr("KURU_MARKET_AUSD_USDC", address(0));
+        p.stablePoolAusdUsdc = vm.envOr("STABLE_POOL_AUSD_USDC", address(0));
         p.chainlinkMonUsd = vm.envAddress("CHAINLINK_MON_USD");
         p.owner = vm.envAddress("VAULT_OWNER");
         p.keeper = vm.envOr("KEEPER_ADDRESS", address(0));
@@ -66,12 +67,18 @@ contract DeployDeltaMon is Script {
         monRoute[0] = p.kuruMonUsdc;
         spot.setRoute(p.usdc, p.wmon, monRoute);
         spot.setRoute(p.wmon, p.usdc, monRoute);
-        // The AUSD book is empty on mainnet today, so this route is registered only when given.
-        if (p.kuruAusdUsdc != address(0)) {
-            address[] memory ausdRoute = new address[](1);
-            ausdRoute[0] = p.kuruAusdUsdc;
-            spot.setRoute(p.usdc, p.ausd, ausdRoute);
-            spot.setRoute(p.ausd, p.usdc, ausdRoute);
+
+        // Kuru's AUSD order books are empty: the direct AUSD/USDC book reverts with MarketStateError
+        // and the two hop route through MON with InsufficientLiquidity, at every size. The liquidity
+        // Kuru's own front end uses for that pair sits in a StableSwap pool, so AUSD is routed there.
+        // The indices come from the pool itself rather than from a guess.
+        if (p.stablePoolAusdUsdc != address(0)) {
+            IStableSwap pool = IStableSwap(p.stablePoolAusdUsdc);
+            int128 iUsdc = pool.coins(0) == p.usdc ? int128(0) : int128(1);
+            int128 iAusd = pool.coins(0) == p.ausd ? int128(0) : int128(1);
+            require(iUsdc != iAusd, "stable pool does not hold both USDC and AUSD");
+            spot.setStableRoute(p.usdc, p.ausd, address(pool), iUsdc, iAusd);
+            spot.setStableRoute(p.ausd, p.usdc, address(pool), iAusd, iUsdc);
         }
         // Locked for the same reason. A route added later means a new adapter behind the timelock.
         spot.renounceOwnership();
@@ -101,6 +108,7 @@ contract DeployDeltaMon is Script {
         console2.log("DeltaMonVault  ", address(vault));
         console2.log("KuruSpotAdapter", address(spot));
         console2.log("ChainlinkOracle", address(oracle));
+        console2.log("AUSD stable pool", p.stablePoolAusdUsdc);
         console2.log("Next: the multisig calls acceptOwnership() on the vault.");
 
         string memory json = "deployment";
@@ -110,6 +118,7 @@ contract DeployDeltaMon is Script {
         vm.serializeAddress(json, "admin", p.owner);
         vm.serializeAddress(json, "deployer", deployer);
         vm.serializeAddress(json, "keeper", p.keeper);
+        vm.serializeAddress(json, "stablePool", p.stablePoolAusdUsdc);
         string memory out = vm.serializeUint(json, "deployedAtBlock", block.number);
         vm.writeJson(out, string.concat("deployments/deltamon-", vm.toString(block.chainid), ".json"));
     }

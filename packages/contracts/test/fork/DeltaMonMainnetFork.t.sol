@@ -22,6 +22,8 @@ contract DeltaMonMainnetForkTest is Test {
     address constant KURU_MON_USDC = 0x065C9d28E428A0db40191a54d33d5b7c71a9C394;
     address constant KURU_MON_AUSD = 0x131A2e70A5b31a517A74b8c567149bc294470Da9;
     address constant KURU_AUSD_USDC = 0x699AbC15308156E9a3AB89Ec7387e9CfE1c86A3b;
+    /// The Curve-style pool Kuru's own front end routes USDC/AUSD through. coins(0) AUSD, coins(1) USDC.
+    address constant STABLE_POOL_AUSD_USDC = 0x942644106B073E30D72c2C5D7529D5C296ea91ab;
     address constant CHAINLINK_MON_USD = 0xBcD78f76005B7515837af6b50c7C52BCf73822fb;
     address constant USDC_WHALE = 0x35a73BAcb179d3740395A3ceCc87FF2e581d6042;
     IMonadStaking constant STAKING = IMonadStaking(0x0000000000000000000000000000000000001000);
@@ -50,13 +52,13 @@ contract DeltaMonMainnetForkTest is Test {
         adapter = new KuruSpotAdapter(KURU_ROUTER, WMON, admin);
         address[] memory monRoute = new address[](1);
         monRoute[0] = KURU_MON_USDC;
-        address[] memory ausdRoute = new address[](1);
-        ausdRoute[0] = KURU_AUSD_USDC;
         vm.startPrank(admin);
         adapter.setRoute(USDC, WMON, monRoute);
         adapter.setRoute(WMON, USDC, monRoute);
-        adapter.setRoute(USDC, AUSD, ausdRoute);
-        adapter.setRoute(AUSD, USDC, ausdRoute);
+        // Kuru's AUSD books are empty, so AUSD goes through the stable pool its own front end uses.
+        // coins(0) is AUSD, coins(1) is USDC.
+        adapter.setStableRoute(USDC, AUSD, STABLE_POOL_AUSD_USDC, 1, 0);
+        adapter.setStableRoute(AUSD, USDC, STABLE_POOL_AUSD_USDC, 0, 1);
         vm.stopPrank();
 
         vm.prank(admin);
@@ -143,18 +145,43 @@ contract DeltaMonMainnetForkTest is Test {
         vault.unstake(VALIDATOR, mon);
     }
 
-    /// @notice Documents a live blocker: Perpl takes AUSD as collateral, but neither Kuru route to
-    ///         AUSD can be filled at any size today. Both revert with the book's MarketStateError.
-    ///         Until a route exists, AUSD has to reach the vault another way.
-    function test_ausdCannotBeSourcedOnKuruToday() public onlyFork {
+    /// @notice AUSD is reachable after all, just not on an order book. The vault buys it from the
+    ///         StableSwap pool Kuru's own front end routes through, and sells it back.
+    function test_ausdComesFromTheStablePool() public onlyFork {
         vm.prank(alice);
         vault.deposit(2000e6, alice);
+        uint256 valueBefore = vault.totalAssets();
 
-        uint256 snap = vm.snapshotState();
         vm.prank(admin);
-        vm.expectRevert(); // direct AUSD/USDC book
-        vault.swapUsdcForAusd(200e6, 0);
-        vm.revertToState(snap);
+        uint256 out = vault.swapUsdcForAusd(500e6, 0);
+        console2.log("500 USDC bought AUSD", out);
+        assertGe(out, 495e6); // inside the vault's one percent parity band
+        assertEq(IERC20(AUSD).balanceOf(address(vault)), out);
+        assertApproxEqRel(vault.totalAssets(), valueBefore, 0.005e18);
+
+        vm.prank(admin);
+        uint256 back = vault.swapAusdForUsdc(out, 0);
+        console2.log("sold back for USDC", back);
+        assertGe(back, 495e6);
+        assertApproxEqRel(vault.totalAssets(), valueBefore, 0.005e18);
+    }
+
+    /// @notice Why the pool is used at all: Kuru's AUSD books are still empty. The direct book
+    ///         reverts with MarketStateError, the MON two-hop with InsufficientLiquidity.
+    function test_kuruAusdBooksAreStillEmpty() public onlyFork {
+        vm.prank(alice);
+        vault.deposit(1000e6, alice);
+
+        address[] memory direct = new address[](1);
+        direct[0] = KURU_AUSD_USDC;
+        vm.startPrank(admin);
+        adapter.setStableRoute(USDC, AUSD, address(0), 0, 0); // drop the pool, force the book
+        adapter.setRoute(USDC, AUSD, direct);
+        vm.stopPrank();
+
+        vm.prank(admin);
+        vm.expectRevert();
+        vault.swapUsdcForAusd(100e6, 0);
 
         address[] memory viaMon = new address[](2);
         viaMon[0] = KURU_MON_USDC;
@@ -162,8 +189,8 @@ contract DeltaMonMainnetForkTest is Test {
         vm.prank(admin);
         adapter.setRoute(USDC, AUSD, viaMon);
         vm.prank(admin);
-        vm.expectRevert(); // two-hop through the deep MON book, still no fill
-        vault.swapUsdcForAusd(200e6, 0);
+        vm.expectRevert();
+        vault.swapUsdcForAusd(100e6, 0);
     }
 
     /// @notice Measures the round-trip size Kuru's MON book can actually absorb right now.
