@@ -353,10 +353,21 @@ export function useVaultAction(
 
 // ── parsing what people type ──
 
-export type FieldKind = "usdc" | "mon" | "shares" | "wad" | "int" | "address" | "addressList";
+export type FieldKind =
+  | "usdc"
+  | "mon"
+  | "shares"
+  | "wad"
+  | "int"
+  | "address"
+  | "addressList"
+  /** Raw text, kept as typed. For venues that scale a decimal themselves, and optional fields. */
+  | "text";
 
-export function parseField(kind: FieldKind, raw: string): bigint | Address | Address[] {
+export function parseField(kind: FieldKind, raw: string): bigint | Address | Address[] | string {
   const value = raw.trim();
+  // Text is the one kind that may legitimately be empty, so it is answered before the check.
+  if (kind === "text") return value;
   if (value === "") throw new Error("missing value");
   switch (kind) {
     case "usdc":

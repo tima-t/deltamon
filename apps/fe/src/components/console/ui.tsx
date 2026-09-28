@@ -75,6 +75,8 @@ export interface FieldSpec {
   kind: FieldKind | "signedUsdc";
   placeholder?: string;
   defaultValue?: string;
+  /** Adds a MAX button that fills this decimal string. Omit when there is no meaningful ceiling. */
+  max?: string;
 }
 
 export type FieldValues = Record<string, bigint | string | string[]>;
@@ -130,12 +132,26 @@ export function ActionForm({
           {fields.map((field) => (
             <label key={field.name} className="block">
               <span className="text-muted text-xs">{field.label}</span>
-              <input
-                value={values[field.name] ?? ""}
-                placeholder={field.placeholder}
-                onChange={(e) => setValues((prev) => ({ ...prev, [field.name]: e.target.value }))}
-                className="border-line focus:border-monad mt-1 w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none"
-              />
+              <div className="border-line focus-within:border-monad mt-1 flex items-center rounded-md border">
+                <input
+                  value={values[field.name] ?? ""}
+                  placeholder={field.placeholder}
+                  onChange={(e) => setValues((prev) => ({ ...prev, [field.name]: e.target.value }))}
+                  className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm outline-none"
+                />
+                {field.max !== undefined && field.max !== "0" ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setValues((prev) => ({ ...prev, [field.name]: field.max as string }))
+                    }
+                    className="text-monad shrink-0 px-2 text-xs font-semibold"
+                    title={`Use the whole ${field.max}`}
+                  >
+                    MAX
+                  </button>
+                ) : null}
+              </div>
             </label>
           ))}
         </div>

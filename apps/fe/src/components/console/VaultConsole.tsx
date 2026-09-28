@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { erc20Abi, isAddress } from "viem";
-import { useAccount, useReadContract, useSwitchChain } from "wagmi";
+import { useAccount, useReadContract, useReadContracts, useSwitchChain } from "wagmi";
 import { chainById } from "@deltamon/shared";
 import {
+  VAULT_ABI,
   addr,
   agoText,
   big,
@@ -26,10 +27,12 @@ import {
 } from "@/lib/vault";
 import { AdminPanel } from "./AdminPanel";
 import { KeeperPanel } from "./KeeperPanel";
+import { ManagerPanel } from "./ManagerPanel";
+import { PerpPositionPanel } from "./PerpPositionPanel";
 import { UserPanel } from "./UserPanel";
 import { Card, Pill, Stat, TxBanner } from "./ui";
 
-type Tab = "overview" | "deposit" | "admin" | "keeper";
+type Tab = "overview" | "deposit" | "manager" | "perp" | "admin" | "keeper";
 
 export function VaultConsole() {
   const {
@@ -85,6 +88,27 @@ export function VaultConsole() {
   const isKeeper = same(account, keeper);
   const explorer = explorerUrl(chainId, "tx", "").replace(/\/tx\/$/, "");
 
+  // The manager tab is for whoever holds the role, so it is keyed off the connected address.
+  const { data: managerStanding } = useReadContracts({
+    allowFailure: true,
+    contracts: [
+      { address: vault, abi: VAULT_ABI, functionName: "isPerpManager", args: [account], chainId },
+      {
+        address: vault,
+        abi: VAULT_ABI,
+        functionName: "perpManagerOutstanding",
+        args: [account],
+        chainId,
+      },
+    ],
+    query: { enabled: Boolean(vault && account), refetchInterval: 12_000 },
+  });
+  const isManager =
+    (managerStanding?.[0]?.status === "success" && managerStanding[0].result === true) ||
+    (managerStanding?.[1]?.status === "success" &&
+      typeof managerStanding[1].result === "bigint" &&
+      managerStanding[1].result > 0n);
+
   const ausd = addr(state.ausd);
   const { data: ausdHeld } = useReadContract({
     address: ausd,
@@ -104,6 +128,8 @@ export function VaultConsole() {
   const tabs: { id: Tab; label: string; show: boolean }[] = [
     { id: "overview", label: "Overview", show: true },
     { id: "deposit", label: "Deposit & withdraw", show: true },
+    { id: "manager", label: "Return capital", show: isManager },
+    { id: "perp", label: "Perp position", show: isManager || isOwner },
     { id: "admin", label: "Admin", show: isOwner },
     { id: "keeper", label: "Keeper", show: isKeeper || isOwner },
   ];
@@ -327,6 +353,18 @@ export function VaultConsole() {
         {vault && tab === "deposit" ? (
           <UserPanel vault={vault} chainId={chainId} state={state} busy={busy} run={action.run} />
         ) : null}
+
+        {vault && tab === "manager" && isManager ? (
+          <ManagerPanel
+            vault={vault}
+            chainId={chainId}
+            state={state}
+            busy={busy}
+            run={action.run}
+          />
+        ) : null}
+
+        {tab === "perp" && (isManager || isOwner) ? <PerpPositionPanel /> : null}
 
         {vault && tab === "admin" && isOwner ? (
           <AdminPanel vault={vault} chainId={chainId} state={state} busy={busy} run={action.run} />
