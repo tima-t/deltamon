@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { formatUnits, isAddress, parseUnits, type Address } from "viem";
-import { useReadContract, useReadContracts } from "wagmi";
+import { erc20Abi, formatUnits, isAddress, parseUnits, type Address } from "viem";
+import { useBalance, useReadContract, useReadContracts } from "wagmi";
 import {
   VAULT_ABI,
   addr,
   big,
   bool,
+  fmtMon,
   fmtUsdc,
   int,
   shortAddr,
@@ -26,6 +27,28 @@ interface Props {
 }
 
 export function AdminPanel({ vault, chainId, state, busy, run }: Props) {
+  // What the vault can actually spend right now. Staked and unbonding MON are not swappable, and
+  // the swaps do not reserve accrued fees, so the ceilings are the liquid balances net of them.
+  const wmon = addr(state.wmon);
+  const ausdToken = addr(state.ausd);
+  const { data: tokenBalances } = useReadContracts({
+    allowFailure: true,
+    contracts: [
+      { address: wmon, abi: erc20Abi, functionName: "balanceOf", args: [vault], chainId },
+      { address: ausdToken, abi: erc20Abi, functionName: "balanceOf", args: [vault], chainId },
+    ],
+    query: { enabled: Boolean(wmon && ausdToken), refetchInterval: 12_000 },
+  });
+  const { data: nativeMon } = useBalance({ address: vault, chainId });
+  const held = (i: number): bigint => {
+    const entry = tokenBalances?.[i];
+    return entry?.status === "success" && typeof entry.result === "bigint" ? entry.result : 0n;
+  };
+  const wmonHeld = held(0);
+  const ausdHeld = held(1);
+  const spendableUsdc = big(state.availableLiquidity);
+  const dec = (v: bigint, d: number) => (v > 0n ? formatUnits(v, d) : "0");
+
   const [manager, setManager] = useState("");
   const [fundAmount, setFundAmount] = useState("");
   const managerIsAddress = isAddress(manager);
@@ -88,17 +111,60 @@ export function AdminPanel({ vault, chainId, state, busy, run }: Props) {
     // one leaves a tall empty box beside it.
     <div className="grid items-start gap-5 lg:grid-cols-2">
       <Card title="Allocate" subtitle="Kuru's MON book is thin: swap a few hundred USDC at a time.">
+        <div className="border-line grid grid-cols-2 gap-3 rounded-lg border p-3 text-sm sm:grid-cols-4">
+          <div>
+            <div className="text-muted text-xs">USDC free</div>
+            <div className="tabular-nums">{fmtUsdc(spendableUsdc)}</div>
+            <div className="text-muted text-[11px]">
+              {fmtUsdc(big(state.accruedFees))} owed in fees
+            </div>
+          </div>
+          <div>
+            <div className="text-muted text-xs">WMON</div>
+            <div className="tabular-nums">{fmtMon(wmonHeld)}</div>
+            <div className="text-muted text-[11px]">swappable</div>
+          </div>
+          <div>
+            <div className="text-muted text-xs">AUSD</div>
+            <div className="tabular-nums">{fmtUsdc(ausdHeld)}</div>
+            <div className="text-muted text-[11px]">swappable</div>
+          </div>
+          <div>
+            <div className="text-muted text-xs">MON staked</div>
+            <div className="tabular-nums">{fmtMon(big(state.stakedMon))}</div>
+            <div className="text-muted text-[11px]">
+              {fmtMon(nativeMon?.value ?? 0n)} native · not swappable
+            </div>
+          </div>
+        </div>
         <ActionForm
           title="USDC → MON"
           note="The vault floors the price against Chainlink itself, so a bad fill reverts."
-          fields={[{ name: "amount", label: "USDC in", kind: "usdc", placeholder: "250" }]}
+          fields={[
+            {
+              name: "amount",
+              label: "USDC in",
+              kind: "usdc",
+              placeholder: "250",
+              max: dec(spendableUsdc, 6),
+            },
+          ]}
           button="Swap"
           busy={busy}
           onRun={(v) => run("swapUsdcForMon", [v.amount, 0n], "swap USDC for MON")}
         />
         <ActionForm
           title="MON → USDC"
-          fields={[{ name: "amount", label: "MON in", kind: "mon", placeholder: "10000" }]}
+          note="Wrapped MON only. Staked and unbonding MON have to be unstaked and claimed first."
+          fields={[
+            {
+              name: "amount",
+              label: "MON in",
+              kind: "mon",
+              placeholder: "10000",
+              max: dec(wmonHeld, 18),
+            },
+          ]}
           button="Swap"
           busy={busy}
           onRun={(v) => run("swapMonForUsdc", [v.amount, 0n], "swap MON for USDC")}
@@ -106,14 +172,30 @@ export function AdminPanel({ vault, chainId, state, busy, run }: Props) {
         <ActionForm
           title="USDC → AUSD"
           note="Kuru's AUSD books are empty, so this goes through the stable pool its own front end uses. The vault floors it against parity."
-          fields={[{ name: "amount", label: "USDC in", kind: "usdc", placeholder: "100" }]}
+          fields={[
+            {
+              name: "amount",
+              label: "USDC in",
+              kind: "usdc",
+              placeholder: "100",
+              max: dec(spendableUsdc, 6),
+            },
+          ]}
           button="Swap"
           busy={busy}
           onRun={(v) => run("swapUsdcForAusd", [v.amount, 0n], "swap USDC for AUSD")}
         />
         <ActionForm
           title="AUSD → USDC"
-          fields={[{ name: "amount", label: "AUSD in", kind: "usdc", placeholder: "100" }]}
+          fields={[
+            {
+              name: "amount",
+              label: "AUSD in",
+              kind: "usdc",
+              placeholder: "100",
+              max: dec(ausdHeld, 6),
+            },
+          ]}
           button="Swap"
           busy={busy}
           onRun={(v) => run("swapAusdForUsdc", [v.amount, 0n], "swap AUSD for USDC")}
@@ -126,10 +208,16 @@ export function AdminPanel({ vault, chainId, state, busy, run }: Props) {
       >
         <ActionForm
           title="Stake MON"
-          note={`Commission cap is ${formatUnits(commission, 18)} (1 = 100%). Validator 5 charges 10%.`}
+          note={`Paid from native MON, unwrapping WMON if it has to. Commission cap is ${formatUnits(commission, 18)} (1 = 100%). Validator 5 charges 10%.`}
           fields={[
             { name: "validator", label: "Validator id", kind: "int", placeholder: "5" },
-            { name: "amount", label: "MON", kind: "mon", placeholder: "10000" },
+            {
+              name: "amount",
+              label: "MON",
+              kind: "mon",
+              placeholder: "10000",
+              max: dec((nativeMon?.value ?? 0n) + wmonHeld, 18),
+            },
           ]}
           button="Stake"
           busy={busy}
@@ -404,7 +492,13 @@ export function AdminPanel({ vault, chainId, state, busy, run }: Props) {
           note={`${fmtUsdc(big(state.accruedFees))} USDC accrued. This is the only value the admin can move out.`}
           fields={[
             { name: "to", label: "To", kind: "address", placeholder: "0x…" },
-            { name: "amount", label: "USDC", kind: "usdc", placeholder: "0" },
+            {
+              name: "amount",
+              label: "USDC",
+              kind: "usdc",
+              placeholder: "0",
+              max: dec(big(state.accruedFees), 6),
+            },
           ]}
           button="Withdraw"
           busy={busy}

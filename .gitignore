@@ -41,3 +41,4 @@ lcov.info
 
 # enrolment output, contains secrets
 apps/be/perpl-key.env
+.cache/
