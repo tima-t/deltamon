@@ -4,6 +4,10 @@ import { env } from "../config.js";
 import { publicClient } from "../chain.js";
 import { fetchPerpBook } from "./perpBook.js";
 import { assessHedge } from "./hedge.js";
+import { findMarket, sharedSession } from "./perplAccounts.js";
+import { livePerpBook } from "./perpExposure.js";
+import { logger } from "../lib/logger.js";
+import { readVaultYield } from "./yield.js";
 
 const DEMO_MON_PRICE = 0.02643;
 
@@ -49,6 +53,16 @@ export function demoVaultStats(): VaultStats {
       reportAsOf: now.toISOString(),
       dataStatus: "fresh",
     },
+    yield: {
+      apyBps: Math.round(((0.11 * monValue + 0.12 * monValue) / tvl) * 10_000),
+      stakingAprBps: 1_100,
+      stakedUsd: monValue,
+      stakingUsdPerYear: 0.11 * monValue,
+      fundingAprBps: 1_200,
+      fundingUsdPerYear: 0.12 * monValue,
+      principalUsd: tvl,
+      windowDays: 7,
+    },
     lastRebalanceAt: null,
     updatedAt: now.toISOString(),
   };
@@ -71,6 +85,7 @@ export async function readVaultStats(vault: Address): Promise<VaultStats> {
     pricePerShare,
     perpDeployed,
     perpEquity,
+    stakedMon,
   ] = await publicClient.multicall({
     allowFailure: false,
     contracts: [
@@ -88,6 +103,7 @@ export async function readVaultStats(vault: Address): Promise<VaultStats> {
       { ...c, functionName: "pricePerShare" },
       { ...c, functionName: "perpDeployed" },
       { ...c, functionName: "perpEquity" },
+      { ...c, functionName: "stakedMon" },
     ],
   });
 
@@ -105,9 +121,27 @@ export async function readVaultStats(vault: Address): Promise<VaultStats> {
   // Wrapped, native, staked and unbonding MON alike.
   const monValue = Number(formatUnits(totalMon, 18)) * priceUsd;
   const monShareBps = tvlUsd > 0 ? Math.round((monValue / tvlUsd) * 10_000) : 0;
-  const book = env.PERP_BOOK_URL
-    ? await fetchPerpBook(env.PERP_BOOK_URL, 1_500).catch(() => null)
-    : null;
+  // The live socket first: the backend holds the Perpl account, so there is nothing to publish
+  // and re-read. PERP_BOOK_URL stays as the fallback for a manager who runs their own bot.
+  const book = (await perpBookNow(priceUsd)) ??
+    (env.PERP_BOOK_URL ? await fetchPerpBook(env.PERP_BOOK_URL, 1_500).catch(() => null) : null);
+
+  const hedge = assessHedge(
+    monValue,
+    tvlUsd,
+    book,
+    Number(formatUnits(perpDeployed, assetDecimals)),
+    Number(formatUnits(perpEquity, assetDecimals)),
+  );
+  const vaultYield = await readVaultYield(vault, {
+    stakedMon,
+    monPriceUsd: priceUsd,
+    shortNotionalUsd: hedge.shortExposureUsd,
+    assetDecimals,
+  }).catch((err) => {
+    logger.warn({ err }, "vault yield unavailable");
+    return null;
+  });
 
   return {
     source: "onchain",
@@ -136,13 +170,8 @@ export async function readVaultStats(vault: Address): Promise<VaultStats> {
       driftBps: 0,
       rebalanceThresholdBps: 0,
     },
-    hedge: assessHedge(
-      monValue,
-      tvlUsd,
-      book,
-      Number(formatUnits(perpDeployed, assetDecimals)),
-      Number(formatUnits(perpEquity, assetDecimals)),
-    ),
+    hedge,
+    yield: vaultYield,
     lastRebalanceAt: null,
     updatedAt: new Date().toISOString(),
   };
@@ -151,4 +180,14 @@ export async function readVaultStats(vault: Address): Promise<VaultStats> {
 export async function getVaultStats(): Promise<VaultStats> {
   if (!env.VAULT_ADDRESS) return demoVaultStats();
   return readVaultStats(env.VAULT_ADDRESS as Address);
+}
+
+/** The perp book from the live Perpl socket, or null when it cannot answer for it. */
+export async function perpBookNow(monPriceUsd: number) {
+  const session = sharedSession();
+  if (!session) return null;
+  const monMarket = await findMarket("MON").catch(() => null);
+  const { book, reason } = livePerpBook(session.account(), monPriceUsd, monMarket?.id ?? null);
+  if (!book && reason) logger.debug({ reason }, "no live perp book");
+  return book;
 }

@@ -35,6 +35,10 @@ export function BalanceEngine({ stats }: { stats: VaultStats }) {
           ? "Within ±2% target"
           : "Outside ±2% target";
   const tone = illustrative || !measured ? "muted" : withinTarget ? "good" : "warn";
+  // What the managers have made or lost on what the vault sent them.
+  const pnl = hedge.managerCapitalUsd > 0 ? hedge.managerEquityUsd - hedge.managerCapitalUsd : null;
+  const vaultYield = stats.yield;
+  const pct = (bps: number | null) => (bps === null ? "—" : `${(bps / 100).toFixed(1)}%`);
 
   return (
     <figure
@@ -50,9 +54,25 @@ export function BalanceEngine({ stats }: { stats: VaultStats }) {
             The Balance Engine
           </h2>
         </div>
-        <span className="status-pill shrink-0" data-tone={tone} role="status">
-          {status}
-        </span>
+        <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
+          <span className="status-pill" data-tone={tone} role="status">
+            {status}
+          </span>
+          {vaultYield ? (
+            <div
+              className="sm:text-right"
+              title={`Staking rewards plus perp funding per year, over the USDC deposited (${vaultYield.principalUsd === null ? "principal still indexing" : formatUsd(vaultYield.principalUsd)}). Trailing ${vaultYield.windowDays}-day rates, not compounded.`}
+            >
+              <div className="font-data text-muted text-[11px] uppercase tracking-widest">
+                {illustrative ? "Illustrative APY" : "Est. APY"}
+              </div>
+              <div className="text-2xl font-semibold tabular-nums">{pct(vaultYield.apyBps)}</div>
+              <p className="text-muted text-xs tabular-nums">
+                Staking {pct(vaultYield.stakingAprBps)} · Funding {pct(vaultYield.fundingAprBps)}
+              </p>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="relative mx-auto mt-2 max-w-[480px]">
@@ -60,7 +80,7 @@ export function BalanceEngine({ stats }: { stats: VaultStats }) {
           viewBox="0 0 400 400"
           className="w-full"
           role="img"
-          aria-label={`${status}. Long ${formatUsd(hedge.longExposureUsd)}. Short ${hedge.shortExposureUsd === null ? "unavailable" : formatUsd(hedge.shortExposureUsd)}. Net exposure ${shownDelta === null ? "unavailable" : `${(shownDelta / 100).toFixed(2)} percent`}.`}
+          aria-label={`${status}. Long ${formatUsd(hedge.longExposureUsd)}. Short ${hedge.shortExposureUsd === null ? "unavailable" : formatUsd(hedge.shortExposureUsd)}. Net exposure ${shownDelta === null ? "unavailable" : `${(shownDelta / 100).toFixed(2)} percent`}. Perp book ${formatUsd(hedge.managerEquityUsd)}.`}
         >
           <circle cx="200" cy="200" r="177" fill="none" className="engine-rim" strokeWidth="1" />
           {Array.from({ length: 36 }, (_, index) => {
@@ -170,7 +190,7 @@ export function BalanceEngine({ stats }: { stats: VaultStats }) {
         </svg>
       </div>
 
-      <div className="relative z-10 grid gap-4 border-t border-line pt-4 sm:grid-cols-2">
+      <div className="relative z-10 grid gap-4 border-t border-line pt-4 sm:grid-cols-3">
         <div>
           <div
             className="font-data text-[11px] uppercase tracking-widest"
@@ -195,6 +215,18 @@ export function BalanceEngine({ stats }: { stats: VaultStats }) {
           </div>
           <p className="text-muted mt-1 text-xs">
             {illustrative ? "Illustrative short size" : `Manager reported · ${reportText}`}
+          </p>
+        </div>
+        <div>
+          <div className="font-data text-muted text-[11px] uppercase tracking-widest">
+            03 / Perp book
+          </div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">
+            {formatUsd(hedge.managerEquityUsd)}
+          </div>
+          <p className="text-muted mt-1 text-xs">
+            {formatUsd(hedge.managerCapitalUsd)} sent to managers
+            {pnl === null ? "" : ` · ${pnl >= 0 ? "+" : "−"}${formatUsd(Math.abs(pnl))}`}
           </p>
         </div>
       </div>

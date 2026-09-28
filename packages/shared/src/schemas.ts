@@ -37,6 +37,23 @@ export const HedgeSchema = z.object({
 });
 export type Hedge = z.infer<typeof HedgeSchema>;
 
+export const VaultYieldSchema = z.object({
+  /** (staking rewards + perp funding) per year / USDC principal, bps. Simple, not compounded. */
+  apyBps: z.number().int().nullable(),
+  /** Trailing APR of the validators the vault delegates to, net of commission, bps. */
+  stakingAprBps: z.number().int().nullable(),
+  stakedUsd: z.number().nonnegative(),
+  stakingUsdPerYear: z.number().nullable(),
+  /** Trailing funding a MON short was paid, annualised on notional, bps. Negative = shorts paid. */
+  fundingAprBps: z.number().int().nullable(),
+  fundingUsdPerYear: z.number().nullable(),
+  /** USDC depositors put in: the sum of every holder's cost basis. */
+  principalUsd: z.number().nonnegative().nullable(),
+  /** Length of the trailing window both rates are averaged over. */
+  windowDays: z.number(),
+});
+export type VaultYield = z.infer<typeof VaultYieldSchema>;
+
 export const VaultStatsSchema = z.object({
   source: z.enum(["demo", "onchain"]),
   chainId: z.number().int(),
@@ -52,6 +69,7 @@ export const VaultStatsSchema = z.object({
   shareToken: ShareTokenSchema,
   allocation: AllocationSchema,
   hedge: HedgeSchema,
+  yield: VaultYieldSchema.nullable(),
   lastRebalanceAt: z.string().nullable(),
   updatedAt: z.string(),
 });
