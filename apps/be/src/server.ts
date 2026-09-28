@@ -7,6 +7,7 @@ import { loggerOptions } from "./lib/logger.js";
 import { healthRoutes } from "./routes/health.js";
 import { vaultRoutes } from "./routes/vault.js";
 import { marketRoutes } from "./routes/markets.js";
+import { perpRoutes } from "./routes/perp.js";
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({ logger: loggerOptions });
@@ -18,6 +19,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(healthRoutes);
   await app.register(vaultRoutes, { prefix: "/api" });
   await app.register(marketRoutes, { prefix: "/api" });
+  await app.register(perpRoutes, { prefix: "/api" });
 
   return app;
 }

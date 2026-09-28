@@ -1,6 +1,7 @@
 import { env } from "./config.js";
 import { buildServer } from "./server.js";
 import { keeper } from "./services/keeper.js";
+import { stopAllSessions } from "./services/perplAccounts.js";
 
 const app = await buildServer();
 
@@ -15,6 +16,7 @@ try {
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, async () => {
     keeper.stop();
+    stopAllSessions();
     await app.close();
     process.exit(0);
   });

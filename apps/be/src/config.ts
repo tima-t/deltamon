@@ -51,7 +51,23 @@ const EnvSchema = z.object({
     .regex(/^\d+(\.\d+)?$/)
     .default("1"),
 
+  /**
+   * Addresses allowed to drive a Perpl account through this backend, comma separated. A caller
+   * proves it holds one by signing a challenge, and gets a 24 hour bearer token in return. Public
+   * addresses only: no key of any kind belongs in this variable.
+   */
+  PERPL_MANAGERS: z
+    .string()
+    .default("")
+    .transform((raw) =>
+      raw
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => /^0x[0-9a-fA-F]{40}$/.test(s)),
+    ),
+
   PERPL_API_URL: z.preprocess(emptyToUndefined, z.url().default(PERPL_API_URL)),
+  PERPL_CHAIN_ID: z.coerce.number().int().positive().default(143),
   PERPL_API_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
   PERPL_API_KEY_SECRET: z.preprocess(emptyToUndefined, z.string().optional()),
 });
