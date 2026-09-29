@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
 import type { AutomationConfig, FlowPeriod } from "@deltamon/shared";
 import {
+  AutomationAuthError,
   AutomationError,
   fetchAutomationConfig,
   fetchFlows,
@@ -73,7 +74,12 @@ export function AutomationPanel() {
     } catch (err) {
       setNotice({
         tone: "bad",
-        text: err instanceof AutomationError ? err.message : "Could not save the config.",
+        text:
+          err instanceof AutomationAuthError
+            ? err.message
+            : err instanceof AutomationError
+              ? err.message
+              : "Could not save the config.",
       });
     } finally {
       setBusy(false);

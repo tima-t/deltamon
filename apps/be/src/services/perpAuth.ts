@@ -1,6 +1,7 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { recoverMessageAddress, type Hex } from "viem";
 import { env } from "../config.js";
+import { collection, collections, mongoConfigured } from "../lib/mongo.js";
 
 /**
  * Who may drive a Perpl account through this backend.
@@ -9,8 +10,9 @@ import { env } from "../config.js";
  * whether the caller is one of the addresses in PERPL_MANAGERS. They prove it by signing a
  * single-use challenge with that address, and get a bearer token good for a day in return.
  *
- * Tokens live in memory: a restart signs everyone out, which is the right default for a key that
- * can open and close positions.
+ * Sessions are held in memory and, when storage is configured, mirrored to it. Without that mirror
+ * every backend restart signs everyone out, which in development happens on each file save and
+ * looks exactly like a broken login.
  */
 
 export const NONCE_TTL_MS = 5 * 60_000;
@@ -30,6 +32,37 @@ interface Session {
 
 const challenges = new Map<string, Challenge>();
 const sessions = new Map<string, Session>();
+
+interface SessionDoc {
+  _id: string;
+  address: string;
+  expiresAt: number;
+}
+
+/** Best effort: a session that cannot be persisted still works until the process restarts. */
+async function persist(token: string, session: Session): Promise<void> {
+  if (!mongoConfigured()) return;
+  try {
+    const docs = await collection<SessionDoc>(collections.sessions);
+    await docs.updateOne(
+      { _id: token },
+      { $set: { address: session.address, expiresAt: session.expiresAt } },
+      { upsert: true },
+    );
+  } catch {
+    // Not fatal: the in-memory copy is still authoritative for this process.
+  }
+}
+
+async function forget(token: string): Promise<void> {
+  if (!mongoConfigured()) return;
+  try {
+    const docs = await collection<SessionDoc>(collections.sessions);
+    await docs.deleteOne({ _id: token });
+  } catch {
+    // The in-memory delete has already happened.
+  }
+}
 
 const lower = (a: string) => a.toLowerCase();
 
@@ -109,7 +142,9 @@ export async function verifyChallenge(
   if (lower(recovered) !== lower(address)) return { ok: false, reason: "signature does not match" };
 
   const token = randomBytes(32).toString("base64url");
-  sessions.set(token, { address: lower(address), expiresAt: now + TOKEN_TTL_MS });
+  const session = { address: lower(address), expiresAt: now + TOKEN_TTL_MS };
+  sessions.set(token, session);
+  await persist(token, session);
   return {
     ok: true,
     token,
@@ -118,8 +153,12 @@ export async function verifyChallenge(
   };
 }
 
-/** The address behind a bearer token, or null. Compared in constant time. */
-export function sessionFor(token: string | undefined, now = Date.now()): Session | null {
+/**
+ * The address behind a bearer token, or null. The in-memory copy is compared in constant time;
+ * a token this process has not seen is looked up in storage, which is how a session survives a
+ * restart.
+ */
+export async function sessionFor(token: string | undefined, now = Date.now()): Promise<Session | null> {
   if (!token) return null;
   sweep(now);
   for (const [known, session] of sessions) {
@@ -127,11 +166,22 @@ export function sessionFor(token: string | undefined, now = Date.now()): Session
     const b = Buffer.from(token);
     if (a.length === b.length && timingSafeEqual(a, b)) return session;
   }
-  return null;
+  if (!mongoConfigured()) return null;
+  try {
+    const docs = await collection<SessionDoc>(collections.sessions);
+    const found = await docs.findOne({ _id: token });
+    if (!found || found.expiresAt <= now) return null;
+    const session = { address: found.address, expiresAt: found.expiresAt };
+    sessions.set(token, session); // cached, so the next call stays in memory
+    return session;
+  } catch {
+    return null;
+  }
 }
 
-export function revoke(token: string): void {
+export async function revoke(token: string): Promise<void> {
   sessions.delete(token);
+  await forget(token);
 }
 
 export function bearerFrom(header: string | undefined): string | undefined {

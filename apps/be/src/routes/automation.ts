@@ -42,7 +42,7 @@ export const automationRoutes: FastifyPluginAsync = async (app) => {
   const requireAdmin = async (
     req: FastifyRequest,
   ): Promise<{ ok: true; address: string } | { ok: false; status: number; error: string }> => {
-    const session = sessionFor(bearerFrom(req.headers.authorization));
+    const session = await sessionFor(bearerFrom(req.headers.authorization));
     if (!session) return { ok: false, status: 401, error: "sign in to change the automation" };
     const owner = await vaultOwner();
     if (!owner) return { ok: false, status: 503, error: "no vault configured" };

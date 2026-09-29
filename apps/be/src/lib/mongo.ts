@@ -40,6 +40,7 @@ export const collections = {
   config: "automation_config",
   flows: "automation_flows",
   activity: "activity",
+  sessions: "console_sessions",
 } as const;
 
 async function ensureIndexes(d: Db): Promise<void> {
@@ -53,6 +54,10 @@ async function ensureIndexes(d: Db): Promise<void> {
   await d
     .collection(collections.activity)
     .createIndex({ dedupeKey: 1 }, { unique: true, sparse: true, name: "activity_once" });
+  // Mongo expires the document itself, so a forgotten token cannot linger past its life.
+  await d
+    .collection(collections.sessions)
+    .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0, name: "session_ttl" });
 }
 
 export async function collection<T extends Document>(name: string): Promise<Collection<T>> {

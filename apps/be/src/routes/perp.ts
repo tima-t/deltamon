@@ -72,7 +72,7 @@ export const perpRoutes: FastifyPluginAsync = async (app) => {
     if (!req.url.startsWith("/api/perp/")) return;
     const path = req.url.split("?")[0] ?? "";
     if (open.has(path)) return;
-    const session = authSessionFor(bearerFrom(req.headers.authorization));
+    const session = await authSessionFor(bearerFrom(req.headers.authorization));
     if (!session) {
       return reply
         .code(401)
@@ -114,7 +114,7 @@ export const perpRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/perp/auth/signout", async (req) => {
     const token = bearerFrom(req.headers.authorization);
-    if (token) revoke(token);
+    if (token) await revoke(token);
     return { ok: true };
   });
 

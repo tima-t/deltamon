@@ -45,7 +45,7 @@ describe("signing in", () => {
     const result = await verifyChallenge(allowed.address, challenge.nonce, signature);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(sessionFor(result.token)?.address).toBe(allowed.address.toLowerCase());
+    expect((await sessionFor(result.token))?.address).toBe(allowed.address.toLowerCase());
     expect(Date.parse(result.expiresAt) - Date.now()).toBeGreaterThan(TOKEN_TTL_MS - 5_000);
   });
 
@@ -116,20 +116,20 @@ describe("the token", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(sessionFor(result.token, Date.now() + TOKEN_TTL_MS - 1_000)).not.toBeNull();
-    expect(sessionFor(result.token, Date.now() + TOKEN_TTL_MS + 1)).toBeNull();
+    expect(await sessionFor(result.token, Date.now() + TOKEN_TTL_MS - 1_000)).not.toBeNull();
+    expect(await sessionFor(result.token, Date.now() + TOKEN_TTL_MS + 1)).toBeNull();
 
     const second = await signIn(allowed);
     const again = await verifyChallenge(allowed.address, second.challenge.nonce, second.signature);
     expect(again.ok).toBe(true);
     if (!again.ok) return;
-    revoke(again.token);
-    expect(sessionFor(again.token)).toBeNull();
+    await revoke(again.token);
+    expect(await sessionFor(again.token)).toBeNull();
   });
 
-  it("knows nothing of a token it never issued", () => {
-    expect(sessionFor("not-a-token")).toBeNull();
-    expect(sessionFor(undefined)).toBeNull();
+  it("knows nothing of a token it never issued", async () => {
+    expect(await sessionFor("not-a-token")).toBeNull();
+    expect(await sessionFor(undefined)).toBeNull();
   });
 });
 
