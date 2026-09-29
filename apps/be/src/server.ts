@@ -14,7 +14,12 @@ export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({ logger: loggerOptions });
 
   await app.register(helmet, { contentSecurityPolicy: false });
-  await app.register(cors, { origin: env.CORS_ORIGIN.split(",").map((s) => s.trim()) });
+  // @fastify/cors allows only GET, HEAD and POST by default, so a browser's preflight for a PUT
+  // is refused before the request is sent and the console sees an unreachable backend.
+  await app.register(cors, {
+    origin: env.CORS_ORIGIN.split(",").map((s) => s.trim()),
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
+  });
   await app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
 
   await app.register(healthRoutes);
