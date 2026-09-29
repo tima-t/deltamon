@@ -19,12 +19,20 @@ const risks = [
 
 export function Risks() {
   return (
-    <section id="risks" className="mx-auto w-full max-w-7xl px-5 pb-20 sm:px-8">
-      <p className="eyebrow">Read the fine print / 05</p>
-      <h2 className="mt-3 text-3xl font-semibold sm:text-4xl">The risk stays visible.</h2>
+    <section id="risks" className="counter-risks mx-auto w-full max-w-7xl px-5 pb-20 sm:px-8">
+      <p className="counter-section-index">04 / THE PART THAT MATTERS</p>
+      <h2>
+        Good questions
+        <br />
+        <em>before good moves.</em>
+      </h2>
+      <p className="counter-risks-intro">
+        A character can make finance less intimidating. These risks still deserve plain words and
+        your full attention.
+      </p>
       <dl className="mt-8 grid gap-4 sm:grid-cols-2">
         {risks.map(([title, body]) => (
-          <div key={title} className="panel p-6">
+          <div key={title} className="panel counter-risk-card p-6">
             <dt className="text-lg font-semibold">{title}</dt>
             <dd className="text-muted mt-2 text-sm leading-relaxed">{body}</dd>
           </div>

@@ -17,27 +17,30 @@ const steps = [
 
 export function HowItWorks() {
   return (
-    <section id="how" className="mx-auto w-full max-w-7xl px-5 py-16 sm:px-8">
-      <p className="eyebrow">The mechanism / explained</p>
-      <h2 className="mt-3 max-w-3xl text-3xl font-semibold sm:text-5xl">
-        A vault you can read at a glance.
+    <section id="how" className="counter-how mx-auto w-full max-w-7xl px-5 py-16 sm:px-8">
+      <p className="counter-section-index">03 / HOW THIS ONE WORKS</p>
+      <h2>
+        Two sides.
+        <br />
+        <em>One honest picture.</em>
       </h2>
-      <p className="text-muted mt-5 max-w-2xl text-base leading-relaxed">
-        The amount used to back a short is not the same as the short&apos;s size. That distinction
-        is the heart of the Balance Engine.
+      <p className="counter-how-intro">
+        The counterweight is a way to understand the idea. The short&apos;s backing capital and the
+        short&apos;s actual size are different numbers. Our instrument shows the real position.
       </p>
-      <ol className="mt-10 grid gap-6 sm:grid-cols-3">
+      <ol className="counter-story-grid mt-10 grid gap-6 sm:grid-cols-3">
         {steps.map((s, i) => (
-          <li key={s.title} className="panel p-6">
-            <div className="eyebrow">
-              0{i + 1} / {i === 0 ? "DEPOSIT" : i === 1 ? "LONG" : "SHORT"}
+          <li key={s.title} className="panel counter-story-card p-6">
+            <div className="counter-story-number">
+              0{i + 1}
+              <span aria-hidden="true">↗</span>
             </div>
             <h3 className="mt-4 text-xl font-semibold">{s.title}</h3>
             <p className="text-muted mt-3 text-sm leading-relaxed">{s.body}</p>
           </li>
         ))}
       </ol>
-      <details className="panel mt-6 p-6 sm:p-8">
+      <details className="panel counter-example mt-6 p-6 sm:p-8">
         <summary className="cursor-pointer text-lg font-semibold">
           How can a 60/40 funding mix be delta neutral?
         </summary>

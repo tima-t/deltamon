@@ -7,9 +7,9 @@ const EVENT = "deltamon-theme-change";
 
 function readTheme(): Theme {
   try {
-    return window.localStorage.getItem("deltamon.theme") === "light" ? "light" : "dark";
+    return window.localStorage.getItem("deltamon.theme") === "dark" ? "dark" : "light";
   } catch {
-    return "dark";
+    return "light";
   }
 }
 
@@ -23,7 +23,7 @@ function subscribe(callback: () => void) {
 }
 
 export function useTheme(): Theme {
-  return useSyncExternalStore(subscribe, readTheme, () => "dark");
+  return useSyncExternalStore(subscribe, readTheme, () => "light");
 }
 
 export function ThemeToggle() {

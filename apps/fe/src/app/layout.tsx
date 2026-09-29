@@ -4,6 +4,7 @@ import { Bricolage_Grotesque, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/goo
 import "@rainbow-me/rainbowkit/styles.css";
 import "./globals.css";
 import { Providers } from "./providers";
+import { SHOW_TIPPET_LORE } from "@/lib/featureFlags";
 
 const bricolage = Bricolage_Grotesque({
   variable: "--font-bricolage",
@@ -34,11 +35,13 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
   title: "DeltaMon",
   description:
-    "Put MON to work with a vault that targets balanced MON exposure. Explore the live holdings, manager-reported hedge and deposit path on Monad.",
+    "MON moves. DeltaMon shows both sides: onchain MON holdings, the manager-reported short, and the deposit path for sdMON shares on Monad.",
   icons: { icon: "/brand/deltamon-mark.svg" },
   openGraph: {
-    title: "DeltaMon · The Balance Engine",
-    description: "See every side of the vault.",
+    title: "DeltaMon · See both sides",
+    description: SHOW_TIPPET_LORE
+      ? "Meet Tippet, the little counterweight. Inspect the real position."
+      : "Meet the counterweight. Inspect the position.",
     images: ["/art/balance-engine-social.png"],
   },
 };
@@ -47,7 +50,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="en"
-      data-theme="dark"
+      data-theme="light"
       className={`${bricolage.variable} ${plexSans.variable} ${plexMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
