@@ -142,3 +142,24 @@ describe("the authorization header", () => {
     expect(bearerFrom(undefined)).toBeUndefined();
   });
 });
+
+describe("what the wallet is asked to sign", () => {
+  it("says which console the signature is for", () => {
+    const perp = createChallenge(allowed.address);
+    expect(perp.message).toContain("DeltaMon perp console");
+    expect(perp.message).toContain("trade this Perpl account");
+  });
+
+  it("tells an admin they are authorising the automation, not a trade", () => {
+    const admin = createChallenge(allowed.address, Date.now(), "automation");
+    expect(admin.message).toContain("DeltaMon automation");
+    expect(admin.message).toContain("change what the vault does automatically");
+    expect(admin.message).not.toContain("trade this Perpl account");
+  });
+
+  it("still verifies against the exact text that was issued", async () => {
+    const challenge = createChallenge(allowed.address, Date.now(), "automation");
+    const signature = await allowed.signMessage({ message: challenge.message });
+    expect((await verifyChallenge(allowed.address, challenge.nonce, signature)).ok).toBe(true);
+  });
+});

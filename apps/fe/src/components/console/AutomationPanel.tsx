@@ -2,16 +2,18 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useAccount } from "wagmi";
+import { useAccount, useSignMessage } from "wagmi";
 import type { AutomationConfig, FlowPeriod } from "@deltamon/shared";
 import {
   AutomationAuthError,
   AutomationError,
   fetchAutomationConfig,
   fetchFlows,
+  requestAdminChallenge,
   saveAutomationConfig,
+  verifyAdminSignature,
 } from "@/lib/automation";
-import { isLive, usePerpSession } from "@/lib/perpSession";
+import { isLive, storeSession, usePerpSession } from "@/lib/perpSession";
 import { shortAddr } from "@/lib/vault";
 import { Card, Pill, Stat } from "./ui";
 
@@ -33,6 +35,7 @@ type Draft = Omit<AutomationConfig, "updatedAt" | "updatedBy">;
 
 export function AutomationPanel() {
   const { address } = useAccount();
+  const { signMessageAsync } = useSignMessage();
   const { session } = usePerpSession();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
@@ -61,6 +64,34 @@ export function AutomationPanel() {
   const dirty = Boolean(
     draft && saved && JSON.stringify(draft) !== JSON.stringify(stripMeta(saved)),
   );
+
+  /** Same shape as the perp tab's sign in, but the backend only issues this one to the admin. */
+  async function signIn() {
+    if (!address) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const challenge = await requestAdminChallenge(address);
+      const signature = await signMessageAsync({ message: challenge.message });
+      const issued = await verifyAdminSignature(address, challenge.nonce, signature);
+      storeSession({
+        address: issued.address,
+        token: issued.token,
+        expiresAt: Date.parse(issued.expiresAt),
+      });
+      setNotice({ tone: "ok", text: "Signed in as admin. This session lasts 24 hours." });
+    } catch (err) {
+      setNotice({
+        tone: "bad",
+        text:
+          err instanceof AutomationError
+            ? err.message
+            : "Sign in failed. The signature was rejected or cancelled.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function save() {
     if (!current) return;
@@ -250,12 +281,28 @@ export function AutomationPanel() {
               </button>
             ) : null}
           </div>
-        ) : (
+        ) : !address ? (
+          <p className="text-muted text-sm">Connect a wallet to sign in.</p>
+        ) : !isAdmin ? (
           <p className="text-muted text-sm">
-            {!isAdmin
-              ? `Read only: only the vault admin ${shortAddr(data?.admin ?? undefined)} can change this.`
-              : "Sign in on the Perp position tab to edit."}
+            Read only. Only the vault admin {shortAddr(data?.admin ?? undefined)} can change this,
+            and you are connected as {shortAddr(address)}.
           </p>
+        ) : (
+          <div>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void signIn()}
+              className="bg-monad hover:bg-monad-deep rounded-md px-4 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50"
+            >
+              {busy ? "Waiting for your signature…" : "Sign in to edit"}
+            </button>
+            <p className="text-muted mt-2 text-xs">
+              Signing costs nothing and sends no transaction. The backend checks it against the
+              vault&apos;s owner and returns a session good for 24 hours.
+            </p>
+          </div>
         )}
 
         {notice ? (

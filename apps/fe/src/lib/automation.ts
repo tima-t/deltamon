@@ -90,3 +90,25 @@ export interface FlowView {
 }
 
 export const fetchFlows = () => call("/automation/flows") as Promise<{ flows: FlowView[] }>;
+
+export interface AdminChallenge {
+  nonce: string;
+  message: string;
+  expiresAt: string;
+}
+
+/**
+ * Signing in to the automation. Separate from the perp tab's challenge because this one accepts
+ * the vault's admin and nobody else, whatever PERPL_MANAGERS says.
+ */
+export const requestAdminChallenge = (address: string) =>
+  call("/automation/auth/challenge", {
+    method: "POST",
+    body: JSON.stringify({ address }),
+  }) as Promise<AdminChallenge>;
+
+export const verifyAdminSignature = (address: string, nonce: string, signature: string) =>
+  call("/automation/auth/verify", {
+    method: "POST",
+    body: JSON.stringify({ address, nonce, signature }),
+  }) as Promise<{ token: string; address: string; expiresAt: string; ttlMs: number }>;

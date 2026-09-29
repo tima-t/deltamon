@@ -7,7 +7,13 @@ import { publicClient } from "../chain.js";
 import { mongoConfigured } from "../lib/mongo.js";
 import { listActivity, readConfig, writeConfig } from "../services/automationStore.js";
 import { recentFlows } from "../services/flowEngine.js";
-import { bearerFrom, sessionFor } from "../services/perpAuth.js";
+import {
+  TOKEN_TTL_MS,
+  bearerFrom,
+  createChallenge,
+  sessionFor,
+  verifyChallenge,
+} from "../services/perpAuth.js";
 
 /**
  * The automation's surface.
@@ -18,6 +24,11 @@ import { bearerFrom, sessionFor } from "../services/perpAuth.js";
  */
 
 const ConfigInput = AutomationConfigSchema.omit({ updatedAt: true, updatedBy: true });
+const AddressInput = z.object({ address: z.string().regex(/^0x[0-9a-fA-F]{40}$/) });
+const VerifyInput = AddressInput.extend({
+  nonce: z.string().min(1),
+  signature: z.string().regex(/^0x[0-9a-fA-F]+$/),
+});
 
 let ownerCache: { at: number; owner: Address } | null = null;
 
@@ -51,6 +62,50 @@ export const automationRoutes: FastifyPluginAsync = async (app) => {
     }
     return { ok: true, address: session.address };
   };
+
+  /**
+   * Signing in here is admin only, whatever PERPL_MANAGERS says. The perp tab's list governs who
+   * may trade; this one governs who may change what the vault does on its own, and that is the
+   * owner alone.
+   */
+  const adminMaySignIn = {
+    check: async (address: string) => {
+      const owner = await vaultOwner();
+      return owner !== null && owner.toLowerCase() === address.toLowerCase();
+    },
+    reason: "only the vault admin can sign in to the automation",
+  };
+
+  app.post("/automation/auth/challenge", async (req, reply) => {
+    const body = AddressInput.safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: "expected an address" });
+    if (!(await adminMaySignIn.check(body.data.address))) {
+      return reply.code(403).send({ error: adminMaySignIn.reason });
+    }
+    return createChallenge(body.data.address, Date.now(), "automation");
+  });
+
+  app.post("/automation/auth/verify", async (req, reply) => {
+    const body = VerifyInput.safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: z.prettifyError(body.error) });
+    const result = await verifyChallenge(
+      body.data.address,
+      body.data.nonce,
+      body.data.signature as `0x${string}`,
+      Date.now(),
+      adminMaySignIn,
+    );
+    if (!result.ok) {
+      app.log.warn({ address: body.data.address, reason: result.reason }, "admin sign in refused");
+      return reply.code(401).send({ error: result.reason });
+    }
+    return {
+      token: result.token,
+      address: result.address,
+      expiresAt: result.expiresAt,
+      ttlMs: TOKEN_TTL_MS,
+    };
+  });
 
   app.get("/automation/config", async (_req, reply) => {
     if (!mongoConfigured()) {
