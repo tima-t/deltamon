@@ -29,10 +29,13 @@ import { AdminPanel } from "./AdminPanel";
 import { KeeperPanel } from "./KeeperPanel";
 import { ManagerPanel } from "./ManagerPanel";
 import { PerpPositionPanel } from "./PerpPositionPanel";
+import { AutomationPanel } from "./AutomationPanel";
+import { ActivityPanel } from "./ActivityPanel";
 import { UserPanel } from "./UserPanel";
 import { Card, Pill, Stat, TxBanner } from "./ui";
 
-type Tab = "overview" | "deposit" | "manager" | "perp" | "admin" | "keeper";
+type Tab =
+  "overview" | "deposit" | "activity" | "manager" | "perp" | "automations" | "admin" | "keeper";
 
 export function VaultConsole() {
   const {
@@ -128,8 +131,10 @@ export function VaultConsole() {
   const tabs: { id: Tab; label: string; show: boolean }[] = [
     { id: "overview", label: "Overview", show: true },
     { id: "deposit", label: "Deposit & withdraw", show: true },
+    { id: "activity", label: "Activity", show: true },
     { id: "manager", label: "Return capital", show: isManager },
     { id: "perp", label: "Perp position", show: isManager || isOwner },
+    { id: "automations", label: "Automations", show: isOwner },
     { id: "admin", label: "Admin", show: isOwner },
     { id: "keeper", label: "Keeper", show: isKeeper || isOwner },
   ];
@@ -365,6 +370,10 @@ export function VaultConsole() {
         ) : null}
 
         {tab === "perp" && (isManager || isOwner) ? <PerpPositionPanel /> : null}
+
+        {tab === "activity" ? <ActivityPanel /> : null}
+
+        {tab === "automations" && isOwner ? <AutomationPanel /> : null}
 
         {vault && tab === "admin" && isOwner ? (
           <AdminPanel vault={vault} chainId={chainId} state={state} busy={busy} run={action.run} />
