@@ -66,6 +66,32 @@ const EnvSchema = z.object({
         .filter((s) => /^0x[0-9a-fA-F]{40}$/.test(s)),
     ),
 
+  /**
+   * Where automation state lives: the pipeline's steps, its config, and the activity log. Without
+   * it the automation refuses to run rather than risk replaying steps it cannot remember.
+   */
+  /** The perp manager the pipeline funds. Must be listed on the vault as a manager. */
+  PERP_MANAGER_ADDRESS: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .regex(/^0x[0-9a-fA-F]{40}$/)
+      .optional(),
+  ),
+  MONGO_CONNECTION_STRING: z.preprocess(emptyToUndefined, z.string().optional()),
+  MONGO_DB_NAME: z.string().default("deltamon"),
+  /**
+   * Signs the automation's vault transactions. Full admin power: it can swap, stake and fund perp
+   * managers. Keep it off any machine that does not need to run the pipeline.
+   */
+  ADMIN_PRIVATE_KEY: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .regex(/^0x[0-9a-fA-F]{64}$/)
+      .optional(),
+  ),
+
   PERPL_API_URL: z.preprocess(emptyToUndefined, z.url().default(PERPL_API_URL)),
   PERPL_CHAIN_ID: z.coerce.number().int().positive().default(143),
   PERPL_API_KEY: z.preprocess(emptyToUndefined, z.string().optional()),

@@ -113,3 +113,51 @@ export const HealthSchema = z.object({
   version: z.string(),
 });
 export type Health = z.infer<typeof HealthSchema>;
+
+/** How often the allocation pipeline runs. */
+export const FlowPeriodSchema = z.enum(["deposit", "12h", "24h"]);
+export type FlowPeriod = z.infer<typeof FlowPeriodSchema>;
+
+export const AutomationConfigSchema = z.object({
+  /** Off by default. Nothing is signed while this is false. */
+  enabled: z.boolean(),
+  /** Share of each deposit bought as MON; the rest becomes AUSD. */
+  monAusdSplitRatio: z.number().min(0).max(1),
+  flowPipelinePeriod: FlowPeriodSchema,
+  /**
+   * Unbond the stake when the perp position's liquidation buffer falls to this percentage.
+   * Zero switches the monitor off.
+   */
+  unbondBufferLevel: z.number().int().min(0).max(50),
+  /** Leverage for the hedge, in hundredths. 150 is 1.5x, which a 0.6 split implies. */
+  shortLeverage: z.number().int().min(100).max(1000),
+  updatedAt: z.string().nullable(),
+  updatedBy: z.string().nullable(),
+});
+export type AutomationConfig = z.infer<typeof AutomationConfigSchema>;
+
+export const DEFAULT_AUTOMATION_CONFIG: AutomationConfig = {
+  enabled: false,
+  monAusdSplitRatio: 0.6,
+  flowPipelinePeriod: "deposit",
+  unbondBufferLevel: 20,
+  shortLeverage: 150,
+  updatedAt: null,
+  updatedBy: null,
+};
+
+/** One line in the activity log: a pipeline step, or something a person did to the vault. */
+export const ActivitySchema = z.object({
+  at: z.string(),
+  /** "pipeline" for automated steps, "onchain" for what the contracts emitted, "perp" for Perpl. */
+  source: z.enum(["pipeline", "onchain", "perp"]),
+  kind: z.string(),
+  status: z.enum(["started", "ok", "failed"]),
+  summary: z.string(),
+  flowId: z.string().nullable().optional(),
+  txHash: z.string().nullable().optional(),
+  blockNumber: z.number().nullable().optional(),
+  actor: z.string().nullable().optional(),
+  detail: z.record(z.string(), z.unknown()).nullable().optional(),
+});
+export type Activity = z.infer<typeof ActivitySchema>;

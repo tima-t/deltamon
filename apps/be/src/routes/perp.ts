@@ -7,6 +7,7 @@ import {
   sharedSession,
 } from "../services/perplAccounts.js";
 import { describePosition } from "../services/perpPositionView.js";
+import { recordActivity } from "../services/automationStore.js";
 import { closeShortFrame, openShortFrames } from "../services/perplOrders.js";
 import {
   TOKEN_TTL_MS,
@@ -199,6 +200,18 @@ export const perpRoutes: FastifyPluginAsync = async (app) => {
         { by: req.perpAddress, size: body.data.size, market: market.name, accepted: statuses.length },
         "short opened",
       );
+      await recordActivity({
+        source: "perp",
+        kind: "perp.openShort",
+        status: "ok",
+        summary: `Opened a ${body.data.size} ${market.name} short by hand`,
+        actor: req.perpAddress ?? null,
+        detail: {
+          size: body.data.size,
+          stopLoss: body.data.stopLoss ?? null,
+          takeProfit: body.data.takeProfit ?? null,
+        },
+      });
       return { sent: statuses.length, requestIds: frames.map((f) => f.rq), market: market.name };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -233,6 +246,13 @@ export const perpRoutes: FastifyPluginAsync = async (app) => {
         { by: req.perpAddress, size: body.data.size, market: market.name },
         "short closed",
       );
+      await recordActivity({
+        source: "perp",
+        kind: "perp.closeShort",
+        status: "ok",
+        summary: `Closed ${body.data.size} ${market.name} of the short by hand`,
+        actor: req.perpAddress ?? null,
+      });
       return { sent: 1, requestIds: [frame.rq], market: market.name };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

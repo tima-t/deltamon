@@ -31,3 +31,20 @@ export function getKeeperWallet(): WalletClient | null {
   walletClient = createWalletClient({ account, chain, transport: http(env.RPC_URL) });
   return walletClient;
 }
+
+let adminClient: WalletClient | null | undefined;
+
+/**
+ * Signs the automation's vault transactions. Null when ADMIN_PRIVATE_KEY is unset, which is how
+ * the pipeline stays inert on a machine that should not be trading.
+ */
+export function getAdminWallet(): WalletClient | null {
+  if (adminClient !== undefined) return adminClient;
+  if (!env.ADMIN_PRIVATE_KEY) {
+    adminClient = null;
+    return adminClient;
+  }
+  const account = privateKeyToAccount(env.ADMIN_PRIVATE_KEY as Hex);
+  adminClient = createWalletClient({ account, chain, transport: http(env.RPC_URL) });
+  return adminClient;
+}
