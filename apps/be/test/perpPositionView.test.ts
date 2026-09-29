@@ -91,15 +91,19 @@ describe("a real MON short", () => {
   });
 
   it("derives a liquidation price above the entry, since a short loses as price climbs", () => {
-    // (10.281336 + 372 x 0.027634) / (372 x 1.2)
-    expect(view.liquidationPrice).toBeCloseTo(0.0460600, 6);
+    // 0.027634 + (10.281336 - 0.05 x 372 x 0.027634) / 372. app.perpl.xyz showed 0.0539.
+    expect(view.liquidationPrice).toBeCloseTo(0.0538903, 7);
     expect(view.liquidationPrice!).toBeGreaterThan(view.entryPrice!);
-    expect(view.maintenanceMargin).toBeCloseTo(0.2, 9);
+    // maintenance_margin 2000 is 20x in hundredths, so 5%.
+    expect(view.maintenanceMargin).toBeCloseTo(0.05, 9);
   });
 
   it("measures the buffer from the mark, not from entry", () => {
-    // (0.04606 - 0.028056) / 0.028056
-    expect(view.liquidationBuffer).toBeCloseTo(0.6417, 3);
+    // (0.0538903 - 0.028056) / 0.028056
+    expect(view.liquidationBuffer).toBeCloseTo(0.9208, 3);
+    // Perpl showed 86.6% with the mark at 0.02888.
+    const later = describePosition(SHORT, { ...MON, markPrice: 28_880 });
+    expect(later.liquidationBuffer).toBeCloseTo(0.866, 3);
   });
 });
 
@@ -125,9 +129,9 @@ describe("the other direction and the missing pieces", () => {
   });
 
   it("leaves a barely solvent position almost no buffer", () => {
-    // 2 USDC against a 10.44 notional at the mark: equity 2.157 against a 2.087 maintenance
-    // requirement. Still solvent, so liquidation sits just under the mark rather than above it.
-    const thin = describePosition({ ...SHORT, sd: 1, c: "2000000" }, MON);
+    // 0.515 USDC against a 0.514 maintenance requirement (5% of the 10.28 entry notional).
+    // Still solvent, so liquidation sits just under the mark rather than above it.
+    const thin = describePosition({ ...SHORT, sd: 1, c: "515000" }, MON);
     expect(thin.liquidationPrice!).toBeLessThan(thin.markPrice!);
     expect(thin.liquidationBuffer!).toBeLessThan(0.02);
   });

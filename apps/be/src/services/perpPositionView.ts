@@ -74,15 +74,15 @@ const scaled = (v: unknown, decimals: number): number | null => {
   return n === null ? null : n / 10 ** decimals;
 };
 
-/** Collateral and PnL are in the settlement token, which is USDC at six decimals. */
-const USDC_DECIMALS = 6;
+/** Perpl settles in AUSD, which carries six decimals and trades at a dollar. */
+const COLLATERAL_DECIMALS = 6;
 
 export function describePosition(raw: RawPosition, market: MarketConfig): PositionView {
   const size = scaled(raw.s, market.sizeDecimals);
   const entryPrice = scaled(raw.ep, market.priceDecimals);
   const markPrice =
     market.markPrice === null ? null : market.markPrice / 10 ** market.priceDecimals;
-  const collateralUsd = scaled(raw.c, USDC_DECIMALS);
+  const collateralUsd = scaled(raw.c, COLLATERAL_DECIMALS);
   const sd = num(raw.sd);
   const side = sd === SIDE.long ? "long" : sd === SIDE.short ? "short" : null;
   const leverage = num(raw.lv) === null ? null : (num(raw.lv) as number) / 100;
@@ -114,7 +114,7 @@ export function describePosition(raw: RawPosition, market: MarketConfig): Positi
     market.maintenanceMargin,
   );
 
-  const realisedFundingUsd = scaled(raw.fnd, USDC_DECIMALS);
+  const realisedFundingUsd = scaled(raw.fnd, COLLATERAL_DECIMALS);
   const fundingAccruedUsd =
     realisedFundingUsd === null && unrealisedFundingUsd === null
       ? null
@@ -162,12 +162,15 @@ export function describePosition(raw: RawPosition, market: MarketConfig): Positi
 }
 
 /**
- * Liquidation sits where the remaining collateral equals the maintenance requirement:
+ * Perpl's own figure, which it computes in its UI and publishes nowhere in the API. The
+ * maintenance requirement is taken on the entry notional, and liquidation sits where losses have
+ * eaten the collateral down to it:
  *
- *   collateral + pnl(P) = maintenance x size x P
+ *   collateral + pnl(P) = m x size x entry
  *
- * Solved for a short that gives P = (collateral + size x entry) / (size x (1 + m)), and for a long
- * P = (size x entry - collateral) / (size x (1 - m)). `maintenance_margin` is in ten-thousandths.
+ * so P = entry + (collateral - m x size x entry) / size for a short, and the mirror image for a
+ * long. `maintenance_margin` is a leverage in hundredths (types.md: 2000 = 5%), so m = 100 / raw.
+ * Checked against app.perpl.xyz on a live short: 372 MON at 0.027634 on 10.28 USDC gives 0.0539.
  */
 function liquidation(
   side: "long" | "short" | null,
@@ -179,14 +182,11 @@ function liquidation(
 ): Pick<PositionView, "liquidationPrice" | "liquidationBuffer" | "maintenanceMargin"> {
   const none = { liquidationPrice: null, liquidationBuffer: null, maintenanceMargin: null };
   if (side === null || size === null || entryPrice === null || collateralUsd === null) return none;
-  if (maintenanceMarginRaw === null || size <= 0) return none;
+  if (maintenanceMarginRaw === null || maintenanceMarginRaw <= 0 || size <= 0) return none;
 
-  const m = maintenanceMarginRaw / 10_000;
-  const entryNotional = size * entryPrice;
-  const price =
-    side === "short"
-      ? (collateralUsd + entryNotional) / (size * (1 + m))
-      : (entryNotional - collateralUsd) / (size * (1 - m));
+  const m = 100 / maintenanceMarginRaw;
+  const room = (collateralUsd - m * size * entryPrice) / size;
+  const price = side === "short" ? entryPrice + room : entryPrice - room;
 
   if (!Number.isFinite(price) || price <= 0) {
     // A long collateralised past its own notional cannot be liquidated by price alone.

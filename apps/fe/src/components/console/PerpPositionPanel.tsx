@@ -200,11 +200,12 @@ export function PerpPositionPanel() {
     );
   }
 
-  // Perpl reports collateral in the settlement token's units, which is USDC at six decimals.
+  // Perpl settles in AUSD, not USDC. Same six decimals and both sit at a dollar, so only the
+  // label was ever wrong, but a trading screen should not name the wrong token.
   const units = (raw: string | null | undefined) => {
     if (raw === null || raw === undefined) return "—";
     try {
-      return `${fmtUsdc(BigInt(raw))} USDC`;
+      return `${fmtUsdc(BigInt(raw))} AUSD`;
     } catch {
       return raw;
     }
@@ -344,13 +345,14 @@ export function PerpPositionPanel() {
               );
             })}
             <p className="text-muted text-xs">
-              Perpl publishes no liquidation price, so it is derived from each position&apos;s
-              collateral against the market&apos;s maintenance margin
+              Perpl publishes no liquidation price in its API, so it is worked out the way
+              Perpl&apos;s app does: collateral against the market&apos;s maintenance margin on
+              the entry notional
               {account.positions[0]?.view?.maintenanceMargin !== null &&
               account.positions[0]?.view?.maintenanceMargin !== undefined
                 ? ` (${(account.positions[0].view.maintenanceMargin * 100).toFixed(1)}%)`
                 : ""}
-              . Treat it as an estimate and check it against Perpl before relying on it.
+              .
             </p>
           </div>
         ) : (
