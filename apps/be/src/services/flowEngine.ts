@@ -1,7 +1,7 @@
 import { erc20Abi, formatUnits, type Address, type Hex } from "viem";
-import { deltaMonVaultAbi, type AutomationConfig, type FlowPeriod } from "@deltamon/shared";
+import { ADDRESSES, deltaMonVaultAbi, type AutomationConfig, type FlowPeriod } from "@deltamon/shared";
 import { env } from "../config.js";
-import { getAdminWallet, publicClient } from "../chain.js";
+import { getAdminWallet, getManagerWallet, publicClient } from "../chain.js";
 import { logger } from "../lib/logger.js";
 import { collection, collections } from "../lib/mongo.js";
 import { recordActivity } from "./automationStore.js";
@@ -16,7 +16,12 @@ import { openShortFrames } from "./perplOrders.js";
  *   2. buy AUSD with the rest
  *   3. stake the MON
  *   4. send the AUSD to a perp manager
- *   5. short the same amount of MON that was staked
+ *   5. let Perpl pull that AUSD from the manager
+ *   6. deposit it as collateral
+ *   7. short the same amount of MON that was staked
+ *
+ * Steps five and six are signed by the manager's own wallet, not the admin's: Perpl collateral can
+ * only be moved on chain by whoever holds it, and the trading API key cannot move funds at all.
  *
  * Steps run strictly in order and each one is persisted before and after it acts, so a restart
  * resumes at the step that was in flight rather than from the beginning. A step that fails is
@@ -29,7 +34,22 @@ export const STEP_NAMES = [
   "swapUsdcForAusd",
   "stake",
   "fundPerpManager",
+  "approvePerplCollateral",
+  "depositToPerpl",
   "openShort",
+] as const;
+
+/** Which wallet signs which step. The manager's own wallet owns the collateral it deposits. */
+const MANAGER_STEPS = new Set<StepName>(["approvePerplCollateral", "depositToPerpl"]);
+
+const PERPL_ABI = [
+  {
+    type: "function",
+    name: "depositCollateral",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [],
+  },
 ] as const;
 export type StepName = (typeof STEP_NAMES)[number];
 
@@ -187,9 +207,14 @@ async function advance(flow: FlowDoc): Promise<void> {
   await runStep(flow, index, step);
 }
 
-function adminAddress(): Address {
-  const wallet = getAdminWallet();
-  if (!wallet?.account) throw new Error("ADMIN_PRIVATE_KEY is not set");
+/** The address that signed a given step, which is what its pinned nonce belongs to. */
+function signerFor(step: StepName): Address {
+  const wallet = MANAGER_STEPS.has(step) ? getManagerWallet() : getAdminWallet();
+  if (!wallet?.account) {
+    throw new Error(
+      MANAGER_STEPS.has(step) ? "PERP_MANAGER_PRIVATE_KEY is not set" : "ADMIN_PRIVATE_KEY is not set",
+    );
+  }
   return wallet.account.address;
 }
 
@@ -220,7 +245,8 @@ async function resolveInFlight(flow: FlowDoc, index: number, step: FlowStep): Pr
     return;
   }
 
-  const state = await checkNonce(adminAddress(), step.nonce);
+  // The nonce belongs to whichever wallet sent this step, not always the admin's.
+  const state = await checkNonce(signerFor(step.name), step.nonce);
   if (state.kind === "unused") {
     // Nothing was mined with that nonce, so the send never landed. Safe to try again.
     await patchStep(flow.triggerKey, index, { status: "pending" });
@@ -261,8 +287,22 @@ async function stepActivity(
 }
 
 async function runStep(flow: FlowDoc, index: number, step: FlowStep): Promise<void> {
-  const wallet = getAdminWallet();
-  if (!wallet?.account) throw new Error("ADMIN_PRIVATE_KEY is not set");
+  const usesManager = MANAGER_STEPS.has(step.name);
+  const wallet = usesManager ? getManagerWallet() : getAdminWallet();
+  if (!wallet?.account) {
+    throw new Error(
+      usesManager
+        ? "PERP_MANAGER_PRIVATE_KEY is not set, so the manager cannot deposit collateral"
+        : "ADMIN_PRIVATE_KEY is not set",
+    );
+  }
+  // A wallet with no MON cannot send anything, and the revert it produces says nothing useful.
+  if (usesManager) {
+    const gas = await publicClient.getBalance({ address: wallet.account.address });
+    if (gas === 0n) {
+      throw new Error(`manager wallet ${wallet.account.address} holds no MON for gas`);
+    }
+  }
   const vault = flow.vault as Address;
   const previous = flow.steps.slice(0, index);
   const attempts = step.attempts + 1;
@@ -306,11 +346,22 @@ async function runStep(flow: FlowDoc, index: number, step: FlowStep): Promise<vo
     });
     await stepActivity(flow, { ...step, txHash, result }, "ok", plan.summary(result));
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = explain(err instanceof Error ? err.message : String(err));
     await patchStep(flow.triggerKey, index, { status: "failed", error: message });
     await stepActivity(flow, step, "failed", `${step.name} failed: ${message}`);
     if (attempts >= MAX_ATTEMPTS) await finishFlow(flow.triggerKey, "failed");
   }
+}
+
+/** Turns the reverts worth explaining into something a person can act on. */
+function explain(message: string): string {
+  if (message.includes("AccountDoesNotExist")) {
+    return `${message} — the manager has no Perpl account yet. Open one on Perpl with that wallet before the pipeline can deposit collateral.`;
+  }
+  if (message.includes("insufficient funds for gas")) {
+    return `${message} — the signing wallet needs MON for gas.`;
+  }
+  return message;
 }
 
 interface StepPlan {
@@ -398,6 +449,52 @@ async function planStep(
       },
       settle: async () => ({ staked: bought.toString(), validator: validator.toString() }),
       summary: () => `Staked ${formatUnits(bought, 18)} MON with validator ${validator}`,
+    };
+  }
+
+  if (name === "approvePerplCollateral" || name === "depositToPerpl") {
+    const exchange = ADDRESSES[env.CHAIN_ID as keyof typeof ADDRESSES]?.perpl?.exchange as
+      | Address
+      | undefined;
+    if (!exchange) throw new Error(`no Perpl exchange known for chain ${env.CHAIN_ID}`);
+    const wallet = getManagerWallet();
+    if (!wallet?.account) throw new Error("PERP_MANAGER_PRIVATE_KEY is not set");
+    const holder = wallet.account.address;
+
+    // Deposit whatever the manager is actually holding, not what the previous step sent: a partial
+    // earlier run may have left some behind, and it is all collateral either way.
+    const held = await tokenBalance(ausd, holder);
+    if (held === 0n) return null;
+
+    if (name === "approvePerplCollateral") {
+      const allowance = (await publicClient.readContract({
+        address: ausd,
+        abi: erc20Abi,
+        functionName: "allowance",
+        args: [holder, exchange],
+      })) as bigint;
+      if (allowance >= held) return null; // already enough, nothing to sign
+      return {
+        request: {
+          address: ausd,
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [exchange, held],
+        },
+        settle: async () => ({ approved: held.toString(), spender: exchange }),
+        summary: () => `Approved ${formatUnits(held, 6)} AUSD for Perpl`,
+      };
+    }
+
+    return {
+      request: {
+        address: exchange,
+        abi: PERPL_ABI,
+        functionName: "depositCollateral",
+        args: [held],
+      },
+      settle: async () => ({ deposited: held.toString() }),
+      summary: () => `Deposited ${formatUnits(held, 6)} AUSD into Perpl as collateral`,
     };
   }
 

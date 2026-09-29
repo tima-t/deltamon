@@ -48,3 +48,21 @@ export function getAdminWallet(): WalletClient | null {
   adminClient = createWalletClient({ account, chain, transport: http(env.RPC_URL) });
   return adminClient;
 }
+
+let managerClient: WalletClient | null | undefined;
+
+/**
+ * Signs for the perp manager's own wallet, which is what puts AUSD into Perpl. Null when no key is
+ * configured, in which case the pipeline stops before the deposit rather than opening a short it
+ * cannot margin.
+ */
+export function getManagerWallet(): WalletClient | null {
+  if (managerClient !== undefined) return managerClient;
+  if (!env.PERP_MANAGER_PRIVATE_KEY) {
+    managerClient = null;
+    return managerClient;
+  }
+  const account = privateKeyToAccount(env.PERP_MANAGER_PRIVATE_KEY as Hex);
+  managerClient = createWalletClient({ account, chain, transport: http(env.RPC_URL) });
+  return managerClient;
+}

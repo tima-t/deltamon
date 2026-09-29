@@ -70,6 +70,20 @@ const EnvSchema = z.object({
    * Where automation state lives: the pipeline's steps, its config, and the activity log. Without
    * it the automation refuses to run rather than risk replaying steps it cannot remember.
    */
+  /**
+   * Signs the manager wallet's own transactions: approving AUSD and depositing it into Perpl as
+   * collateral. Separate from the admin key and just as sensitive, since the manager holds vault
+   * money the vault cannot claw back.
+   */
+  PERP_MANAGER_PRIVATE_KEY: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .regex(/^(0x)?[0-9a-fA-F]{64}$/, "expected a 32 byte hex private key, with or without 0x")
+      .transform((k) => (k.startsWith("0x") ? k : `0x${k}`))
+      .optional(),
+  ),
+
   /** The perp manager the pipeline funds. Must be listed on the vault as a manager. */
   PERP_MANAGER_ADDRESS: z.preprocess(
     emptyToUndefined,
@@ -88,7 +102,9 @@ const EnvSchema = z.object({
     emptyToUndefined,
     z
       .string()
-      .regex(/^0x[0-9a-fA-F]{64}$/)
+      .regex(/^(0x)?[0-9a-fA-F]{64}$/, "expected a 32 byte hex private key, with or without 0x")
+      // viem wants the prefix; a key pasted without one is still a key.
+      .transform((k) => (k.startsWith("0x") ? k : `0x${k}`))
       .optional(),
   ),
 
