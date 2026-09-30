@@ -12,10 +12,26 @@ There is no CI in this repo. Railway builds on push.
 
 ## Creating the services
 
-For each service, in the Railway dashboard: **New → GitHub Repo → tima-t/deltamon**, then under
-_Settings → Build_ set **Root Directory** to `/` and **Dockerfile Path** to the path above. The
-`railway.json` beside each Dockerfile already carries the start command, health check and restart
-policy, so nothing else needs setting by hand.
+For each service: **New → GitHub Repo → tima-t/deltamon**, then in _Settings_:
+
+| Setting             | Backend                | Frontend               |
+| ------------------- | ---------------------- | ---------------------- |
+| Root Directory      | `/`                    | `/`                    |
+| Builder             | **Dockerfile**         | **Dockerfile**         |
+| Dockerfile Path     | `apps/be/Dockerfile`   | `apps/fe/Dockerfile`   |
+| Config-as-code path | `apps/be/railway.json` | `apps/fe/railway.json` |
+
+**Set the builder explicitly.** Railway auto-detects a builder, and for this repo it picks Railpack,
+which runs `pnpm --filter @deltamon/be build` on its own. That skips `@deltamon/shared`, so the API
+compiles against a package with no `dist` and fails with seventeen "Cannot find module
+'@deltamon/shared'" errors. Choosing Dockerfile avoids the guess entirely.
+
+Railway also looks for `railway.json` at the service's root directory, which is the repo root here,
+so the per-service files have to be named under _Config-as-code_ or they are silently ignored.
+
+If you would rather stay on Railpack, override the commands instead: build with `pnpm build:be` or
+`pnpm build:fe`, which go through turbo and therefore build `@deltamon/shared` first, and start with
+`pnpm start:be` or `pnpm start:fe`.
 
 Deploy the backend first: the frontend bakes its URL in at build time.
 

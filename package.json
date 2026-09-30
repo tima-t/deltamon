@@ -19,7 +19,11 @@
     "abi:sync": "pnpm --filter @deltamon/shared abi:sync",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "clean": "turbo run clean && rm -rf node_modules"
+    "clean": "turbo run clean && rm -rf node_modules",
+    "build:be": "turbo run build --filter=@deltamon/be",
+    "build:fe": "turbo run build --filter=@deltamon/fe",
+    "start:be": "pnpm --filter @deltamon/be start",
+    "start:fe": "pnpm --filter @deltamon/fe start"
   },
   "devDependencies": {
     "prettier": "^3.9.6",
