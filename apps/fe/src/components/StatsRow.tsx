@@ -27,12 +27,15 @@ export function StatsRow({ stats }: { stats: VaultStats }) {
     },
   ];
   return (
-    <dl className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-      {items.map((item) => (
-        <div key={item.label} className="metric-card">
+    <dl className="position-ledger">
+      {items.map((item, index) => (
+        <div key={item.label} className="position-ledger-item">
+          <span className="position-ledger-index" aria-hidden="true">
+            0{index + 1} / SUPPORTING READING
+          </span>
           <dt className="metric-label">{item.label}</dt>
           <dd className="metric-value">{item.value}</dd>
-          <dd className="text-muted mt-1 text-xs">{item.hint}</dd>
+          <dd className="position-ledger-hint">{item.hint}</dd>
         </div>
       ))}
     </dl>

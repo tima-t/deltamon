@@ -91,14 +91,14 @@ export function VaultDashboard() {
           <div>
             <p className="counter-section-index">01 / THE REAL POSITION</p>
             <h2 id="counter-position-title">
-              Here’s what
+              MON HELD.
               <br />
-              <em>the numbers say.</em>
+              <em>SHORT REPORTED.</em>
             </h2>
           </div>
           <p>
-            Our character tells the story. The instrument tells you what the vault actually holds
-            and what its manager reports. Check the timestamp before you act.
+            Two sides, measured differently. The vault&apos;s MON is read onchain. The short comes
+            from its manager. Their gap is the exposure worth watching.
           </p>
         </div>
         <div className="counter-engine-wrap">
@@ -132,18 +132,6 @@ export function VaultDashboard() {
               ) : null}
             </div>
           )}
-          <aside className="counter-trust-note">
-            <span className="counter-note-icon" aria-hidden="true">
-              !
-            </span>
-            <div>
-              <strong>Who holds the other side?</strong>
-              <p>
-                MON holdings are read onchain. A separate manager controls and reports the short;
-                capital sent to that manager leaves the vault’s direct custody.
-              </p>
-            </div>
-          </aside>
         </div>
         {stats ? (
           <div className="counter-stats">
@@ -154,6 +142,16 @@ export function VaultDashboard() {
                 manager position report.
               </p>
             ) : null}
+            <details className="counter-composition" id="vault-composition">
+              <summary>
+                <span>
+                  <strong>Vault composition</strong>
+                  <small>MON, idle USDC, and manager book equity</small>
+                </span>
+                <span aria-hidden="true">↗</span>
+              </summary>
+              <HoldingsPanel stats={stats} />
+            </details>
           </div>
         ) : null}
       </section>
@@ -173,34 +171,8 @@ export function VaultDashboard() {
             deposit is complete only when the vault confirms it.
           </p>
         </div>
-        <div className="grid gap-6 pb-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,.95fr)]">
-          <div id="deposit" className="min-w-0">
-            <DepositPanel />
-          </div>
-          {stats ? (
-            <HoldingsPanel stats={stats} />
-          ) : (
-            <div className="panel counter-offline-holdings p-8" role="status">
-              <div className="counter-offline-head">
-                <span>VAULT COMPOSITION</span>
-                <span>—</span>
-              </div>
-              <div>
-                <p className="counter-offline-title">
-                  No reading.
-                  <br />
-                  No guesswork.
-                </p>
-                <p className="text-muted mt-4 max-w-sm text-sm">
-                  Vault holdings are unavailable from the API right now. Wallet actions remain
-                  accessible; check the actual values before depositing.
-                </p>
-              </div>
-              <a href="#how" className="counter-offline-link">
-                How the strategy works ↗
-              </a>
-            </div>
-          )}
+        <div id="deposit" className="counter-deposit-wrap">
+          <DepositPanel />
         </div>
       </section>
       <section id="position" className="counter-your-position">

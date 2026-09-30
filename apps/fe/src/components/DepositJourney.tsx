@@ -1,95 +1,142 @@
 "use client";
 
 import { motion, useReducedMotion } from "motion/react";
-import { getDepositStages } from "@/lib/crosschain/progress";
+import { getDepositStages, type DepositStageState } from "@/lib/crosschain/progress";
+
+const segments = [
+  "M60 96 C130 96 140 36 230 36",
+  "M230 36 C315 36 325 96 410 96",
+  "M410 96 C495 96 505 36 580 36",
+];
+
+const stations = [
+  { x: 60, y: 96, label: "SOURCE" },
+  { x: 230, y: 36, label: "MONAD" },
+  { x: 410, y: 96, label: "VAULT" },
+  { x: 580, y: 36, label: "SHARES" },
+];
+
+const stateLabel: Record<DepositStageState, string> = {
+  complete: "CONFIRMED",
+  active: "IN PROGRESS",
+  waiting: "UP NEXT",
+  failed: "NEEDS ATTENTION",
+};
 
 export function DepositJourney({
   status,
   sourceName,
   sourceTxSent,
   mintConfirmed,
+  simulated = false,
 }: {
   status?: string;
   sourceName: string;
   sourceTxSent: boolean;
   mintConfirmed: boolean;
+  simulated?: boolean;
 }) {
   const reduceMotion = useReducedMotion();
   const stages = getDepositStages(status, sourceName, sourceTxSent, mintConfirmed);
-  const completed = stages.filter((item) => item.state === "complete").length;
   const current = stages.findIndex((item) => item.state === "active" || item.state === "failed");
-  const progress = Math.min(
-    100,
-    (completed + (current >= 0 && stages[current]?.state === "active" ? 0.3 : 0)) * 25,
-  );
+  const failed = stages.some((item) => item.state === "failed");
+  const complete = stages.every((item) => item.state === "complete");
 
   return (
     <section
-      aria-label="Deposit progress"
-      className="border-line bg-surface/60 rounded-xl border px-4 py-4 shadow-[0_8px_28px_rgba(0,0,0,0.06)]"
+      aria-label={
+        simulated ? "Simulated cross-chain deposit progress" : "Cross-chain deposit progress"
+      }
+      className="deposit-journey"
     >
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold">Deposit progress</h3>
-        <span className="text-muted text-xs tabular-nums" aria-live="polite">
-          {current >= 0 ? `Step ${current + 1} of 4` : "4 of 4 complete"}
-        </span>
+      <div className="deposit-journey-topline">
+        <span>DELTA / TRANSFER MAP 01</span>
+        <span>{simulated ? "SIMULATED SIGNAL" : "AURORA + VAULT STATUS"}</span>
       </div>
-      <div
-        className="bg-line mt-3 h-1 overflow-hidden rounded-full"
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={4}
-        aria-valuenow={completed}
-        aria-label="Completed deposit steps"
-      >
-        <motion.div
-          initial={false}
-          animate={{ width: `${progress}%` }}
-          transition={{ duration: reduceMotion ? 0 : 0.7, ease: [0.2, 0, 0, 1] }}
-          className={`deposit-progress-fill bg-monad h-full rounded-full ${current >= 0 && stages[current]?.state === "active" ? "deposit-progress-active" : ""}`}
-        />
-      </div>
-      <ol className="mt-4 space-y-1">
-        {stages.map((item, index) => (
-          <li
-            key={item.title}
-            className={`deposit-stage deposit-stage-${item.state} relative flex gap-3 rounded-lg px-2 py-2.5 ${item.state === "active" ? "bg-monad/10" : ""}`}
-          >
-            {index < stages.length - 1 ? (
-              <span
-                aria-hidden="true"
-                className={`absolute left-[23px] top-10 -bottom-3 w-px ${item.state === "complete" ? "bg-long/50" : "bg-line"}`}
+      <div className="deposit-journey-body">
+        <div className="deposit-journey-heading">
+          <div>
+            <p className="deposit-kicker">THE JOURNEY / {sourceName.toUpperCase()} → MONAD</p>
+            <h3>
+              {failed ? "A hold on the route." : complete ? "Shares arrived." : "Across the lines."}
+            </h3>
+          </div>
+          <span className="deposit-journey-count" aria-live="polite">
+            {complete
+              ? "04 / 04 CONFIRMED"
+              : `0${current + 1} / 04 ${failed ? "NEEDS ATTENTION" : "IN PROGRESS"}`}
+          </span>
+        </div>
+        <div className="deposit-journey-map" aria-hidden="true">
+          <span className="deposit-journey-map-label">ORIGIN / {sourceName.toUpperCase()}</span>
+          <svg viewBox="0 0 640 132" preserveAspectRatio="xMidYMid meet">
+            <path
+              className="deposit-journey-map-guide"
+              d="M60 96 C130 96 140 36 230 36 C315 36 325 96 410 96 C495 96 505 36 580 36"
+            />
+            {segments.map((path, index) => (
+              <motion.path
+                key={path}
+                className="deposit-journey-map-done"
+                d={path}
+                initial={false}
+                animate={{ pathLength: stages[index + 1]?.state === "complete" ? 1 : 0 }}
+                transition={{ duration: reduceMotion ? 0 : 0.65, ease: [0.2, 0, 0, 1] }}
               />
+            ))}
+            {current > 0 && !failed ? (
+              <path className="deposit-journey-map-signal" d={segments[current - 1]} />
             ) : null}
-            <span
-              aria-hidden="true"
-              className={`deposit-stage-mark relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold tabular-nums ${
-                item.state === "complete"
-                  ? "border-long/35 bg-long/15 text-long"
-                  : item.state === "active"
-                    ? "border-monad bg-monad text-white"
-                    : item.state === "failed"
-                      ? "border-short/40 bg-short/15 text-short"
-                      : "border-line bg-paper text-muted"
-              }`}
+            {stations.map((station, index) => (
+              <g
+                key={station.label}
+                className={`deposit-journey-station deposit-journey-station-${stages[index]?.state}`}
+              >
+                {stages[index]?.state === "active" ? (
+                  <circle
+                    className="deposit-journey-station-orbit"
+                    cx={station.x}
+                    cy={station.y}
+                    r="30"
+                  />
+                ) : null}
+                <circle
+                  className="deposit-journey-station-disc"
+                  cx={station.x}
+                  cy={station.y}
+                  r="21"
+                />
+                <text x={station.x} y={station.y} dominantBaseline="central" textAnchor="middle">
+                  {stages[index]?.state === "complete"
+                    ? "✓"
+                    : stages[index]?.state === "failed"
+                      ? "!"
+                      : `0${index + 1}`}
+                </text>
+              </g>
+            ))}
+          </svg>
+          <span className="deposit-journey-map-label">DESTINATION / sdMON</span>
+        </div>
+        <ol className="deposit-journey-stages">
+          {stages.map((item, index) => (
+            <li
+              key={item.title}
+              data-state={item.state}
+              aria-current={item.state === "active" ? "step" : undefined}
             >
-              {item.state === "complete" ? "✓" : item.state === "failed" ? "!" : index + 1}
-            </span>
-            <div className="min-w-0 pt-0.5">
-              <p
-                className={`text-sm font-medium ${item.state === "waiting" ? "text-muted" : "text-ink"}`}
-              >
-                {item.title}
-              </p>
-              <p
-                className={`mt-0.5 text-xs leading-5 text-pretty ${item.state === "failed" ? "text-short" : "text-muted"}`}
-              >
-                {item.detail}
-              </p>
-            </div>
-          </li>
-        ))}
-      </ol>
+              <div className="deposit-journey-stage-meta">
+                <span>
+                  0{index + 1} / {stations[index]?.label}
+                </span>
+                <span>{stateLabel[item.state]}</span>
+              </div>
+              <strong>{item.title}</strong>
+              <p>{item.detail}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
     </section>
   );
 }

@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { formatUnits, parseUnits, type Address } from "viem";
 import { useAccount, useReadContracts } from "wagmi";
 import { getDeployment } from "@deltamon/shared";
 import { redemptionPayout } from "@/lib/positionFeedback";
+import { DEPOSIT_CONFIRMED_EVENT } from "@/lib/depositConfirmation";
 import { VAULT_ABI, fmtShares, fmtUsdc, useVaultAction } from "@/lib/vault";
 import { useWalletEntry } from "./WalletEntry";
 
@@ -170,6 +171,13 @@ export function PositionPanel() {
     void refetch();
     if (intentRef.current) setAmountText("");
   }, [refetch, setAmountText]);
+  useEffect(() => {
+    const refreshPosition = () => {
+      void refetch();
+    };
+    window.addEventListener(DEPOSIT_CONFIRMED_EVENT, refreshPosition);
+    return () => window.removeEventListener(DEPOSIT_CONFIRMED_EVENT, refreshPosition);
+  }, [refetch]);
   const action = useVaultAction(vault, 143, onConfirmed);
   const payout = redemptionPayout(action.receipt?.logs, vault, address);
   const startAction = (next: PositionIntent, args: readonly unknown[], label: string) => {
@@ -179,11 +187,15 @@ export function PositionPanel() {
   };
 
   return (
-    <div className="panel p-6 sm:p-8">
+    <div className="panel position-ticket p-6 sm:p-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="eyebrow">Your position / 04</p>
-          <h2 className="mt-2 text-2xl font-semibold">Your exit stays visible</h2>
+          <p className="eyebrow">The return route / Strategy 01</p>
+          <h2 id="return-route-title" tabIndex={-1} className="mt-2 text-2xl font-semibold">
+            Your exit
+            <br />
+            <em>stays visible.</em>
+          </h2>
           <p className="text-muted mt-2 max-w-2xl text-sm">
             Redeem straight out of the vault&apos;s idle USDC. If the book is deployed and there is
             not enough, you wait for the admin to unwind, and you can see exactly how much is
@@ -195,13 +207,27 @@ export function PositionPanel() {
         </span>
       </div>
       {!address ? (
-        <button
-          type="button"
-          onClick={openEntry}
-          className="button-primary mt-6 rounded-xl px-5 py-3 font-semibold"
-        >
-          Get started to view position
-        </button>
+        <div className="position-ticket-empty">
+          <button
+            type="button"
+            onClick={openEntry}
+            className="button-primary position-ticket-action mt-6 rounded-xl px-5 py-3 font-semibold"
+          >
+            Get started to view position
+          </button>
+          <div
+            className="position-ticket-return"
+            aria-label="sdMON shares redeem to USDC, subject to available idle liquidity"
+          >
+            <span>
+              sdMON <small>YOUR SHARES</small>
+            </span>
+            <b aria-hidden="true">↘</b>
+            <span>
+              USDC <small>AVAILABLE IDLE CASH</small>
+            </span>
+          </div>
+        </div>
       ) : !vault ? (
         <p className="text-muted mt-6 text-sm">Vault address is not configured.</p>
       ) : !positionReady ? (

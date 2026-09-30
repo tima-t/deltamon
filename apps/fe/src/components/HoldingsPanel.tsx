@@ -38,46 +38,51 @@ export function HoldingsPanel({ stats }: { stats: VaultStats }) {
       : []),
   ];
   return (
-    <section className="panel p-6 sm:p-8" aria-labelledby="holdings-title">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="eyebrow">Vault composition / 02</p>
-          <h2 id="holdings-title" className="mt-2 text-2xl font-semibold">
-            What your shares hold
-          </h2>
-        </div>
-        <span className="font-data text-muted text-xs">
-          {stats.source === "demo" ? "ILLUSTRATIVE ASSET MIX" : "LIVE ASSET MIX"}
-        </span>
+    <section className="holdings-ledger" aria-labelledby="holdings-title">
+      <div className="holdings-ledger-topline">
+        <span>VAULT COMPOSITION / 01</span>
+        <span>{stats.source === "demo" ? "ILLUSTRATIVE ASSET MIX" : "LIVE ASSET MIX"}</span>
       </div>
-      <div className="mt-7 space-y-5">
-        {rows.map((row) => (
-          <div key={row.name} className="border-line border-b pb-4 last:border-b-0 last:pb-0">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="size-2 rounded-full" style={{ background: row.color }} />
-                <span className="font-semibold">{row.name}</span>
+      <div className="holdings-ledger-intro">
+        <p className="deposit-kicker">WHAT A SHARE REPRESENTS</p>
+        <h2 id="holdings-title">
+          Inside
+          <br />
+          <em>the vault.</em>
+        </h2>
+        <p>One share is a claim on the whole book. Here is the asset mix behind it.</p>
+      </div>
+      <div className="holdings-ledger-rows">
+        {rows.map((row, index) => (
+          <div key={row.name} className="holdings-ledger-row">
+            <span className="holdings-ledger-index">0{index + 1}</span>
+            <div className="holdings-ledger-row-main">
+              <div className="holdings-ledger-row-head">
+                <h3>{row.name}</h3>
+                <strong>{formatUsd(row.value)}</strong>
               </div>
-              <strong className="font-data text-sm">{formatUsd(row.value)}</strong>
-            </div>
-            <p className="text-muted mt-1 pl-4 text-xs">{row.detail}</p>
-            <div className="bg-line/35 mt-3 ml-4 h-1 overflow-hidden rounded-full">
-              <div
-                className="h-full rounded-full"
-                style={{
-                  width: `${Math.min(100, stats.tvlUsd ? (row.value / stats.tvlUsd) * 100 : 0)}%`,
-                  background: row.color,
-                }}
-              />
+              <p>{row.detail}</p>
+              <div className="holdings-ledger-bar">
+                <span
+                  style={{
+                    width: `${Math.min(100, stats.tvlUsd ? (row.value / stats.tvlUsd) * 100 : 0)}%`,
+                    background: row.color,
+                  }}
+                />
+              </div>
             </div>
           </div>
         ))}
       </div>
-      <p className="text-muted mt-6 text-xs leading-relaxed">
-        Asset allocation and MON exposure are different measurements. The manager may use leverage
-        so a smaller amount of capital supports a short equal to the MON held. Short size comes from
-        the manager report; vault holdings come from onchain reads.
-      </p>
+      <div className="holdings-ledger-note">
+        <span aria-hidden="true">!</span>
+        <p>
+          <strong>Assets are not exposure.</strong> A smaller amount of manager capital may support
+          a short equal to the MON held. Short size comes from the manager report; vault holdings
+          come from onchain reads.
+        </p>
+      </div>
+      <div className="holdings-ledger-footer">MEASURE THE LONG ↔ VERIFY THE SHORT</div>
     </section>
   );
 }

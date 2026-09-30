@@ -128,12 +128,12 @@ export function WalletEntryProvider({ children }: { children: ReactNode }) {
           if (busy) event.preventDefault();
           else close();
         }}
-        className="border-line bg-paper text-ink m-auto w-[min(92vw,440px)] rounded-2xl border p-0 shadow-2xl backdrop:bg-black/65"
+        className="deposit-wallet-dialog border-line bg-paper text-ink m-auto w-[min(92vw,440px)] rounded-2xl border p-0 shadow-2xl backdrop:bg-black/65"
         aria-label={view === "account" ? "Account" : "Get started"}
       >
         <div className="border-line flex items-start justify-between gap-4 border-b px-6 py-5">
           <div>
-            <p className="eyebrow">DeltaMon / Access</p>
+            <p className="eyebrow">DeltaMon / Access ticket</p>
             <h2 className="mt-1 text-xl font-semibold">
               {view === "account"
                 ? "Your account"
