@@ -1,0 +1,34 @@
+# Everything the image builds for itself, plus everything it must never contain.
+node_modules
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+.turbo
+
+# Secrets. Railway supplies these as variables; none of them belong in a layer.
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+apps/be/perpl-key.env
+
+# Foundry. The apps consume ABIs from packages/shared, never the toolchain.
+packages/contracts/lib
+packages/contracts/out
+packages/contracts/cache
+packages/contracts/broadcast
+
+# Local state and tooling with no place in a build.
+.git
+.github
+.claude
+.agents
+.vscode
+apps/be/.cache
+**/*.log
+coverage
+lcov.info
+docs

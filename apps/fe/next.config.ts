@@ -29,6 +29,9 @@ const optionalNative = ["@react-native-async-storage/async-storage"];
 const unresolvable = [...optionalX402, ...optionalNative];
 
 const nextConfig: NextConfig = {
+  // Railway runs the built server, not the repo. Standalone emits a self-contained server plus
+  // only the node_modules it actually traced, which is what the runtime image copies.
+  output: "standalone",
   reactStrictMode: true,
   transpilePackages: ["@deltamon/shared"],
   turbopack: {

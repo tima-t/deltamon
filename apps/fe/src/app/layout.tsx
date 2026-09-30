@@ -23,8 +23,15 @@ const plexMono = IBM_Plex_Mono({
   display: "swap",
 });
 
+function siteUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  return configured && configured !== "" ? configured : "http://localhost:3000";
+}
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
+  // ?? only catches undefined, and a deploy that sets the variable to an empty string is the
+  // common case; new URL("") throws and takes the whole build down.
+  metadataBase: new URL(siteUrl()),
   title: "DeltaMon",
   description:
     "Put MON to work with a vault that targets balanced MON exposure. Explore the live holdings, manager-reported hedge and deposit path on Monad.",
