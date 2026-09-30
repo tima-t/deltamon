@@ -25,8 +25,10 @@ COPY apps/fe/package.json apps/fe/
 COPY packages/shared/package.json packages/shared/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/typescript-config/package.json packages/typescript-config/
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile --ignore-scripts
+# No BuildKit cache mount here: Railway's builder requires a cache-key prefix on the mount id
+# and rejects the Dockerfile outright without one. Layer caching covers this anyway, since the
+# manifests are copied on their own above.
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # ── build ──────────────────────────────────────────────────────────────────────
 FROM deps AS build
