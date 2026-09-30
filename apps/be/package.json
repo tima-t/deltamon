@@ -6,6 +6,7 @@
   "type": "module",
   "description": "DeltaMon API + keeper: serves vault stats and rebalances the delta-neutral strategy",
   "scripts": {
+    "prebuild": "pnpm --filter @deltamon/shared build",
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
