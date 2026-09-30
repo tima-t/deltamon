@@ -26,15 +26,15 @@ export function SiteHeader() {
         <Link href="/#vault" className="counter-header-link hidden text-sm md:inline">
           The position
         </Link>
-        <Link href="/#how" className="counter-header-link hidden text-sm lg:inline">
+        {/* <Link href="/#how" className="counter-header-link hidden text-sm lg:inline">
           How it works
-        </Link>
+        </Link> */}
         <Link href="/console" className="text-muted hover:text-ink hidden text-sm sm:inline">
           Console
         </Link>
-        <span className="text-muted hidden text-sm lg:inline">
+        {/* <span className="text-muted hidden text-sm lg:inline">
           {isConnected ? (chain?.name ?? "Connected") : "Monad"}
-        </span>
+        </span> */}
         <ThemeToggle />
         <button
           type="button"

@@ -13,7 +13,7 @@ export default function Home() {
 
       <VaultDashboard />
       {SHOW_TIPPET_LORE ? <CharacterStory /> : null}
-      <HowItWorks />
+      {/* <HowItWorks /> */}
       {/* <Risks /> */}
       <SiteFooter />
     </main>
