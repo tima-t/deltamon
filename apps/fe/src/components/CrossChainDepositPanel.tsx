@@ -36,6 +36,11 @@ import { ReceiveFunds } from "./ReceiveFunds";
 import { useWalletEntry } from "./WalletEntry";
 import { assertContractGas } from "@/lib/nativeGas";
 import { showReturnRouteAfterDeposit } from "@/lib/depositConfirmation";
+import {
+  DepositSourceConstellation,
+  DepositSelectedSource,
+  type DepositSourceStar,
+} from "./DepositSourceConstellation";
 
 interface Execution {
   id?: string;
@@ -629,6 +634,37 @@ export function CrossChainDepositPanel({
           : quote
             ? "review"
             : "amount";
+  const sourceStars: DepositSourceStar[] = [
+    ...(monadBalance !== undefined && (monadBalance > 0n || isPasskey)
+      ? [
+          {
+            id: "monad",
+            name: "Monad",
+            balance: monadBalance.toString(),
+            decimals: 6,
+            fundable: isPasskey,
+          },
+        ]
+      : []),
+    ...assets.map((asset) => ({
+      id: asset.assetId,
+      name: asset.chainName,
+      balance: asset.balance,
+      decimals: asset.decimals,
+      error: asset.error,
+    })),
+  ];
+  const selectedStar = sourceStars.find((source) => source.id === selectedId);
+
+  function chooseSource(id: string) {
+    const source = sourceStars.find((item) => item.id === id);
+    if (!source || source.balance === null) return;
+    setSelectedId(id);
+    setSourceView("amount");
+    onSourceChange?.(source.name);
+    if (selectedId !== id) setAmountText("");
+    setQuote(null);
+  }
 
   return (
     <div className="deposit-crosschain space-y-4">
@@ -940,76 +976,12 @@ export function CrossChainDepositPanel({
                 </button>
               </div>
             ) : null}
-            <div className="deposit-source-list" role="group" aria-label="Choose USDC source">
-              {monadBalance !== undefined && (monadBalance > 0n || isPasskey) ? (
-                <button
-                  type="button"
-                  aria-pressed={isMonadSelected}
-                  onClick={() => {
-                    setSelectedId("monad");
-                    setSourceView("amount");
-                    onSourceChange?.("Monad");
-                    if (selectedId !== "monad") setAmountText("");
-                    setQuote(null);
-                  }}
-                  className="deposit-source-option"
-                >
-                  <span aria-hidden="true" className="deposit-source-monogram">
-                    M
-                  </span>
-                  <span className="min-w-0 flex-1 text-sm font-medium">Monad</span>
-                  <span className="text-right text-sm font-semibold tabular-nums">
-                    {Number(formatUnits(monadBalance, 6)).toLocaleString(undefined, {
-                      maximumFractionDigits: 2,
-                    })}{" "}
-                    <span className="text-muted text-xs font-normal">USDC</span>
-                  </span>
-                  <span className="deposit-source-radio" aria-hidden="true">
-                    {isMonadSelected ? "●" : "○"}
-                  </span>
-                </button>
-              ) : null}
-              {assets.map((asset) => (
-                <button
-                  key={asset.assetId}
-                  type="button"
-                  disabled={asset.balance === null}
-                  aria-pressed={selectedId === asset.assetId}
-                  onClick={() => {
-                    setSelectedId(asset.assetId);
-                    setSourceView("amount");
-                    onSourceChange?.(asset.chainName);
-                    if (selectedId !== asset.assetId) setAmountText("");
-                    setQuote(null);
-                  }}
-                  className="deposit-source-option disabled:opacity-50"
-                >
-                  <span aria-hidden="true" className="deposit-source-monogram">
-                    {asset.chainName.slice(0, 1)}
-                  </span>
-                  <span className="min-w-0 flex-1 text-sm font-medium">{asset.chainName}</span>
-                  <span className="text-right text-sm font-semibold tabular-nums">
-                    {asset.balance === null
-                      ? asset.error
-                      : `${Number(formatUnits(BigInt(asset.balance), asset.decimals)).toLocaleString(undefined, { maximumFractionDigits: 2 })} USDC`}
-                  </span>
-                  <span className="deposit-source-radio" aria-hidden="true">
-                    {selectedId === asset.assetId ? "●" : "○"}
-                  </span>
-                </button>
-              ))}
-              {!loadingBalances &&
-              !loadingMonadBalance &&
-              assets.length === 0 &&
-              (!monadBalance || monadBalance === 0n) ? (
-                <p className="text-muted py-3 text-sm">
-                  No USDC balances found on supported chains.
-                </p>
-              ) : null}
-              {loadingBalances || loadingMonadBalance ? (
-                <p className="text-muted py-2 text-xs">Checking USDC balances…</p>
-              ) : null}
-            </div>
+            <DepositSourceConstellation
+              sources={sourceStars}
+              selectedId={selectedId}
+              onSelect={chooseSource}
+              loading={loadingBalances || loadingMonadBalance}
+            />
           </div>
         </div>
       ) : isMonadSelected ? null : quote ? (
@@ -1071,6 +1043,7 @@ export function CrossChainDepositPanel({
         </div>
       ) : (
         <div key="amount" className="deposit-stage-screen">
+          {selectedStar ? <DepositSelectedSource source={selectedStar} /> : null}
           <button
             type="button"
             className="deposit-lab-back"
@@ -1125,6 +1098,9 @@ export function CrossChainDepositPanel({
       )}
       {isMonadSelected && address && !session ? (
         <div className="deposit-stage-screen" hidden={sourceView !== "amount" || fundingNeeded}>
+          {selectedStar && sourceView === "amount" && !fundingNeeded ? (
+            <DepositSelectedSource source={selectedStar} />
+          ) : null}
           <button
             type="button"
             className="deposit-lab-back"

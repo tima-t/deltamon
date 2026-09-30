@@ -5,7 +5,18 @@ import Link from "next/link";
 import { showReturnRouteAfterDeposit } from "@/lib/depositConfirmation";
 import { DepositJourney } from "./DepositJourney";
 import { DepositRoute } from "./DepositRoute";
+import {
+  DepositSourceConstellation,
+  DepositSelectedSource,
+  type DepositSourceStar,
+} from "./DepositSourceConstellation";
 import { DepositStepIndicator, type DepositStep } from "./DepositStepIndicator";
+
+const mockSources: DepositSourceStar[] = [
+  { id: "monad", name: "Monad", balance: "2240000", decimals: 6 },
+  { id: "base", name: "Base", balance: "2420000", decimals: 6 },
+  { id: "polygon", name: "Polygon", balance: "310000", decimals: 6 },
+];
 
 type LabStage =
   | "connect"
@@ -84,13 +95,19 @@ const routePhases = [
   },
 ] as const;
 
-export function DepositFlowLab() {
-  const [stage, setStage] = useState<LabStage>("connect");
+export function DepositFlowLab({
+  initialStage = "connect",
+}: {
+  initialStage?: "connect" | "source";
+}) {
+  const [stage, setStage] = useState<LabStage>(initialStage);
   const [source, setSource] = useState("Monad");
   const [amount, setAmount] = useState("");
   const [errorAt, setErrorAt] = useState<"none" | "approval" | "deposit" | "vault">("none");
   const [routeStudy, setRouteStudy] = useState(false);
-  const valid = Number(amount) > 0 && Number(amount) <= 250;
+  const sourceStar = mockSources.find((item) => item.name === source) ?? mockSources[0]!;
+  const sourceBalance = Number(sourceStar.balance) / 10 ** sourceStar.decimals;
+  const valid = Number(amount) > 0 && Number(amount) <= sourceBalance;
   const crossChain = source !== "Monad";
   const routePhase = crossChain ? routePhases.find((phase) => phase.stage === stage) : undefined;
   const currentStep: DepositStep =
@@ -166,6 +183,12 @@ export function DepositFlowLab() {
             <button type="button" onClick={reset}>
               Start again
             </button>
+            <button type="button" onClick={() => setStage("source")}>
+              Inspect source atlas
+            </button>
+            <Link className="deposit-lab-source-link" href="/deposit-lab/source">
+              Direct source preview ↗
+            </Link>
           </div>
           <section className="deposit-lab-route-controls" aria-labelledby="route-study-heading">
             <h2 id="route-study-heading" className="deposit-kicker">
@@ -255,36 +278,32 @@ export function DepositFlowLab() {
                   <p className="deposit-kicker">01 / CHOOSE THE STARTING POINT</p>
                   <h3>Your USDC starts here.</h3>
                   <p>Choose the network where your USDC is held.</p>
-                  <div className="deposit-source-list">
-                    {["Monad", "Base", "Ethereum"].map((chain) => (
-                      <button
-                        key={chain}
-                        type="button"
-                        className="deposit-source-option"
-                        aria-pressed={source === chain}
-                        onClick={() => {
-                          setSource(chain);
-                          setStage("amount");
-                        }}
-                      >
-                        <span className="deposit-source-monogram">{chain[0]}</span>
-                        <span className="min-w-0 flex-1">{chain}</span>
-                        <span className="font-data">250 USDC</span>
-                        <span className="deposit-source-radio">{source === chain ? "●" : "○"}</span>
-                      </button>
-                    ))}
-                  </div>
+                  <DepositSourceConstellation
+                    sources={mockSources}
+                    selectedId={sourceStar.id}
+                    onSelect={(id) => {
+                      const next = mockSources.find((item) => item.id === id);
+                      if (!next) return;
+                      if (source !== next.name) setAmount("");
+                      setSource(next.name);
+                      setStage("amount");
+                    }}
+                  />
                 </div>
               ) : null}
               {stage === "amount" ? (
                 <div className="deposit-form">
+                  <DepositSelectedSource source={sourceStar} />
                   <div className="deposit-form-heading">
                     <div>
                       <span className="deposit-kicker">02 / SET THE AMOUNT</span>
                       <h3>Your USDC in.</h3>
                     </div>
-                    <button className="deposit-balance-button" onClick={() => setAmount("250")}>
-                      Use balance · 250 USDC
+                    <button
+                      className="deposit-balance-button"
+                      onClick={() => setAmount(String(sourceBalance))}
+                    >
+                      Use balance · {sourceBalance} USDC
                     </button>
                   </div>
                   <label className="deposit-amount-label">
@@ -302,7 +321,7 @@ export function DepositFlowLab() {
                       </span>
                     </div>
                   </label>
-                  {Number(amount) > 250 ? (
+                  {Number(amount) > sourceBalance ? (
                     <p role="alert" className="mt-2 text-short">
                       More than your simulated balance.
                     </p>
