@@ -7,8 +7,6 @@
 #
 # NEXT_PUBLIC_* values are read at build time and baked into the client bundle, so they are build
 # arguments here rather than runtime variables. Changing one means rebuilding.
-#
-# syntax=docker/dockerfile:1
 FROM node:24-alpine AS base
 ENV PNPM_HOME=/pnpm
 ENV PATH="$PNPM_HOME:$PATH"
