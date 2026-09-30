@@ -67,10 +67,6 @@ const EnvSchema = z.object({
     ),
 
   /**
-   * Where automation state lives: the pipeline's steps, its config, and the activity log. Without
-   * it the automation refuses to run rather than risk replaying steps it cannot remember.
-   */
-  /**
    * Signs the manager wallet's own transactions: approving AUSD and depositing it into Perpl as
    * collateral. Separate from the admin key and just as sensitive, since the manager holds vault
    * money the vault cannot claw back.
@@ -92,6 +88,11 @@ const EnvSchema = z.object({
       .regex(/^0x[0-9a-fA-F]{40}$/)
       .optional(),
   ),
+  /**
+   * Where automation state lives: the pipeline's steps, its config, the console's sessions and the
+   * activity log. Without it the automation stays idle rather than risk replaying a step it cannot
+   * remember, and the Automations tab reports that storage is not configured.
+   */
   MONGO_CONNECTION_STRING: z.preprocess(emptyToUndefined, z.string().optional()),
   MONGO_DB_NAME: z.string().default("deltamon"),
   /**
