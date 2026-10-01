@@ -95,6 +95,10 @@ async function scanVaultEvents(vault: Address, config: AutomationConfig): Promis
 
       if (spec.kind !== "vault.deposit") continue;
       const assets = typeof log.args?.assets === "bigint" ? log.args.assets : 0n;
+      // The feed records deposits whether or not the automation is on, but a run must not be
+      // created while it is off: no step would advance, and the record would sit waiting to
+      // execute against a stale deposit the moment someone flipped the switch.
+      if (!config.enabled) continue;
       if (config.flowPipelinePeriod !== "deposit" || assets === 0n) continue;
       await startFlow(
         `deposit:${log.transactionHash}:${log.logIndex}`,

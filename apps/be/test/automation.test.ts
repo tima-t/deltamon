@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
 import { AutomationConfigSchema, DEFAULT_AUTOMATION_CONFIG } from "@deltamon/shared";
 
 import { windowKey } from "../src/services/automationSchedule.js";
@@ -64,5 +65,21 @@ describe("the pipeline's shape", () => {
     // And the AUSD has to reach the manager before the manager can deposit it.
     expect(order.indexOf("fundPerpManager")).toBeLessThan(order.indexOf("approvePerplCollateral"));
     expect(order.indexOf("swapUsdcForMon")).toBe(0);
+  });
+});
+
+describe("the enabled switch", () => {
+  it("is checked before a deposit can start a run", async () => {
+    const src = await readFile(
+      new URL("../src/services/automationRunner.ts", import.meta.url),
+      "utf8",
+    );
+    const scanner = src.slice(src.indexOf("async function scanVaultEvents"), src.indexOf("async function blockTimes"));
+    const guard = scanner.indexOf("if (!config.enabled) continue;");
+    const start = scanner.indexOf("await startFlow(");
+    // The feed still records deposits while the automation is off; only the run must not begin.
+    expect(guard).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(start);
+    expect(scanner).toContain("recordActivity(");
   });
 });
