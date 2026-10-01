@@ -9,6 +9,7 @@ import {
   AutomationError,
   fetchAutomationConfig,
   fetchFlows,
+  impliedLeverage,
   requestAdminChallenge,
   saveAutomationConfig,
   verifyAdminSignature,
@@ -135,6 +136,7 @@ export function AutomationPanel() {
   if (!current) return <p className="text-muted text-sm">Reading the automation config…</p>;
 
   const set = (patch: Partial<Draft>) => setDraft({ ...current, ...patch });
+  const implied = impliedLeverage(current.monAusdSplitRatio);
 
   return (
     <div className="grid items-start gap-5 lg:grid-cols-2">
@@ -275,12 +277,13 @@ export function AutomationPanel() {
           />
           <span className="text-muted mt-1 block text-xs">
             A {(current.monAusdSplitRatio * 100).toFixed(0)}/
-            {(100 - current.monAusdSplitRatio * 100).toFixed(0)} split implies about{" "}
-            {current.monAusdSplitRatio < 1
-              ? (current.monAusdSplitRatio / (1 - current.monAusdSplitRatio)).toFixed(2)
-              : "∞"}
-            x. Perpl is funded outside the pipeline, so the short fails if its collateral cannot
-            cover this.
+            {(100 - current.monAusdSplitRatio * 100).toFixed(0)} split implies{" "}
+            {implied === null ? "no workable leverage" : `about ${implied.toFixed(2)}x`}
+            {implied !== null && Math.abs(current.shortLeverage / 100 - implied) > 0.05
+              ? ", so this setting leaves collateral idle and moves liquidation closer"
+              : ""}
+            . Perpl is funded outside the pipeline, so the short fails if its collateral cannot
+            cover it.
           </span>
         </label>
 

@@ -35,6 +35,19 @@ If you would rather stay on Railpack, override the commands instead: build with 
 
 Deploy the backend first: the frontend bakes its URL in at build time.
 
+### Watch paths
+
+If you set watch paths so a service only rebuilds for its own changes, match the files that
+actually exist. `apps/fe/**/*.ts` excludes every React component, because `.tsx` does not match
+`*.ts`: the frontend then never rebuilds for a UI change and serves a stale image indefinitely.
+
+| Service  | Watch paths                                          |
+| -------- | ---------------------------------------------------- |
+| Backend  | `apps/be/**`, `packages/shared/**`, `pnpm-lock.yaml` |
+| Frontend | `apps/fe/**`, `packages/shared/**`, `pnpm-lock.yaml` |
+
+Both apps compile `@deltamon/shared`, so a change there has to rebuild both.
+
 ## Backend variables
 
 Railway injects `PORT`. The server already defaults `HOST` to `0.0.0.0`, so it binds correctly

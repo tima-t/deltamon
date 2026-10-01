@@ -112,3 +112,14 @@ export const verifyAdminSignature = (address: string, nonce: string, signature: 
     method: "POST",
     body: JSON.stringify({ address, nonce, signature }),
   }) as Promise<{ token: string; address: string; expiresAt: string; ttlMs: number }>;
+
+/**
+ * The leverage a split implies: shorting the staked MON against the AUSD left over needs
+ * ratio / (1 - ratio). Below it the order cannot be margined, above it collateral sits idle and
+ * liquidation moves closer, so this is the setting to match rather than beat.
+ */
+export function impliedLeverage(monAusdSplitRatio: number): number | null {
+  if (monAusdSplitRatio <= 0) return null;
+  if (monAusdSplitRatio >= 1) return null; // nothing left to post as collateral
+  return monAusdSplitRatio / (1 - monAusdSplitRatio);
+}
