@@ -21,9 +21,9 @@ export function StatsRow({ stats }: { stats: VaultStats }) {
       hint: "Actual share of vault value",
     },
     {
-      label: "Capital with manager",
+      label: "Short backing capital",
       value: formatUsd(stats.hedge.managerCapitalUsd, { compact: true }),
-      hint: "Backing the short; not its notional",
+      hint: "Outside the vault; not the short size",
     },
   ];
   return (

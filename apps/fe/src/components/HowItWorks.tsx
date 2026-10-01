@@ -6,12 +6,12 @@ const steps = [
     body: "Deposit on Monad, or choose a supported source chain when routing is enabled. You receive sdMON shares for your claim on the vault.",
   },
   {
-    title: "Put MON to work",
-    body: "The vault holds MON and can stake it. Its actual allocation changes as deposits, exits, prices and manager decisions change.",
+    title: "Stake MON",
+    body: "The vault allocates part of its assets to MON and stakes it. The amount can change as deposits, exits, and prices change.",
   },
   {
     title: "Offset the exposure",
-    body: "Capital sent to a perp manager supports a MON short. The manager reports its size; the engine compares that short with the MON held.",
+    body: "An automated process opens an offsetting MON short. Check its latest reported size and update time against the MON held by the vault.",
   },
 ];
 
@@ -20,13 +20,14 @@ export function HowItWorks() {
     <section id="how" className="counter-how mx-auto w-full max-w-7xl px-5 py-16 sm:px-8">
       <p className="counter-section-index">03 / HOW THIS ONE WORKS</p>
       <h2>
-        Two sides.
+        The MON strategy.
         <br />
-        <em>One honest picture.</em>
+        <em>Step by step.</em>
       </h2>
       <p className="counter-how-intro">
-        The counterweight is a way to understand the idea. The short&apos;s backing capital and the
-        short&apos;s actual size are different numbers. Our instrument shows the real position.
+        The vault holds MON and aims to reduce its price exposure with a short. The position above
+        shows the MON held and the reported short separately. It estimates their difference only
+        when the short report is current.
       </p>
       <ol className="counter-story-grid mt-10 grid gap-6 sm:grid-cols-3">
         {steps.map((s, i) => (
@@ -42,13 +43,13 @@ export function HowItWorks() {
       </ol>
       <details className="panel counter-example mt-6 p-6 sm:p-8">
         <summary className="cursor-pointer text-lg font-semibold">
-          How can a 60/40 funding mix be delta neutral?
+          Why is the backing capital smaller than the short?
         </summary>
         <p className="text-muted mt-4 max-w-3xl text-sm leading-relaxed">
           For example, $60 of MON held can be offset by a $60 MON short backed by $40 of capital.
-          The short uses 1.5× notional relative to that capital. The plate compares the two $60
-          exposures; the $40 is a separate capital account. Actual allocation and leverage can
-          change, and live readings need a current manager report.
+          The short is larger than the capital backing it. The plate compares the two $60 positions;
+          the $40 is shown separately. Actual amounts can change, and a live comparison needs a
+          current short report.
         </p>
         <figure
           className="position-plate faq-exposure-plate"
@@ -93,14 +94,14 @@ export function HowItWorks() {
               <div className="position-graphic-scale" aria-hidden="true">
                 <span>VAULT SIDE</span>
                 <span>SAME USD SCALE</span>
-                <span>MANAGER SIDE</span>
+                <span>SHORT REPORT</span>
               </div>
             </div>
             <div className="position-reading position-reading-short">
               <span className="position-reading-index">02 / EXAMPLE SHORT</span>
-              <span className="position-reading-name">MON short notional</span>
+              <span className="position-reading-name">MON short size</span>
               <strong>$60</strong>
-              <p>Manager side</p>
+              <p>Reported short</p>
             </div>
           </div>
           <figcaption className="position-plate-foot">

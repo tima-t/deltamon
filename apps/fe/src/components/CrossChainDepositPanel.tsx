@@ -18,7 +18,7 @@ import {
   parseUnits,
   type Address,
 } from "viem";
-import { ADDRESSES } from "@deltamon/shared";
+import { ADDRESSES, deltaMonVaultAbi, getDeployment } from "@deltamon/shared";
 import { sourceChainById } from "@/lib/crosschain/chains";
 import type { FundedAsset } from "@/lib/crosschain/catalog";
 import {
@@ -155,6 +155,15 @@ export function CrossChainDepositPanel({
   const { switchChainAsync } = useSwitchChain();
   const { signMessageAsync } = useSignMessage();
   const { writeContractAsync } = useWriteContract();
+  const vault = (process.env.NEXT_PUBLIC_VAULT_ADDRESS || getDeployment(143)?.vault) as
+    Address | undefined;
+  const { data: performanceFeeBps } = useReadContract({
+    chainId: 143,
+    address: vault,
+    abi: deltaMonVaultAbi,
+    functionName: "performanceFeeBps",
+    query: { enabled: Boolean(vault) },
+  });
   const [assets, setAssets] = useState<FundedAsset[]>([]);
   const [loadingBalances, setLoadingBalances] = useState(false);
   const balanceRequest = useRef(0);
@@ -991,7 +1000,7 @@ export function CrossChainDepositPanel({
           </button>
           <div className="deposit-review space-y-2 text-sm">
             <p className="deposit-kicker">03 / REVIEW BEFORE SIGNING</p>
-            <h4>Check both sides.</h4>
+            <h4>Review your route.</h4>
             <p className="text-muted">
               Send {amountText} USDC on {selected?.chainName}. The vault will receive{" "}
               {formatUnits(BigInt(quote.depositAmount), 6)} USDC on Monad.
@@ -1026,6 +1035,13 @@ export function CrossChainDepositPanel({
             <p className="text-muted">
               You will sign an authorization and send USDC on {selected?.chainName}. Source-chain
               gas is required; no Monad gas is needed.
+            </p>
+            <p className="text-muted">
+              {performanceFeeBps === undefined
+                ? "The current performance fee rate is unavailable."
+                : performanceFeeBps === 0
+                  ? "No performance fee applies when you redeem."
+                  : `A ${performanceFeeBps / 100}% performance fee applies to profit when you redeem.`}
             </p>
             <button
               type="button"

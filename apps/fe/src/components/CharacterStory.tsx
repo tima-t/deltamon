@@ -62,7 +62,7 @@ export function CharacterStory() {
         <div className="counter-lore-chapters">
           <p>
             <span>THE DELTAMON FIELD BOOK</span>
-            <strong>Chapter 01 follows MON and a manager-run short.</strong> If more strategies join
+            <strong>Chapter 01 follows MON and an offsetting short.</strong> If more strategies join
             the book, each will have its own exposures, measurements, and risks.
           </p>
           <a href="#how">

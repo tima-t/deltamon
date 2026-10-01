@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { formatUnits, parseUnits, type Address } from "viem";
-import { useAccount, useReadContracts } from "wagmi";
+import { useAccount, useReadContract, useReadContracts } from "wagmi";
 import { getDeployment } from "@deltamon/shared";
 import { redemptionPayout } from "@/lib/positionFeedback";
 import { DEPOSIT_CONFIRMED_EVENT } from "@/lib/depositConfirmation";
@@ -139,6 +139,19 @@ export function PositionPanel() {
   const { openEntry } = useWalletEntry();
   const vault = (process.env.NEXT_PUBLIC_VAULT_ADDRESS || getDeployment(143)?.vault) as
     Address | undefined;
+  const { data: performanceFeeBps } = useReadContract({
+    address: vault,
+    abi: VAULT_ABI,
+    functionName: "performanceFeeBps",
+    chainId: 143,
+    query: { enabled: Boolean(vault) },
+  });
+  const performanceFeeText =
+    performanceFeeBps === undefined
+      ? "The current performance fee rate is unavailable."
+      : Number(performanceFeeBps) === 0
+        ? "No performance fee applies."
+        : `A ${Number(performanceFeeBps) / 100}% performance fee applies only to profit.`;
   const [amountText, setAmountText] = useState("");
   const [intent, setIntent] = useState<PositionIntent | null>(null);
   const intentRef = useRef<PositionIntent | null>(null);
@@ -192,14 +205,14 @@ export function PositionPanel() {
         <div>
           <p className="eyebrow">The return route / Strategy 01</p>
           <h2 id="return-route-title" tabIndex={-1} className="mt-2 text-2xl font-semibold">
-            Your exit
+            See what you
             <br />
-            <em>stays visible.</em>
+            <em>can redeem now.</em>
           </h2>
           <p className="text-muted mt-2 max-w-2xl text-sm">
-            Redeem straight out of the vault&apos;s idle USDC. If the book is deployed and there is
-            not enough, you wait for the admin to unwind, and you can see exactly how much is
-            available.
+            Redemptions use the vault&apos;s available USDC. If there is not enough for your full
+            position, you can redeem the available portion and wait for the admin to return more
+            funds to the vault.
           </p>
         </div>
         <span className="status-pill" data-tone="muted">
@@ -263,7 +276,7 @@ export function PositionPanel() {
             <h3 className="text-lg font-semibold">Redeem</h3>
             <p className="text-muted mt-1 text-xs">
               The vault currently has {data?.[3]?.status === "success" ? fmtUsdc(liquidity) : "—"}{" "}
-              USDC available for exits. A performance fee applies only to profit.
+              USDC available for exits. {performanceFeeText}
             </p>
             <label className="mt-4 block text-sm" htmlFor="redeem-amount">
               Amount in sdMON

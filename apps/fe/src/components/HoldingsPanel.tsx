@@ -21,8 +21,8 @@ export function HoldingsPanel({ stats }: { stats: VaultStats }) {
       color: "var(--ink-muted)",
     },
     {
-      name: "Manager book equity",
-      detail: "Capital sent to managers, plus or minus the reported result",
+      name: "Short account value",
+      detail: "Capital held outside the vault, plus or minus its reported result",
       value: hedge.managerEquityUsd,
       color: "var(--exposure-short)",
     },
@@ -77,12 +77,12 @@ export function HoldingsPanel({ stats }: { stats: VaultStats }) {
       <div className="holdings-ledger-note">
         <span aria-hidden="true">!</span>
         <p>
-          <strong>Assets are not exposure.</strong> A smaller amount of manager capital may support
-          a short equal to the MON held. Short size comes from the manager report; vault holdings
-          come from onchain reads.
+          <strong>Backing capital is not short size.</strong> A smaller amount of capital may
+          support a short equal to the MON held. The account reports the short size; the
+          vault&apos;s MON holdings are read onchain.
         </p>
       </div>
-      <div className="holdings-ledger-footer">MEASURE THE LONG ↔ VERIFY THE SHORT</div>
+      <div className="holdings-ledger-footer">MON HELD ↔ SHORT REPORTED</div>
     </section>
   );
 }

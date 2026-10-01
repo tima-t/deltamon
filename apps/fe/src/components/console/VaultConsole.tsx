@@ -168,7 +168,7 @@ export function VaultConsole() {
                   </span>
                   <strong>{entry.name}</strong>
                   <span className="console-vault-description">
-                    MON exposure and a manager run hedge, viewed as one vault book.
+                    MON holdings and the reported short, viewed as one vault position.
                   </span>
                   <span className="console-vault-address">
                     {shortAddr(entry.address)} <span aria-hidden="true">↗</span>

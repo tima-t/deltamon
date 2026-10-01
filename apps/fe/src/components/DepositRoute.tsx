@@ -42,8 +42,8 @@ export function DepositRoute({
       </div>
       {!compact ? (
         <p className="deposit-route-foot">
-          MON allocation and the manager-run short are handled after entry. Your shares represent
-          the vault, not a fixed MON amount or a guaranteed hedge.
+          Your USDC enters the vault first. MON allocation and the offsetting short happen
+          afterward. Your shares represent the whole vault, not a fixed amount of MON.
         </p>
       ) : null}
     </div>

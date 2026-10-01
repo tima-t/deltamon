@@ -46,7 +46,7 @@ export function BalanceEngine({ stats }: { stats: VaultStats }) {
   return (
     <figure
       className="position-plate"
-      aria-label={`Exposure plate. MON held ${formatUsd(hedge.longExposureUsd)}. Manager-reported MON short ${shortKnown ? formatUsd(hedge.shortExposureUsd!) : "unavailable"}. Net MON exposure ${shownDelta === null ? "unavailable" : `${(shownDelta / 100).toFixed(2)} percent`}. ${status}.`}
+      aria-label={`Exposure plate. MON held ${formatUsd(hedge.longExposureUsd)}. Reported MON short ${shortKnown ? formatUsd(hedge.shortExposureUsd!) : "unavailable"}. Net MON exposure ${shownDelta === null ? "unavailable" : `${(shownDelta / 100).toFixed(2)} percent`}. ${status}.`}
     >
       <div className="position-plate-topline">
         <span>DELTAMON / FIELD INSTRUMENT 01</span>
@@ -63,7 +63,9 @@ export function BalanceEngine({ stats }: { stats: VaultStats }) {
             <i aria-hidden="true" /> {status}
           </span>
           <span className="position-plate-report">
-            {illustrative ? "No live report in this example" : `Manager report · ${reportText}`}
+            {illustrative
+              ? "No live report in this example"
+              : `Short position report · ${reportText}`}
           </span>
         </div>
       </div>
@@ -84,7 +86,7 @@ export function BalanceEngine({ stats }: { stats: VaultStats }) {
           <svg
             viewBox="0 0 520 340"
             role="img"
-            aria-label={`Equal-scale curved readings: MON held ${formatUsd(hedge.longExposureUsd)}, manager-reported MON short ${shortKnown ? formatUsd(hedge.shortExposureUsd!) : "unavailable"}. ${status}.`}
+            aria-label={`Equal-scale curved readings: MON held ${formatUsd(hedge.longExposureUsd)}, reported MON short ${shortKnown ? formatUsd(hedge.shortExposureUsd!) : "unavailable"}. ${status}.`}
           >
             <path className="position-arc-track" d={LONG_ARC} />
             <path className="position-arc-track" data-unavailable={!shortDrawable} d={SHORT_ARC} />
@@ -123,15 +125,15 @@ export function BalanceEngine({ stats }: { stats: VaultStats }) {
           <div className="position-graphic-scale" aria-hidden="true">
             <span>{illustrative ? "VAULT SIDE" : "ONCHAIN"}</span>
             <span>SAME USD SCALE</span>
-            <span>MANAGER REPORT</span>
+            <span>SHORT REPORT</span>
           </div>
         </div>
 
         <div className="position-reading position-reading-short">
           <span className="position-reading-index">
-            {illustrative ? "02 / EXAMPLE SHORT" : "02 / MANAGER REPORT"}
+            {illustrative ? "02 / EXAMPLE SHORT" : "02 / SHORT REPORT"}
           </span>
-          <span className="position-reading-name">MON short notional</span>
+          <span className="position-reading-name">MON short size</span>
           <strong>{shortKnown ? formatUsd(hedge.shortExposureUsd!) : "—"}</strong>
           <p>
             {illustrative
@@ -140,7 +142,7 @@ export function BalanceEngine({ stats }: { stats: VaultStats }) {
                 ? hedge.reportAsOf
                   ? `Last reported ${reportText}.`
                   : "Report time unavailable; short size unverified."
-                : "The manager has not supplied a usable short size."}
+                : "No usable short size has been reported."}
           </p>
         </div>
       </div>
@@ -151,37 +153,38 @@ export function BalanceEngine({ stats }: { stats: VaultStats }) {
             !
           </span>
           <div>
-            <strong>WHO HOLDS THE OTHER SIDE?</strong>
+            <strong>WHERE IS THE SHORT HELD?</strong>
             <p>
-              MON is held by the vault. A separate manager controls and reports the short; capital
-              sent to that manager leaves the vault&apos;s direct custody.
+              The short is held in a separate account. Funds allocated to it are outside the
+              vault&apos;s direct control, and its reported size may be delayed or inaccurate.
             </p>
           </div>
         </div>
         <div className="position-plate-book">
-          <span>PERP BOOK / CAPITAL ACCOUNT</span>
+          <span>SHORT ACCOUNT / BACKING CAPITAL</span>
           <strong>{formatUsd(hedge.managerEquityUsd)}</strong>
           <p>
-            {formatUsd(hedge.managerCapitalUsd)} sent to managers
+            {formatUsd(hedge.managerCapitalUsd)} allocated to the short account
             {pnl === null ? "" : ` · ${pnl >= 0 ? "+" : "−"}${formatUsd(Math.abs(pnl))}`}
           </p>
-          <small>This is backing capital, not short notional.</small>
+          <small>This is backing capital, not short size.</small>
         </div>
       </div>
 
       {stats.yield ? (
         <figcaption className="position-plate-yield">
-          <span>{illustrative ? "ILLUSTRATIVE YIELD" : "ESTIMATED YIELD"}</span>
-          <strong>{pct(stats.yield.apyBps)} APY</strong>
+          <span>{illustrative ? "ILLUSTRATIVE RATE" : "RECENT STAKING + FUNDING ESTIMATE"}</span>
+          <strong>{pct(stats.yield.apyBps)} annualized</strong>
           <span>
             Staking {pct(stats.yield.stakingAprBps)} · Funding {pct(stats.yield.fundingAprBps)}
           </span>
           <small>
-            Trailing {stats.yield.windowDays}-day rates, annualized without compounding, over
-            deposited USDC
+            Recent staking rewards and trailing {stats.yield.windowDays}-day funding, simply
+            annualized over deposited USDC
             {stats.yield.principalUsd === null
               ? " (principal still indexing)."
-              : ` (${formatUsd(stats.yield.principalUsd)}).`}
+              : ` (${formatUsd(stats.yield.principalUsd)}).`}{" "}
+            This is an estimate, not a return earned or promised.
           </small>
         </figcaption>
       ) : null}

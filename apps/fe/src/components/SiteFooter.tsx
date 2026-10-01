@@ -1,23 +1,21 @@
-import { HACKATHON } from "@deltamon/shared";
+import { getDeployment } from "@deltamon/shared";
 
 export function SiteFooter() {
+  const vault = process.env.NEXT_PUBLIC_VAULT_ADDRESS || getDeployment(143)?.vault;
+
   return (
     <footer className="border-line mt-auto border-t">
       <div className="text-muted mx-auto flex w-full max-w-7xl flex-col gap-3 px-5 py-8 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-8">
-        <span>
-          Built for{" "}
-          <a href={HACKATHON.url} className="text-ink underline-offset-2 hover:underline">
-            {HACKATHON.name}
-          </a>{" "}
-          · {HACKATHON.track}
-        </span>
+        <span>DeltaMon · MON strategy on Monad</span>
         <div className="flex gap-5">
           <a href="https://github.com/tima-t/deltamon" className="hover:text-ink">
-            Source
+            Source code
           </a>
-          <a href="https://monadvision.com" className="hover:text-ink">
-            Explorer
-          </a>
+          {vault ? (
+            <a href={`https://monadvision.com/address/${vault}`} className="hover:text-ink">
+              Vault contract
+            </a>
+          ) : null}
           <a href="https://docs.monad.xyz" className="hover:text-ink">
             Monad docs
           </a>

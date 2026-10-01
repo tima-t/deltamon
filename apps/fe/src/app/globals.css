@@ -591,14 +591,18 @@ html[data-theme="dark"] .button-primary:hover {
 }
 .counter-hero h1 {
   margin: 0;
-  font-size: clamp(4.3rem, 7.2vw, 7.5rem);
+  font-size: clamp(4rem, 6vw, 5.25rem);
   font-weight: 800;
   line-height: 0.91;
   letter-spacing: -0.09em;
+  word-spacing: 0.12em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 .counter-hero h1 em {
+  display: block;
   color: var(--monad);
+  font-size: 0.76em;
   font-style: normal;
 }
 .counter-hero-intro {
@@ -3654,12 +3658,12 @@ html[data-theme="dark"] .counter-risks h2 em {
     min-height: 640px;
   }
   .counter-hero h1 {
-    font-size: clamp(4rem, 7.8vw, 6rem);
+    font-size: clamp(3rem, 5.8vw, 4rem);
   }
   .counter-mascot {
-    width: 140%;
-    left: -17%;
-    top: 12%;
+    width: 118%;
+    left: -12%;
+    top: 14%;
   }
   .counter-art-label-top {
     right: -5%;
@@ -3772,7 +3776,10 @@ html[data-theme="dark"] .counter-risks h2 em {
     margin-bottom: 22px;
   }
   .counter-hero h1 {
-    font-size: clamp(3.6rem, 13vw, 6rem);
+    font-size: clamp(2.4rem, 10vw, 4.4rem);
+  }
+  .counter-hero h1 em {
+    font-size: 0.85em;
   }
   .counter-hero-intro {
     margin-top: 22px;

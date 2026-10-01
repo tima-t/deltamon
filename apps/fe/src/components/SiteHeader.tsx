@@ -32,7 +32,7 @@ export function SiteHeader() {
             <span className="counter-brand-name">
               DELTAMON<span className="counter-brand-punctuation">!</span>
             </span>
-            <span className="counter-brand-subtitle">TWO SIDES, IN VIEW</span>
+            <span className="counter-brand-subtitle">MON POSITION IN VIEW</span>
           </span>
         </Link>
 

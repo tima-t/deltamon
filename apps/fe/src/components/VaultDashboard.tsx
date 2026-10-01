@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
 import { BalanceEngine } from "./BalanceEngine";
 import { StatsRow } from "./StatsRow";
@@ -20,31 +19,27 @@ export function VaultDashboard() {
             <span className="counter-spark" aria-hidden="true">
               ✳
             </span>{" "}
-            Strategy 01 / the MON counterweight
+            Strategy 01 / MON vault
           </p>
           <h1 id="counter-hero-title">
-            MON moves.
-            <br />
-            <em>
-              We show
-              <br />
-              both sides.
-            </em>
+            MON staked.
+            <em>Short reported.</em>
           </h1>
           <p className="counter-hero-intro">
-            DeltaMon puts USDC to work in MON and tracks an offsetting, manager-run short. You own
-            sdMON shares. The position, the report time, and the risks stay in view.
+            Deposit USDC into a MON staking strategy and receive sdMON vault shares. DeltaMon pairs
+            the MON position with an automated short that aims to reduce MON price exposure. See the
+            position, latest short report, and available exit liquidity before you deposit.
           </p>
           <div className="counter-hero-actions">
-            <a href="#deposit" className="counter-primary">
-              Explore the vault <span aria-hidden="true">↗</span>
+            <a href="#vault" className="counter-primary">
+              View the position <span aria-hidden="true">↗</span>
             </a>
             <a href="#how" className="counter-text-link">
-              How the counterweight works <span aria-hidden="true">↗</span>
+              How it works <span aria-hidden="true">↗</span>
             </a>
           </div>
           <p className="counter-hero-footnote">
-            Aiming for low net MON exposure is a target, not a guarantee.
+            The hedge targets low net MON exposure; actual exposure can change.
           </p>
           {SHOW_TIPPET_LORE ? (
             <a className="counter-meet-link" href="#meet-tippet">
@@ -68,9 +63,9 @@ export function VaultDashboard() {
             className="counter-mascot"
           />
           <div className="counter-art-label counter-art-label-bottom">
-            MON LEG <span>↔</span> SHORT LEG
+            MON HELD <span>↔</span> MON SHORT
             <br />
-            <small>Measured separately</small>
+            <small>Shown separately</small>
           </div>
         </div>
         <div className="counter-hero-rail" aria-label="Vault basics">
@@ -91,14 +86,14 @@ export function VaultDashboard() {
           <div>
             <p className="counter-section-index">01 / THE REAL POSITION</p>
             <h2 id="counter-position-title">
-              MON HELD.
+              THE MON
               <br />
-              <em>SHORT REPORTED.</em>
+              <em>POSITION.</em>
             </h2>
           </div>
           <p>
-            Two sides, measured differently. The vault&apos;s MON is read onchain. The short comes
-            from its manager. Their gap is the exposure worth watching.
+            The vault&apos;s MON holdings are read onchain. The short&apos;s latest reported size
+            appears beside them, with its update time. A current report lets you estimate the gap.
           </p>
         </div>
         <div className="counter-engine-wrap">
@@ -124,8 +119,8 @@ export function VaultDashboard() {
               </h3>
               <p className="text-muted mt-3 max-w-sm text-sm">
                 {isOffline
-                  ? "The vault API did not respond. No demo figures are being shown as live data."
-                  : "Fetching onchain holdings and the manager position report."}
+                  ? "Current vault readings are unavailable. Try again shortly."
+                  : "Fetching vault holdings and the latest short position report."}
               </p>
               {isLoading ? (
                 <span className="font-data text-muted mt-4 text-xs">CONNECTING TO MONAD</span>
@@ -138,15 +133,14 @@ export function VaultDashboard() {
             <StatsRow stats={stats} />
             {stats.source === "demo" ? (
               <p className="mt-4 text-xs font-medium" style={{ color: "var(--exposure-short)" }}>
-                Illustrative data until the backend points at a deployed vault and receives a
-                manager position report.
+                Example figures. Live readings require a deployed vault and a short position report.
               </p>
             ) : null}
             <details className="counter-composition" id="vault-composition">
               <summary>
                 <span>
                   <strong>Vault composition</strong>
-                  <small>MON, idle USDC, and manager book equity</small>
+                  <small>MON, idle USDC, and the short account</small>
                 </span>
                 <span aria-hidden="true">↗</span>
               </summary>
@@ -168,7 +162,10 @@ export function VaultDashboard() {
           </div>
           <p>
             Start with USDC. Review the route and expected shares before your wallet signs. A
-            deposit is complete only when the vault confirms it.
+            deposit is complete only when the vault confirms it.{" "}
+            <a href="#risks" className="underline underline-offset-2">
+              Read the risks before depositing.
+            </a>
           </p>
         </div>
         <div id="deposit" className="counter-deposit-wrap">

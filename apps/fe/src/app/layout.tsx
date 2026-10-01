@@ -35,13 +35,13 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
   title: "DeltaMon",
   description:
-    "MON moves. DeltaMon shows both sides: onchain MON holdings, the manager-reported short, and the deposit path for sdMON shares on Monad.",
+    "Deposit USDC into a MON staking strategy and receive sdMON vault shares. See the MON position, latest reported short, and available exit liquidity on Monad.",
   icons: { icon: "/brand/deltamon-mark.svg" },
   openGraph: {
-    title: "DeltaMon · See both sides",
+    title: "DeltaMon · MON staking, short reported",
     description: SHOW_TIPPET_LORE
-      ? "Meet Tippet, the little counterweight. Inspect the real position."
-      : "Meet the counterweight. Inspect the position.",
+      ? "Meet Tippet and inspect the MON holdings, latest short report, and exit liquidity."
+      : "Inspect MON holdings, the latest short report, and available exit liquidity.",
     images: ["/art/balance-engine-social.png"],
   },
 };

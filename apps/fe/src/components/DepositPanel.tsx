@@ -102,6 +102,13 @@ function MonadDepositPanel({
     functionName: "minDeposit",
     query: { enabled: Boolean(vault) },
   });
+  const { data: performanceFeeBps } = useReadContract({
+    chainId: 143,
+    address: vault,
+    abi: deltaMonVaultAbi,
+    functionName: "performanceFeeBps",
+    query: { enabled: Boolean(vault) },
+  });
   const { data: maxDeposit } = useReadContract({
     chainId: 143,
     address: vault,
@@ -153,6 +160,12 @@ function MonadDepositPanel({
     !busy &&
     (!isPasskey || (gasBalance !== undefined && gasBalance.value > 0n));
   const decimals = shareDecimals ?? 18;
+  const performanceFeeText =
+    performanceFeeBps === undefined
+      ? "The current performance fee rate is unavailable"
+      : performanceFeeBps === 0
+        ? "No performance fee applies"
+        : `A ${Number(performanceFeeBps) / 100}% performance fee applies to profit when you redeem`;
   const fundingNeeded = isPasskey && address && (balance === 0n || gasBalance?.value === 0n);
   const hasActionError = Boolean(
     actionError || error || receiptError || receipt?.status === "reverted",
@@ -369,8 +382,8 @@ function MonadDepositPanel({
               Review deposit ↗
             </button>
             <p className="deposit-fineprint">
-              USDC enters the vault first. MON allocation and its manager-run hedge are handled
-              afterward; low net exposure is a target, not a deposit guarantee.
+              The vault allocates your USDC after deposit. The short may not be in place
+              immediately; check the latest reported exposure above.
             </p>
           </>
         ) : null}
@@ -384,7 +397,7 @@ function MonadDepositPanel({
                   ← Edit amount
                 </button>
               </div>
-              <h4>Check both sides.</h4>
+              <h4>Review your deposit.</h4>
               <dl>
                 <div>
                   <dt>You send</dt>
@@ -409,8 +422,7 @@ function MonadDepositPanel({
               </dl>
               <p className="deposit-review-note">
                 Shares are an estimate until the vault confirms. Approval, if needed, is a separate
-                wallet transaction. Network gas is paid separately; the performance fee applies only
-                to profit on exit.
+                wallet transaction. Network gas is paid separately. {performanceFeeText}.
               </p>
             </div>
             {receipt?.status === "success" && lastAction === "approve" && hash ? (
@@ -548,10 +560,10 @@ export function DepositPanel() {
           <h2 id="deposit-title">
             Make your
             <br />
-            <em>first move.</em>
+            <em>deposit.</em>
           </h2>
         </div>
-        <p>Start with USDC. Know where it goes, what you receive, and when it is actually yours.</p>
+        <p>Choose your USDC amount, review the shares you expect, and follow the confirmation.</p>
       </div>
       <DepositRoute source={routeSource} />
       <div className="deposit-docket-form">
