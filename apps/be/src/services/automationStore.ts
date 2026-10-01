@@ -26,12 +26,26 @@ export async function readConfig(): Promise<AutomationConfig> {
   const docs = await collection<ConfigDoc>(collections.config);
   const found = await docs.findOne({ _id: CONFIG_ID });
   if (!found) return DEFAULT_AUTOMATION_CONFIG;
-  const parsed = AutomationConfigSchema.safeParse(found);
+  // Parsed field by field over the defaults, so a document written before a setting existed keeps
+  // everything it does carry. Validating it whole would fail on the missing field and quietly
+  // hand back defaults, which reads to an operator as the automation switching itself off.
+  const parsed = AutomationConfigSchema.partial().safeParse(found);
   if (!parsed.success) {
     logger.warn({ issues: parsed.error.issues }, "stored automation config is invalid");
     return DEFAULT_AUTOMATION_CONFIG;
   }
-  return parsed.data;
+  const merged = { ...DEFAULT_AUTOMATION_CONFIG, ...stripUndefined(parsed.data) };
+  const whole = AutomationConfigSchema.safeParse(merged);
+  if (!whole.success) {
+    logger.warn({ issues: whole.error.issues }, "stored automation config is invalid");
+    return DEFAULT_AUTOMATION_CONFIG;
+  }
+  return whole.data;
+}
+
+/** A field the document omits must not overwrite its default with undefined. */
+function stripUndefined<T extends object>(value: T): Partial<T> {
+  return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as Partial<T>;
 }
 
 export async function writeConfig(

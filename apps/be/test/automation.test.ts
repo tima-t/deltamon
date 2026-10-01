@@ -112,3 +112,28 @@ describe("the minimum idle threshold", () => {
     expect(idleAfter(5, 5, 30)).toBe(40_000_000n);
   });
 });
+
+describe("reading a config written before a setting existed", () => {
+  it("keeps what the document carries and defaults only what it lacks", async () => {
+    const { AutomationConfigSchema } = await import("@deltamon/shared");
+    const stored = {
+      enabled: true,
+      monAusdSplitRatio: 0.7,
+      flowPipelinePeriod: "12h" as const,
+      unbondBufferLevel: 25,
+      shortLeverage: 200,
+      updatedAt: "2026-09-30T00:00:00Z",
+      updatedBy: "0xabc",
+    };
+    // Whole-document validation fails on the field that did not exist yet.
+    expect(AutomationConfigSchema.safeParse(stored).success).toBe(false);
+
+    // Field by field over the defaults, nothing the operator set is lost.
+    const merged = { ...DEFAULT_AUTOMATION_CONFIG, ...AutomationConfigSchema.partial().parse(stored) };
+    const whole = AutomationConfigSchema.parse(merged);
+    expect(whole.enabled).toBe(true);
+    expect(whole.shortLeverage).toBe(200);
+    expect(whole.monAusdSplitRatio).toBe(0.7);
+    expect(whole.minIdleUsdcStart).toBe(DEFAULT_AUTOMATION_CONFIG.minIdleUsdcStart);
+  });
+});
