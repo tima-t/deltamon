@@ -213,6 +213,29 @@ export function AutomationPanel() {
 
         <label className="block">
           <div className="flex items-baseline justify-between">
+            <span className="text-sm">Minimum idle USDC to start</span>
+            <span className="text-sm tabular-nums">
+              {current.minIdleUsdcStart === 0 ? "any deposit" : `$${current.minIdleUsdcStart}`}
+            </span>
+          </div>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={current.minIdleUsdcStart}
+            disabled={!canEdit}
+            onChange={(e) => set({ minIdleUsdcStart: Math.max(0, Number(e.target.value) || 0) })}
+            className="border-line focus:border-monad mt-1 w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none disabled:opacity-50"
+          />
+          <span className="text-muted mt-1 block text-xs">
+            Deposits accumulate until the vault holds this much idle, then one run allocates all of
+            it. Below a dollar the pipeline is skipped either way, since seven transactions cost
+            more than the dust moves.
+          </span>
+        </label>
+
+        <label className="block">
+          <div className="flex items-baseline justify-between">
             <span className="text-sm">Unbond buffer level</span>
             <span className="tabular-nums text-sm">
               {current.unbondBufferLevel === 0 ? "off" : `${current.unbondBufferLevel}%`}
@@ -389,6 +412,7 @@ function stripMeta(config: AutomationConfig): Draft {
     enabled: config.enabled,
     monAusdSplitRatio: config.monAusdSplitRatio,
     flowPipelinePeriod: config.flowPipelinePeriod,
+    minIdleUsdcStart: config.minIdleUsdcStart,
     unbondBufferLevel: config.unbondBufferLevel,
     shortLeverage: config.shortLeverage,
   };

@@ -125,6 +125,12 @@ export const AutomationConfigSchema = z.object({
   monAusdSplitRatio: z.number().min(0).max(1),
   flowPipelinePeriod: FlowPeriodSchema,
   /**
+   * Idle USDC the vault must hold before a run starts, in whole USDC. Deposits accumulate until
+   * the vault is over it, so several small ones add up to one run rather than each paying for
+   * seven transactions. Zero starts on any deposit.
+   */
+  minIdleUsdcStart: z.number().min(0).max(1_000_000),
+  /**
    * Unbond the stake when the perp position's liquidation buffer falls to this percentage.
    * Zero switches the monitor off.
    */
@@ -140,6 +146,7 @@ export const DEFAULT_AUTOMATION_CONFIG: AutomationConfig = {
   enabled: false,
   monAusdSplitRatio: 0.6,
   flowPipelinePeriod: "deposit",
+  minIdleUsdcStart: 0,
   unbondBufferLevel: 20,
   shortLeverage: 150,
   updatedAt: null,

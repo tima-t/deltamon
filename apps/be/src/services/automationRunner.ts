@@ -5,11 +5,11 @@ import { getAdminWallet, publicClient } from "../chain.js";
 import { logger } from "../lib/logger.js";
 import { collection, collections, mongoConfigured } from "../lib/mongo.js";
 import { readConfig, recordActivity } from "./automationStore.js";
-import { startFlow, tickFlows } from "./flowEngine.js";
+import { activeFlows, startFlow, tickFlows } from "./flowEngine.js";
 import { findMarket, sharedSession } from "./perplAccounts.js";
 import { describePosition } from "./perpPositionView.js";
 import { confirm, pinNonce, sendPinned } from "./txRunner.js";
-import { MIN_DEPLOY_USDC, windowKey } from "./automationSchedule.js";
+import { thresholdUnits, windowKey } from "./automationSchedule.js";
 import { VAULT_EVENTS, toActivity } from "./activityEvents.js";
 
 /**
@@ -94,17 +94,25 @@ async function scanVaultEvents(vault: Address, config: AutomationConfig): Promis
       await recordActivity({ ...entry, at: at ?? entry.at });
 
       if (spec.kind !== "vault.deposit") continue;
-      const assets = typeof log.args?.assets === "bigint" ? log.args.assets : 0n;
       // The feed records deposits whether or not the automation is on, but a run must not be
       // created while it is off: no step would advance, and the record would sit waiting to
       // execute against a stale deposit the moment someone flipped the switch.
       if (!config.enabled) continue;
-      if (config.flowPipelinePeriod !== "deposit" || assets === 0n) continue;
+      if (config.flowPipelinePeriod !== "deposit") continue;
+
+      // What a run allocates is everything idle, not the deposit that tripped it: with a
+      // threshold, several small deposits accumulate and all of it should be put to work.
+      const idle = await deployableUsdc(vault);
+      if (idle < thresholdUnits(config.minIdleUsdcStart)) continue;
+      // One run at a time. Two overlapping runs would both allocate the same idle balance and
+      // the second would find it already spent.
+      if ((await activeFlows()).length > 0) continue;
+
       await startFlow(
         `deposit:${log.transactionHash}:${log.logIndex}`,
         "deposit",
         vault,
-        assets,
+        idle,
         config,
       );
     }
@@ -133,8 +141,15 @@ async function blockTimes(logs: { blockNumber: bigint | null }[]): Promise<Map<b
 async function runPeriodic(vault: Address, config: AutomationConfig): Promise<void> {
   if (config.flowPipelinePeriod === "deposit") return;
   const idle = await deployableUsdc(vault);
-  if (idle < MIN_DEPLOY_USDC) return;
-  await startFlow(windowKey(config.flowPipelinePeriod), config.flowPipelinePeriod, vault, idle, config);
+  if (idle < thresholdUnits(config.minIdleUsdcStart)) return;
+  if ((await activeFlows()).length > 0) return;
+  await startFlow(
+    windowKey(config.flowPipelinePeriod),
+    config.flowPipelinePeriod,
+    vault,
+    idle,
+    config,
+  );
 }
 
 /**

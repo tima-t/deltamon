@@ -83,3 +83,32 @@ describe("the enabled switch", () => {
     expect(scanner).toContain("recordActivity(");
   });
 });
+
+describe("the minimum idle threshold", () => {
+  it("converts whole USDC to the asset's six decimals", async () => {
+    const { thresholdUnits } = await import("../src/services/automationSchedule.js");
+    expect(thresholdUnits(30)).toBe(30_000_000n);
+    expect(thresholdUnits(2.5)).toBe(2_500_000n);
+  });
+
+  it("keeps a floor of one dollar even when the threshold is zero", async () => {
+    const { thresholdUnits, MIN_DEPLOY_USDC } = await import(
+      "../src/services/automationSchedule.js"
+    );
+    // A run costs seven transactions; allocating dust loses money on gas alone.
+    expect(thresholdUnits(0)).toBe(MIN_DEPLOY_USDC);
+    expect(thresholdUnits(0.25)).toBe(MIN_DEPLOY_USDC);
+  });
+
+  it("accumulates: two small deposits wait, the third crosses", async () => {
+    const { thresholdUnits } = await import("../src/services/automationSchedule.js");
+    const limit = thresholdUnits(30);
+    const idleAfter = (...deposits: number[]) =>
+      deposits.reduce((sum, d) => sum + BigInt(Math.round(d * 1e6)), 0n);
+    expect(idleAfter(5) >= limit).toBe(false);
+    expect(idleAfter(5, 5) >= limit).toBe(false);
+    expect(idleAfter(5, 5, 30) >= limit).toBe(true);
+    // And the run allocates the whole 40, not just the deposit that tripped it.
+    expect(idleAfter(5, 5, 30)).toBe(40_000_000n);
+  });
+});
