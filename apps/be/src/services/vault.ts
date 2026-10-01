@@ -187,7 +187,7 @@ export async function perpBookNow(monPriceUsd: number) {
   const session = sharedSession();
   if (!session) return null;
   const monMarket = await findMarket("MON").catch(() => null);
-  const { book, reason } = livePerpBook(session.account(), monPriceUsd, monMarket?.id ?? null);
+  const { book, reason } = livePerpBook(session.account(), monPriceUsd, monMarket);
   if (!book && reason) logger.debug({ reason }, "no live perp book");
   return book;
 }

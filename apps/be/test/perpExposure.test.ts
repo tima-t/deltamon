@@ -1,28 +1,51 @@
 import { describe, expect, it } from "vitest";
-import { livePerpBook, shortSizeOf } from "../src/services/perpExposure.js";
-import { toPosition, type PerplAccount, type PerplPosition } from "../src/services/perplSession.js";
+import { livePerpBook } from "../src/services/perpExposure.js";
+import type { PerplAccount, PerplPosition } from "../src/services/perplSession.js";
+import type { MarketConfig } from "../src/services/perplOrders.js";
 
-const MON_MARKET = 10;
+/**
+ * The keeper marks the vault with `pnl = equity - deployed`, so an equity that is short by the
+ * collateral sitting inside a position records a loss that never happened. These fixtures are the
+ * real shapes Perpl sent.
+ */
+
 const NOW = 1_790_600_000;
 
-const position = (p: Partial<PerplPosition>): PerplPosition => ({
-  market: MON_MARKET,
-  size: null,
-  side: null,
-  entryPrice: null,
-  collateral: null,
+const MON: MarketConfig = {
+  id: 10,
+  name: "MON",
+  priceDecimals: 6,
+  sizeDecimals: 0,
+  orderTtlBlocks: 20,
+  isOpen: true,
+  markPrice: 27_583,
+  fundingRate: 0,
+  fundingIntervalSec: 2_580,
+  fundingSum: 82_750,
+  fundingSumScalingExp: 2,
+  maintenanceMargin: 2_000,
+  initialMargin: 1_000,
+  fundingLastAtMs: NOW * 1000,
+};
+
+/** A short as the socket reports it: collateral lives on the position, not in the balance. */
+const shortPosition = (over: Record<string, unknown> = {}): PerplPosition => ({
+  market: 10,
+  size: "983",
+  side: "short",
+  entryPrice: "27583",
+  collateral: "21705047",
   unrealisedPnl: null,
-  raw: {},
-  ...p,
+  raw: { mkt: 10, sd: 2, s: 983, ep: 27_583, c: "21705047", efs: 82_750, lv: 150, ...over },
 });
 
 const account = (p: Partial<PerplAccount> = {}): PerplAccount => ({
   connected: true,
   forwarding: true,
-  availableBalance: "10500000",
+  availableBalance: "5119",
   lockedBalance: "0",
   marginUtilizationPct: 0,
-  positions: [],
+  positions: [shortPosition()],
   openOrders: 0,
   updatedAt: new Date(NOW * 1000).toISOString(),
   lastError: null,
@@ -32,99 +55,66 @@ const account = (p: Partial<PerplAccount> = {}): PerplAccount => ({
   ...p,
 });
 
-describe("reading a short out of a position", () => {
-  it("counts a declared short and ignores a long", () => {
-    expect(shortSizeOf(position({ size: "500", side: "short" }), MON_MARKET)).toBe(500);
-    expect(shortSizeOf(position({ size: "500", side: "long" }), MON_MARKET)).toBe(0);
+describe("equity", () => {
+  it("counts the collateral held inside a position, not just the free balance", () => {
+    const { book } = livePerpBook(account(), 0.027583, MON, NOW);
+    // 0.005119 free plus 21.705047 of collateral, flat at the mark.
+    expect(Number(book!.equity) / 1e6).toBeCloseTo(21.710166, 5);
   });
 
-  it("reads a negative size as a short when no side is given", () => {
-    expect(shortSizeOf(position({ size: "-500" }), MON_MARKET)).toBe(500);
-    expect(shortSizeOf(position({ size: "500" }), MON_MARKET)).toBe(0);
+  it("would otherwise report the whole book as lost", () => {
+    const { book } = livePerpBook(account(), 0.027583, MON, NOW);
+    const deployed = 21_000_000n; // what the vault sent the manager
+    const pnl = book!.equity - deployed;
+    // Free balance alone is 5119 units, which against 21 USDC deployed is a 21 dollar fake loss.
+    expect(pnl).toBeGreaterThan(-1_000_000n);
   });
 
-  it("ignores another market entirely", () => {
-    expect(shortSizeOf(position({ market: 1, size: "-2", side: "short" }), MON_MARKET)).toBe(0);
+  it("moves with the position's unrealised result", () => {
+    // Mark below entry: a short is in profit, and equity rises by size times the difference.
+    const cheaper = { ...MON, markPrice: 26_583 };
+    const { book } = livePerpBook(account(), 0.026583, cheaper, NOW);
+    const flat = livePerpBook(account(), 0.027583, MON, NOW).book!;
+    expect(book!.equity).toBeGreaterThan(flat.equity);
+    expect(Number(book!.equity - flat.equity) / 1e6).toBeCloseTo(983 * 0.001, 4);
   });
 
-  it("says so when the row cannot be read", () => {
-    expect(shortSizeOf(position({ size: null }), MON_MARKET)).toBeNull();
-    expect(shortSizeOf(position({ size: "not a number" }), MON_MARKET)).toBeNull();
+  it("is just the free balance when nothing is open", () => {
+    const { book } = livePerpBook(account({ positions: [] }), 0.027583, MON, NOW);
+    expect(book!.equity).toBe(5_119n);
+    expect(book!.shortNotional).toBe(0n);
   });
 });
 
-describe("the live perp book", () => {
-  it("reports a flat account as a real zero short", () => {
-    const { book } = livePerpBook(account(), 0.029, MON_MARKET, NOW);
-    expect(book).toMatchObject({ equity: 10_500_000n, shortNotional: 0n, asOfSec: BigInt(NOW) });
-  });
-
+describe("short notional", () => {
   it("prices the short with the vault's own MON price", () => {
-    const { book } = livePerpBook(
-      account({ positions: [position({ size: "500", side: "short" })] }),
-      0.03,
-      MON_MARKET,
-      NOW,
-    );
-    // 500 MON at $0.03 is $15.00, in six decimal USDC units.
-    expect(book?.shortNotional).toBe(15_000_000n);
+    const { book } = livePerpBook(account(), 0.03, MON, NOW);
+    expect(book!.shortNotional).toBe(BigInt(Math.round(983 * 0.03 * 1e6)));
   });
 
-  it("adds up several shorts and nets nothing from the longs", () => {
-    const { book } = livePerpBook(
-      account({
-        positions: [
-          position({ size: "300", side: "short" }),
-          position({ size: "-200" }),
-          position({ size: "1000", side: "long" }),
-        ],
-      }),
-      0.02,
-      MON_MARKET,
-      NOW,
-    );
-    expect(book?.shortNotional).toBe(10_000_000n); // 500 MON at $0.02
-  });
-
-  it("counts locked collateral into equity", () => {
-    const { book } = livePerpBook(
-      account({ availableBalance: "4000000", lockedBalance: "6500000" }),
-      0.029,
-      MON_MARKET,
-      NOW,
-    );
-    expect(book?.equity).toBe(10_500_000n);
-  });
-
-  it("withholds the book rather than claim a zero short it cannot verify", () => {
-    const result = livePerpBook(
-      account({ positions: [position({ size: "garbage" })] }),
-      0.029,
-      MON_MARKET,
-      NOW,
-    );
-    expect(result.book).toBeNull();
-    expect(result.reason).toMatch(/could not be read/);
-  });
-
-  it("has nothing to say while the socket is down or unpriced", () => {
-    expect(livePerpBook(account({ connected: false }), 0.029, MON_MARKET, NOW).book).toBeNull();
-    expect(livePerpBook(account({ availableBalance: null }), 0.029, MON_MARKET, NOW).book).toBeNull();
-    expect(livePerpBook(account(), 0, MON_MARKET, NOW).book).toBeNull();
+  it("ignores a long and another market", () => {
+    const longOnly = account({ positions: [shortPosition({ sd: 1 })] });
+    expect(livePerpBook(longOnly, 0.03, MON, NOW).book!.shortNotional).toBe(0n);
+    const elsewhere = account({ positions: [shortPosition({ mkt: 1 })] });
+    expect(livePerpBook(elsewhere, 0.03, MON, NOW).book!.shortNotional).toBe(0n);
   });
 });
 
-describe("toPosition", () => {
-  // A snapshot row as Perpl sent it: `sd` is a PositionType number and the size is unsigned.
-  const frame = { mkt: 10, sd: 2, s: 372, ep: 27634, c: "10281336" };
-
-  it("reads sd 2 as a short, which the book then counts", () => {
-    const parsed = toPosition(frame);
-    expect(parsed.side).toBe("short");
-    expect(shortSizeOf(parsed, MON_MARKET)).toBe(372);
+describe("withholding the book", () => {
+  it("says nothing rather than guess when the socket is down or unpriced", () => {
+    expect(livePerpBook(account({ connected: false }), 0.03, MON, NOW).book).toBeNull();
+    expect(livePerpBook(account({ availableBalance: null }), 0.03, MON, NOW).book).toBeNull();
+    expect(livePerpBook(account(), 0, MON, NOW).book).toBeNull();
   });
 
-  it("reads sd 1 as a long", () => {
-    expect(toPosition({ ...frame, sd: 1 }).side).toBe("long");
+  it("refuses to value an open position without market data", () => {
+    const result = livePerpBook(account(), 0.03, null, NOW);
+    expect(result.book).toBeNull();
+    expect(result.reason).toMatch(/market data/);
+  });
+
+  it("withholds rather than skip a position it cannot read", () => {
+    const broken = account({ positions: [shortPosition({ c: "not a number" })] });
+    expect(livePerpBook(broken, 0.03, MON, NOW).book).toBeNull();
   });
 });
