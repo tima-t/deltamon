@@ -1,15 +1,15 @@
 const risks = [
   [
-    "Hedge and MON price",
-    "The vault targets low net MON exposure, but the short can lag the long as prices and positions move. The engine shows measured drift only when the manager's report is fresh.",
+    "MON exposure can change",
+    "The short can lag the MON held as prices and positions move. DeltaMon shows an exposure estimate only when the latest short report is current.",
   ],
   [
-    "Manager custody and reporting",
-    "Capital sent to a perp manager leaves the vault's direct control. The manager also reports short size offchain. The allocation ceiling and timelocks limit this trust boundary; they do not remove it.",
+    "Funds backing the short",
+    "Funds allocated to the short are held outside the vault's direct control. The separate account reports the short size and value; those reports can be delayed or inaccurate.",
   ],
   [
     "Liquidity and exits",
-    "Exits are paid out of the vault's idle USDC and nothing else. When the book is deployed and idle cash runs short, you can only redeem what is available and wait for the admin to unwind the rest. Nothing in the contract forces that unwind.",
+    "Redemptions use the vault's available USDC. If there is not enough, you can redeem the available portion and wait for the admin to return more USDC to the vault. There is no automatic deadline for that action.",
   ],
   [
     "Oracles and contracts",
@@ -19,12 +19,20 @@ const risks = [
 
 export function Risks() {
   return (
-    <section id="risks" className="mx-auto w-full max-w-7xl px-5 pb-20 sm:px-8">
-      <p className="eyebrow">Read the fine print / 05</p>
-      <h2 className="mt-3 text-3xl font-semibold sm:text-4xl">The risk stays visible.</h2>
+    <section id="risks" className="counter-risks mx-auto w-full max-w-7xl px-5 pb-20 sm:px-8">
+      <p className="counter-section-index">04 / BEFORE YOU DEPOSIT</p>
+      <h2>
+        Know the risks
+        <br />
+        <em>before you act.</em>
+      </h2>
+      <p className="counter-risks-intro">
+        The hedge target, report timing, and available exit liquidity can all change. These are the
+        main limits to understand before depositing.
+      </p>
       <dl className="mt-8 grid gap-4 sm:grid-cols-2">
         {risks.map(([title, body]) => (
-          <div key={title} className="panel p-6">
+          <div key={title} className="panel counter-risk-card p-6">
             <dt className="text-lg font-semibold">{title}</dt>
             <dd className="text-muted mt-2 text-sm leading-relaxed">{body}</dd>
           </div>

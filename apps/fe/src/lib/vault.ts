@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatUnits, isAddress, parseUnits, type Abi, type Address, type Hex } from "viem";
 import {
   useAccount,
@@ -132,7 +132,8 @@ export function readyAtText(effectiveAt?: bigint): string {
 
 export function agoText(timestamp?: bigint): string {
   if (!timestamp || timestamp === 0n) return "never";
-  return `${duration(Math.floor(Date.now() / 1000) - Number(timestamp))} ago`;
+  const elapsed = Math.floor(Date.now() / 1000) - Number(timestamp);
+  return elapsed < 0 ? "future timestamp" : `${duration(elapsed)} ago`;
 }
 
 export function explorerUrl(chainId: number, kind: "tx" | "address", value: string): string {
@@ -140,34 +141,21 @@ export function explorerUrl(chainId: number, kind: "tx" | "address", value: stri
   return base ? `${base}/${kind}/${value}` : "";
 }
 
-// ── the vault the console is pointed at ──
+// ── supported vaults in the console ──
 
-const storageKey = (chainId: number) => `deltamon.vault.${chainId}`;
-
-/** localStorage as an external store, so reading it needs no render-time effect. */
-const listeners = new Set<() => void>();
-
-function subscribeToStored(onChange: () => void) {
-  listeners.add(onChange);
-  window.addEventListener("storage", onChange);
-  return () => {
-    listeners.delete(onChange);
-    window.removeEventListener("storage", onChange);
-  };
+export interface SupportedVault {
+  id: string;
+  name: string;
+  strategy: string;
+  address: Address;
 }
 
-function announceStoredChange() {
-  for (const listener of listeners) listener();
-}
-
-function readStored(chainId: number): Address | null {
-  try {
-    const saved = window.localStorage.getItem(storageKey(chainId));
-    return saved && isAddress(saved) ? (saved as Address) : null;
-  } catch {
-    // private browsing with storage blocked
-    return null;
-  }
+function supportedVaults(chainId: number): SupportedVault[] {
+  const fromEnv = process.env.NEXT_PUBLIC_VAULT_ADDRESS;
+  const address = fromEnv && isAddress(fromEnv) ? fromEnv : getDeployment(chainId)?.vault;
+  return address
+    ? [{ id: "strategy-01", name: "MON / USDC", strategy: "Strategy 01", address }]
+    : [];
 }
 
 export function useVaultChainId(): number {
@@ -177,53 +165,16 @@ export function useVaultChainId(): number {
 
 export function useVaultAddress() {
   const chainId = useVaultChainId();
-  const stored = useSyncExternalStore(
-    subscribeToStored,
-    () => readStored(chainId),
-    () => null,
-  );
-  // False on the server and through hydration, so nothing flashes before storage is readable.
-  const ready = useSyncExternalStore(
-    subscribeToStored,
-    () => true,
-    () => false,
-  );
-
-  const fromEnv = process.env.NEXT_PUBLIC_VAULT_ADDRESS;
-  const fallback =
-    fromEnv && isAddress(fromEnv) ? (fromEnv as Address) : getDeployment(chainId)?.vault;
-
-  const save = useCallback(
-    (next: string) => {
-      if (!isAddress(next)) return false;
-      try {
-        window.localStorage.setItem(storageKey(chainId), next);
-      } catch {
-        // nothing persisted, but the console still points at it for this session
-      }
-      announceStoredChange();
-      return true;
-    },
-    [chainId],
-  );
-
-  const clear = useCallback(() => {
-    try {
-      window.localStorage.removeItem(storageKey(chainId));
-    } catch {
-      // nothing to clear
-    }
-    announceStoredChange();
-  }, [chainId]);
+  const vaults = supportedVaults(chainId);
+  const [selectedId, select] = useState("strategy-01");
+  const selected = vaults.find((entry) => entry.id === selectedId) ?? vaults[0];
 
   return {
-    address: stored ?? fallback,
-    fallback,
+    address: selected?.address,
+    selectedId: selected?.id,
+    vaults,
+    select,
     chainId,
-    ready,
-    isOverride: stored !== null,
-    save,
-    clear,
   };
 }
 

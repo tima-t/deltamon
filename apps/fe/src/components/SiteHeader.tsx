@@ -7,36 +7,77 @@ import { ThemeToggle } from "./ThemeToggle";
 import { useWalletEntry } from "./WalletEntry";
 
 export function SiteHeader() {
-  const { address, chain, isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
   const { openEntry, openAccount, isPasskey } = useWalletEntry();
 
   return (
-    <header className="site-header mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
-      <Link
-        href="/"
-        className="flex items-center gap-3 text-xl font-semibold tracking-tight"
-        aria-label="DeltaMon home"
-      >
-        <Image src="/brand/deltamon-mark.svg" alt="" width={38} height={38} />
-        <span>DeltaMon</span>
-      </Link>
-      <div className="flex items-center gap-2 sm:gap-4">
-        <Link href="/console" className="text-muted hover:text-ink hidden text-sm sm:inline">
-          Console
-        </Link>
-        <span className="text-muted hidden text-sm lg:inline">
-          {isConnected ? (chain?.name ?? "Connected") : "Monad"}
+    <header className="site-header counter-header mx-auto w-full max-w-7xl">
+      <div className="counter-header-register" aria-hidden="true">
+        <span>
+          STRATEGY 01 <span className="counter-register-slash">/</span> MONAD
         </span>
-        <ThemeToggle />
-        <button
-          type="button"
-          onClick={isConnected ? openAccount : openEntry}
-          className="button-primary rounded-lg px-3 py-2 text-xs font-semibold sm:text-sm"
-        >
-          {isConnected && address
-            ? `${isPasskey ? "Passkey · " : ""}${address.slice(0, 6)}…${address.slice(-4)}`
-            : "Get started"}
-        </button>
+        <span className="counter-header-beam">
+          <i />
+          <i />
+        </span>
+        <span>THE BALANCE ENGINE</span>
+      </div>
+
+      <div className="counter-header-main">
+        <Link href="/" className="counter-brand" aria-label="DeltaMon home">
+          <span className="counter-brand-stamp">
+            <Image src="/brand/deltamon-mark.svg" alt="" width={48} height={48} />
+          </span>
+          <span className="counter-brand-copy">
+            <span className="counter-brand-name">
+              DELTAMON<span className="counter-brand-punctuation">!</span>
+            </span>
+            <span className="counter-brand-subtitle">MON POSITION IN VIEW</span>
+          </span>
+        </Link>
+
+        <nav className="counter-header-nav" aria-label="Primary navigation">
+          <Link href="/#vault" className="counter-header-link">
+            <span className="counter-header-link-index">01</span>
+            <span>The position</span>
+          </Link>
+          <Link href="/#deposit" className="counter-header-link">
+            <span className="counter-header-link-index">02</span>
+            <span>Deposit</span>
+          </Link>
+          <Link href="/console" className="counter-header-link">
+            <span className="counter-header-link-index">03</span>
+            <span>Console</span>
+          </Link>
+        </nav>
+
+        <div className="counter-header-actions">
+          <ThemeToggle />
+          <button
+            type="button"
+            onClick={isConnected ? openAccount : openEntry}
+            className="button-primary counter-header-wallet"
+            aria-label={
+              isConnected && address
+                ? `Open ${isPasskey ? "passkey" : "connected"} wallet ${address.slice(0, 6)}…${address.slice(-4)}`
+                : undefined
+            }
+          >
+            {isConnected && address ? (
+              <span>
+                <span className="counter-wallet-type">
+                  {isPasskey ? "Passkey · " : "Wallet · "}
+                </span>
+                {address.slice(0, 6)}…{address.slice(-4)}
+              </span>
+            ) : (
+              <span>Get started</span>
+            )}
+            <span className="counter-wallet-arrow" aria-hidden="true">
+              ↗
+            </span>
+          </button>
+        </div>
       </div>
     </header>
   );

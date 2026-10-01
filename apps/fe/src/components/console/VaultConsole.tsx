@@ -2,25 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { erc20Abi, isAddress } from "viem";
+import { erc20Abi } from "viem";
 import { useAccount, useReadContract, useReadContracts, useSwitchChain } from "wagmi";
 import { chainById } from "@deltamon/shared";
 import {
   VAULT_ABI,
   addr,
-  agoText,
-  big,
-  bool,
   explorerUrl,
-  fmtBps,
-  fmtMon,
-  fmtPrice,
-  fmtShares,
-  fmtSignedUsdc,
-  fmtUsdc,
-  int,
   shortAddr,
-  untilText,
   useVaultAction,
   useVaultAddress,
   useVaultState,
@@ -32,7 +21,9 @@ import { PerpPositionPanel } from "./PerpPositionPanel";
 import { AutomationPanel } from "./AutomationPanel";
 import { ActivityPanel } from "./ActivityPanel";
 import { UserPanel } from "./UserPanel";
-import { Card, Pill, Stat, TxBanner } from "./ui";
+import { Pill, TxBanner } from "./ui";
+import { ConsoleOverview } from "./ConsoleOverview";
+import { VaultArtwork } from "./VaultArtwork";
 
 type Tab =
   "overview" | "deposit" | "activity" | "manager" | "perp" | "automations" | "admin" | "keeper";
@@ -51,8 +42,7 @@ export function VaultConsole() {
   } = useSwitchChain();
   const lastAutoSwitch = useRef<string | null>(null);
   const queryClient = useQueryClient();
-  const { address: vault, fallback, chainId, ready, isOverride, save, clear } = useVaultAddress();
-  const [draft, setDraft] = useState("");
+  const { address: vault, selectedId, vaults, select, chainId } = useVaultAddress();
   const [tab, setTab] = useState<Tab>("overview");
 
   const { state, refetch, failed } = useVaultState(vault, chainId);
@@ -122,12 +112,6 @@ export function VaultConsole() {
     query: { enabled: Boolean(ausd && vault) },
   });
 
-  const bookValue = big(state.totalAssets);
-  const exitCoverage =
-    bookValue === 0n
-      ? undefined
-      : Number((big(state.availableLiquidity) * 10_000n) / bookValue) / 100;
-
   const tabs: { id: Tab; label: string; show: boolean }[] = [
     { id: "overview", label: "Overview", show: true },
     { id: "deposit", label: "Deposit & withdraw", show: true },
@@ -140,89 +124,102 @@ export function VaultConsole() {
   ];
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-5 pb-16 sm:px-8">
-      <h1 className="pt-4 text-3xl font-semibold tracking-tight">Vault console</h1>
-      <p className="text-muted mt-2 max-w-2xl">
-        Point this at a DeltaMonVault and drive it directly from your wallet. What you can do
-        depends on the address you connect with.
-      </p>
-
-      {/* address bar */}
-      <div className="border-line bg-surface mt-6 rounded-xl border p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="min-w-64 flex-1">
-            <span className="text-muted text-xs">Vault address</span>
-            <input
-              value={draft}
-              placeholder={vault ?? "0x…"}
-              onChange={(e) => setDraft(e.target.value.trim())}
-              className="border-line focus:border-monad mt-1 w-full rounded-md border bg-transparent px-3 py-2 font-mono text-sm outline-none"
-            />
-          </label>
-          <button
-            type="button"
-            disabled={!isAddress(draft)}
-            onClick={() => {
-              if (save(draft)) setDraft("");
-            }}
-            className="bg-monad hover:bg-monad-deep rounded-md px-4 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50"
-          >
-            Use this vault
-          </button>
-          {isOverride ? (
-            <button
-              type="button"
-              onClick={() => clear()}
-              className="border-line hover:border-ink rounded-md border px-3 py-2 text-sm"
-            >
-              Reset to {shortAddr(fallback)}
-            </button>
-          ) : null}
+    <div className="console-page mx-auto w-full max-w-7xl px-5 pb-20 sm:px-8">
+      <div className="console-intro">
+        <div>
+          <span className="console-index">DELTAMON / OPERATIONS</span>
+          <h1>
+            Vault console<span className="console-title-mark">.</span>
+          </h1>
         </div>
+        <p>
+          Read the book, check what is available for exits, and act from your connected wallet.
+          Controls follow your onchain role.
+        </p>
+      </div>
 
-        <div className="text-muted mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-          <span>
-            Vault{" "}
-            {vault ? (
-              <a
-                href={explorerUrl(chainId, "address", vault)}
-                target="_blank"
-                rel="noreferrer"
-                className="font-mono underline underline-offset-2"
+      <section className="console-selector" aria-labelledby="console-selector-title">
+        <div className="console-selector-heading">
+          <div>
+            <span className="console-index">SELECTED INSTRUMENT</span>
+            <h2 id="console-selector-title">Choose a vault</h2>
+          </div>
+          <span className="console-selector-count">
+            {String(vaults.length).padStart(2, "0")} SUPPORTED
+          </span>
+        </div>
+        {vaults.length ? (
+          <div className="console-vault-list">
+            {vaults.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                aria-pressed={selectedId === entry.id}
+                onClick={() => select(entry.id)}
+                className="console-vault-choice"
               >
-                {shortAddr(vault)}
-              </a>
+                <span className="console-vault-art-wrap">
+                  <VaultArtwork />
+                  <span className="console-vault-art-caption">DM / 01</span>
+                </span>
+                <span className="console-vault-copy">
+                  <span className="console-vault-kicker">
+                    {entry.strategy} <span>·</span> {chainById(chainId).name}
+                  </span>
+                  <strong>{entry.name}</strong>
+                  <span className="console-vault-description">
+                    MON holdings and the reported short, viewed as one vault position.
+                  </span>
+                  <span className="console-vault-address">
+                    {shortAddr(entry.address)} <span aria-hidden="true">↗</span>
+                  </span>
+                </span>
+                <span className="console-vault-selected">
+                  <span className="console-selected-dot" />
+                  {selectedId === entry.id ? "VIEWING" : "SELECT"}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="console-vault-empty">
+            No supported vault is configured on {chainById(chainId).name}.
+          </p>
+        )}
+        <div className="console-vault-meta">
+          <span>
+            VAULT{" "}
+            <a
+              href={vault ? explorerUrl(chainId, "address", vault) : undefined}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {shortAddr(vault)}
+            </a>
+          </span>
+          <span>ORACLE {shortAddr(addr(state.oracle))}</span>
+          <span>VENUE {shortAddr(addr(state.spotVenue))}</span>
+          <span>CHAIN {chainId}</span>
+          <span className="console-vault-role">
+            {isConnected ? (
+              <>
+                YOUR ACCESS {isOwner ? <Pill tone="good">admin</Pill> : null}
+                {isKeeper ? <Pill tone="good">keeper</Pill> : null}
+                {!isOwner && !isKeeper ? <Pill tone="flat">depositor</Pill> : null}
+              </>
             ) : (
-              "not set"
+              "CONNECT A WALLET TO ACT"
             )}
           </span>
-          <span>Oracle {shortAddr(addr(state.oracle))}</span>
-          <span>Venue {shortAddr(addr(state.spotVenue))}</span>
-          <span>Chain {chainId}</span>
-          {isConnected ? (
-            <span className="flex items-center gap-2">
-              You are
-              {isOwner ? <Pill tone="good">admin</Pill> : null}
-              {isKeeper ? <Pill tone="good">keeper</Pill> : null}
-              {!isOwner && !isKeeper ? <Pill tone="flat">depositor</Pill> : null}
-            </span>
-          ) : (
-            <span>Connect a wallet to act</span>
-          )}
         </div>
 
-        {ready && !vault ? (
-          <p className="text-short mt-2 text-sm">
-            No vault for chain {chainId} yet. Paste the address above.
-          </p>
-        ) : null}
         {failed ? (
-          <p className="text-short mt-2 text-sm">
-            That address did not answer as a DeltaMonVault on chain {chainId}.
+          <p className="text-short mt-3 text-sm" role="alert">
+            This supported vault did not answer as a DeltaMonVault on chain {chainId}.
           </p>
         ) : null}
         {isConnected && walletChainId !== chainId ? (
-          <p className="text-short mt-2 text-sm">
+          <p className="text-short mt-3 text-sm" role="status">
             Wallet is on {walletChain?.name ?? `chain ${walletChainId}`}. This vault is on{" "}
             {chainById(chainId).name}.{" "}
             {networkSwitchPending
@@ -237,15 +234,15 @@ export function VaultConsole() {
             type="button"
             disabled={busy}
             onClick={() => action.run("acceptOwnership", [], "accept ownership")}
-            className="border-line hover:border-ink mt-3 rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
+            className="console-accept-owner mt-3 disabled:opacity-50"
           >
             Accept ownership
           </button>
         ) : null}
-      </div>
+      </section>
 
       {/* tabs */}
-      <div className="border-line mt-6 flex flex-wrap gap-1 border-b">
+      <nav className="console-tabs" aria-label="Vault console sections">
         {tabs
           .filter((t) => t.show)
           .map((t) => (
@@ -253,107 +250,16 @@ export function VaultConsole() {
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
-              className={`-mb-px border-b-2 px-3 py-2 text-sm transition-colors ${
-                tab === t.id ? "border-monad text-ink" : "text-muted border-transparent"
-              }`}
+              aria-pressed={tab === t.id}
+              className={tab === t.id ? "is-active" : ""}
             >
               {t.label}
             </button>
           ))}
-      </div>
+      </nav>
 
       <div className="mt-6">
-        {tab === "overview" ? (
-          <div className="grid gap-5 lg:grid-cols-2">
-            <Card title="The book">
-              <div className="grid grid-cols-2 gap-4">
-                <Stat label="Total assets" value={`${fmtUsdc(big(state.totalAssets))} USDC`} />
-                <Stat
-                  label="Price per share"
-                  value={fmtUsdc(big(state.pricePerShare))}
-                  hint={`${fmtShares(big(state.totalSupply))} sdMON out`}
-                />
-                <Stat label="Idle USDC" value={fmtUsdc(big(state.usdcBalance))} />
-                <Stat
-                  label="Free for exits"
-                  value={fmtUsdc(big(state.availableLiquidity))}
-                  hint={`${fmtUsdc(big(state.accruedFees))} owed in fees`}
-                />
-                <Stat
-                  label="MON"
-                  value={fmtMon(big(state.totalMon))}
-                  hint={`${fmtMon(big(state.stakedMon))} staked · ${fmtMon(big(state.unstakingMon))} unbonding`}
-                />
-                <Stat
-                  label="MON price"
-                  value={`$${fmtPrice(big(state.monPrice))}`}
-                  hint={
-                    bool(state.oracleIsLive) ? "oracle live" : "oracle down: in-kind exits are open"
-                  }
-                />
-                <Stat
-                  label="AUSD held"
-                  value={fmtUsdc(typeof ausdHeld === "bigint" ? ausdHeld : 0n)}
-                />
-                <Stat
-                  label="Perp book"
-                  value={`${fmtUsdc(big(state.perpEquity))} USDC`}
-                  hint={`${fmtUsdc(big(state.perpDeployed))} sent · mark ${fmtSignedUsdc(big(state.perpReportedPnl))}`}
-                />
-              </div>
-            </Card>
-
-            <Card title="Settings and roles">
-              <div className="grid grid-cols-2 gap-4">
-                <Stat
-                  label="Deposit cap"
-                  value={`${fmtUsdc(big(state.depositCap))} USDC`}
-                  hint={`minimum ${fmtUsdc(big(state.minDeposit))}`}
-                />
-                <Stat label="Performance fee" value={fmtBps(int(state.performanceFeeBps))} />
-                <Stat label="Perp ceiling" value={fmtBps(int(state.maxPerpAllocationBps))} />
-                <Stat label="Swap slippage cap" value={fmtBps(int(state.maxSwapSlippageBps))} />
-                <Stat
-                  label="Perp mark"
-                  value={
-                    bool(state.perpReportIsStale) ? (
-                      <Pill tone="warn">stale</Pill>
-                    ) : (
-                      <Pill tone="good">fresh</Pill>
-                    )
-                  }
-                  hint={`marked ${agoText(big(state.perpReportedAt))}`}
-                />
-                <Stat
-                  label="Exit coverage"
-                  value={
-                    exitCoverage === undefined ? (
-                      "—"
-                    ) : exitCoverage >= 10 ? (
-                      <Pill tone="good">{exitCoverage}% payable</Pill>
-                    ) : (
-                      <Pill tone="warn">{exitCoverage}% payable</Pill>
-                    )
-                  }
-                  hint="share of the book redeemable right now"
-                />
-                <Stat label="Admin" value={shortAddr(owner)} />
-                <Stat label="Keeper" value={shortAddr(keeper)} />
-                <Stat
-                  label="Paused"
-                  value={bool(state.paused) ? <Pill tone="warn">paused</Pill> : "no"}
-                />
-                <Stat label="Whitelist" value={bool(state.whitelistEnabled) ? "on" : "off"} />
-              </div>
-              <div className="text-muted space-y-1 text-sm">
-                <div>Fee change: {untilText(big(state.pendingFeeEffectiveAt))}</div>
-                <div>Perp ceiling change: {untilText(big(state.pendingMaxPerpAllocationAt))}</div>
-                <div>Risk limit change: {untilText(big(state.pendingRiskParamsAt))}</div>
-                <div>Venue change: {untilText(big(state.venueEffectiveAt))}</div>
-              </div>
-            </Card>
-          </div>
-        ) : null}
+        {tab === "overview" ? <ConsoleOverview state={state} ausdHeld={ausdHeld} /> : null}
 
         {vault && tab === "deposit" ? (
           <UserPanel vault={vault} chainId={chainId} state={state} busy={busy} run={action.run} />

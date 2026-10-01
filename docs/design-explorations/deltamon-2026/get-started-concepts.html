@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DeltaMon — Get started, three directions</title>
+    <style>
+      :root { color-scheme: dark; --plum:#27202b; --cream:#f5ecd7; --violet:#6942bb; --lilac:#c4a8fa; --amber:#c58b50; --line:#baa991; }
+      * { box-sizing:border-box; }
+      html { scroll-behavior:smooth; }
+      body { margin:0; background:#16121a; color:#f6efdf; font-family:"IBM Plex Sans",Arial,sans-serif; -webkit-font-smoothing:antialiased; }
+      button { font:inherit; cursor:pointer; }
+      button:focus-visible, a:focus-visible { outline:3px solid #e9bb63; outline-offset:4px; }
+      .mono { font-family:"IBM Plex Mono",ui-monospace,monospace; text-transform:uppercase; letter-spacing:.16em; }
+      .display { font-family:"Bricolage Grotesque",Arial,sans-serif; letter-spacing:-.055em; }
+      .room { max-width:1600px; margin:auto; }
+      .mast { padding:38px clamp(24px,5vw,76px) 31px; border-bottom:1px solid #54485a; display:flex; gap:22px; align-items:flex-end; justify-content:space-between; }
+      .mast .label { color:#bc9ced; font-size:10px; font-weight:700; }
+      .mast h1 { font-size:clamp(32px,4vw,58px); line-height:.95; margin:14px 0 0; max-width:790px; }
+      .mast p { max-width:320px; color:#bdb3c2; font-size:14px; line-height:1.5; margin:0; }
+      .jump { display:flex; gap:8px; padding:16px clamp(24px,5vw,76px); border-bottom:1px solid #54485a; position:sticky; top:0; z-index:20; background:#16121aeb; backdrop-filter:blur(15px); }
+      .jump a { text-decoration:none; color:#e7dbed; border:1px solid #66586c; padding:9px 12px; border-radius:2px; font-size:11px; transition:background .2s,border-color .2s; }
+      .jump a:hover { background:#33283b; border-color:#bf9ff8; }
+      .concept { display:grid; grid-template-columns:minmax(230px,290px) minmax(0,1fr); gap:clamp(26px,4vw,70px); padding:clamp(38px,5vw,76px) clamp(24px,5vw,76px); border-bottom:1px solid #54485a; align-items:center; }
+      .copy { align-self:start; position:sticky; top:90px; }
+      .copy .number { color:#bd9cf3; font-size:11px; font-weight:700; }
+      .copy h2 { font-size:clamp(32px,3vw,48px); line-height:.96; margin:16px 0 16px; }
+      .copy p { font-size:14px; line-height:1.56; color:#c9bfcb; }
+      .copy dl { margin:28px 0 0; border-top:1px solid #54485a; }
+      .copy dt { color:#bd9cf3; font-size:10px; margin-top:18px; }
+      .copy dd { margin:6px 0 0; font-size:13px; line-height:1.5; color:#eee7ed; }
+      .stage { min-height:655px; display:grid; place-items:center; padding:35px; position:relative; overflow:hidden; isolation:isolate; }
+      .stage::before { content:""; position:absolute; inset:0; opacity:.35; z-index:-1; background-image:radial-gradient(#9e8b9e 1px,transparent 1px); background-size:15px 15px; }
+      .stage-label { position:absolute; top:16px; left:19px; color:#d5cad8; font-size:9px; }
+      .stage-note { position:absolute; bottom:16px; right:19px; color:#d5cad8; font-size:9px; }
+      .reopen { display:none; border:1px solid #e5d6f6; background:#2b2130; color:white; padding:15px 19px; }
+      .stage.is-closed .reopen { display:block; }
+      .stage.is-closed .modal { display:none; }
+      .modal { width:min(100%,785px); position:relative; overflow:hidden; box-shadow:0 25px 75px #0008; }
+      .modal button { min-height:44px; }
+      .x { width:42px; height:42px; display:grid; place-items:center; border:1px solid currentColor; background:transparent; color:inherit; font-size:20px; line-height:1; }
+      .choice { text-align:left; display:flex; align-items:center; justify-content:space-between; gap:16px; width:100%; transition:transform .22s cubic-bezier(.2,0,0,1),background .22s,border-color .22s; }
+      .choice:active, .action:active { transform:scale(.96); }
+      .choice strong { display:block; font-family:"Bricolage Grotesque",Arial,sans-serif; font-size:18px; letter-spacing:-.03em; }
+      .choice small { display:block; font-size:12px; line-height:1.38; margin-top:5px; font-weight:400; letter-spacing:0; }
+      .choice .arrow { flex:none; font-size:23px; font-weight:300; line-height:1; }
+      .passkey-pane { display:none; }
+      .modal.is-passkey .choice-pane { display:none; }
+      .modal.is-passkey .passkey-pane { display:block; }
+      .passkey-pane h3 { font-size:clamp(28px,3vw,41px); line-height:1; margin:8px 0 12px; }
+      .passkey-pane p { max-width:420px; font-size:13px; line-height:1.55; margin:0 0 17px; }
+      .passkey-actions { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+      .action { min-height:62px; border:1px solid currentColor; padding:10px 15px; text-align:left; font-weight:700; transition:transform .22s,background .22s; }
+      .back { border:0; background:transparent; color:inherit; text-decoration:underline; padding:14px 0 0; font-size:12px; }
+      .demo-feedback { min-height:16px; font-size:11px; margin:10px 0 0; opacity:.78; }
+
+      /* 01 — a miniature physical counterweight installation */
+      .stage-one { background:#382747; }
+      .one { background:var(--cream); color:var(--plum); border:2px solid var(--plum); box-shadow:11px 11px 0 #6942bb,0 25px 75px #0008; display:grid; grid-template-columns:45% 55%; min-height:500px; }
+      .one .art { position:relative; background:#e4d6bb; overflow:hidden; border-right:2px solid var(--plum); }
+      .one .art::before { content:""; position:absolute; inset:0; background:repeating-linear-gradient(0deg,transparent 0 4px,#27202b08 4px 5px); }
+      .one .art .art-label { position:absolute; top:26px; left:26px; font-size:9px; color:#6d506e; font-weight:700; z-index:2; }
+      .one .art .ring { position:absolute; width:430px; height:430px; left:50%; top:50%; translate:-50% -50%; border:1px solid #bda8aa; border-radius:50%; box-shadow:0 0 0 37px #e4d6bb,0 0 0 38px #bda8aa; }
+      .one .sculpture { position:absolute; width:320px; height:250px; left:50%; top:51%; translate:-50% -50%; filter:drop-shadow(13px 19px 11px #4a34474a); animation:sculpt-in 1.1s both cubic-bezier(.2,0,0,1); }
+      .one .beam { position:absolute; top:69px; left:34px; width:254px; height:15px; border-radius:20px; background:var(--plum); rotate:-12deg; transform-origin:50% 50%; }
+      .one .beam::after { content:""; position:absolute; left:119px; top:4px; width:15px; height:15px; rotate:45deg; background:#6942bb; }
+      .one .stem { position:absolute; top:83px; left:158px; width:2px; height:118px; background:var(--plum); }
+      .one .base { position:absolute; top:197px; left:107px; width:105px; height:8px; border-radius:50%; background:var(--plum); }
+      .one .hang { position:absolute; width:2px; background:var(--plum); transform-origin:top; }
+      .one .hang.left { top:94px; left:68px; height:90px; }
+      .one .hang.right { top:50px; left:285px; height:128px; }
+      .one .weight { position:absolute; display:grid; place-items:center; color:#fff9ed; font-family:Georgia,serif; font-size:25px; }
+      .one .weight.left { top:158px; left:34px; width:70px; height:70px; background:#6942bb; border-radius:49% 51% 55% 45%; rotate:13deg; }
+      .one .weight.right { top:162px; left:255px; width:61px; height:61px; background:#c58b50; border-radius:3px 22px 3px 25px; rotate:-12deg; }
+      .one .art-foot { position:absolute; bottom:25px; left:26px; right:26px; display:flex; justify-content:space-between; gap:10px; border-top:1px solid #9e8e7b; padding-top:10px; color:#695c62; font-size:8px; }
+      .one .content { padding:25px 29px 25px 31px; display:flex; flex-direction:column; min-width:0; }
+      .one .top { display:flex; align-items:start; justify-content:space-between; gap:10px; }
+      .one .top .mono { color:#6942bb; font-size:9px; font-weight:700; }
+      .one h3.main { font-size:clamp(36px,4.3vw,60px); line-height:.89; margin:34px 0 13px; max-width:340px; }
+      .one .intro { font-size:13px; line-height:1.5; color:#5d5360; margin:0 0 25px; max-width:330px; }
+      .one .choices { display:grid; gap:9px; margin-top:auto; }
+      .one .choice { border:1.5px solid #514459; color:var(--plum); background:#f5ecd7; padding:14px 15px; }
+      .one .choice:hover { background:#e4d6f2; border-color:#6942bb; }
+      .one .choice small { color:#655c66; }
+      .one .choice .arrow { color:#6942bb; }
+      .one .passkey-pane { margin-top:auto; }
+      .one .passkey-pane p { color:#655c66; }
+      .one .action { background:transparent; }
+      .one .action:first-child { background:var(--violet); color:white; border-color:var(--violet); }
+      .one .action:hover { background:#e9ddf5; color:var(--plum); }
+
+      /* 02 — an aperture, drawn from light and ink rather than a wallet icon */
+      .stage-two { background:#281a37; }
+      .two { color:#f8f0df; background:#21172d; border:1px solid #8067a5; min-height:535px; }
+      .two::after { content:""; pointer-events:none; position:absolute; inset:0; box-shadow:inset 0 0 0 7px #21172d,inset 0 0 0 8px #5d4a70; }
+      .two .top { display:flex; align-items:center; justify-content:space-between; padding:20px 25px 0; position:relative; z-index:3; }
+      .two .top .mono { font-size:9px; color:#cdb4ee; }
+      .two .x { border-color:#685577; }
+      .two .visual { height:238px; position:relative; overflow:hidden; margin:-12px 30px -20px; }
+      .two .visual::before { content:""; position:absolute; left:50%; top:44%; translate:-50% -50%; width:390px; height:390px; border-radius:50%; background:radial-gradient(circle,#f0d1ac 0 3%,#ca9ff8 4% 5%,#271337 6% 14%,#503570 15% 16%,#21172d 17% 23%,#8e65b8 24% 24.5%,#21172d 25% 34%,#604475 35% 35.6%,transparent 36%),conic-gradient(from 50deg,#cd99ff00,#b48bdf77,#f5d7b633,#cd99ff00,#6f4ca555,#cd99ff00); filter:drop-shadow(0 0 25px #9663d168); animation:iris 12s infinite linear; }
+      .two .visual::after { content:""; position:absolute; left:50%; top:44%; translate:-50% -50%; width:400px; height:400px; background:repeating-conic-gradient(from 0deg,#c7a7ee77 0deg 1deg,transparent 1deg 15deg); mask:radial-gradient(circle,transparent 0 26%,black 27% 29%,transparent 30% 100%); animation:iris-reverse 20s infinite linear; }
+      .two .star { position:absolute; left:50%; top:44%; translate:-50% -50%; width:22px; height:22px; background:#f6e2b9; rotate:45deg; z-index:2; box-shadow:0 0 38px #e4c390; }
+      .two .visual .tiny { position:absolute; bottom:30px; right:12px; font-size:8px; color:#bca4cc; }
+      .two .body { padding:0 34px 30px; position:relative; z-index:2; }
+      .two h3.main { font-size:clamp(35px,4vw,56px); line-height:.91; margin:6px 0 9px; text-align:center; }
+      .two .intro { font-size:12px; line-height:1.5; color:#c8bad0; margin:0 auto 21px; text-align:center; max-width:470px; }
+      .two .choices { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+      .two .choice { background:#30203e; color:#fff7ed; border:1px solid #7e659a; padding:17px; min-height:112px; }
+      .two .choice:hover { background:#49315c; border-color:#d2aeff; }
+      .two .choice small { color:#d1bddc; }
+      .two .choice .arrow { color:#e3b973; align-self:start; }
+      .two .passkey-pane { max-width:540px; margin:0 auto; text-align:center; }
+      .two .passkey-pane p { margin-left:auto; margin-right:auto; color:#c8bad0; }
+      .two .action { background:#30203e; color:white; border-color:#8e6db2; }
+      .two .action:first-child { background:#dec4f9; color:#25172d; border-color:#dec4f9; }
+      .two .action:hover { background:#6d4b8d; color:white; }
+
+      /* 03 — a printed entry folio with a type-driven reveal */
+      .stage-three { background:#584039; }
+      .three { color:#2a2028; background:#f7ead0; border:2px solid #30212f; min-height:506px; box-shadow:12px 12px 0 #c88c53,0 25px 75px #0008; }
+      .three .top { display:flex; justify-content:space-between; align-items:start; padding:20px 25px 0; }
+      .three .top .mono { font-size:9px; color:#6942bb; font-weight:700; }
+      .three .x { border-color:#92806d; }
+      .three .headline { position:relative; padding:20px 26px 21px; min-height:199px; overflow:hidden; }
+      .three .headline::after { content:""; position:absolute; right:-55px; top:-22px; width:255px; height:255px; border-radius:50%; border:35px solid #d8b681; box-shadow:0 0 0 20px #b59bca,0 0 0 21px #2a2028; opacity:.62; }
+      .three .seal { position:absolute; right:75px; top:38px; z-index:1; font-size:74px; color:#6942bb; line-height:1; rotate:-16deg; font-family:Georgia,serif; }
+      .three h3.main { position:relative; z-index:2; font-size:clamp(58px,8vw,107px); line-height:.75; margin:0; max-width:560px; font-weight:900; letter-spacing:-.09em; }
+      .three h3.main span { display:block; margin-left:58px; color:#6942bb; }
+      .three .stripe { height:14px; background:repeating-linear-gradient(90deg,#2a2028 0 22px,#f7ead0 22px 26px,#6942bb 26px 50px,#f7ead0 50px 54px); border-top:2px solid #2a2028; border-bottom:2px solid #2a2028; }
+      .three .lower { padding:24px 25px 24px; }
+      .three .intro { display:flex; gap:20px; align-items:baseline; justify-content:space-between; padding-bottom:20px; }
+      .three .intro strong { font-family:Georgia,serif; font-style:italic; font-size:22px; font-weight:400; white-space:nowrap; }
+      .three .intro span { font-size:12px; color:#62565f; max-width:390px; line-height:1.4; }
+      .three .choices { display:grid; grid-template-columns:1fr 1fr; border:1.5px solid #2a2028; }
+      .three .choice { min-height:118px; border:0; background:#f7ead0; color:#2a2028; padding:17px; align-items:flex-start; }
+      .three .choice + .choice { border-left:1.5px dashed #8b718c; }
+      .three .choice:hover { background:#e8d8bb; }
+      .three .choice small { color:#675b63; }
+      .three .choice .arrow { color:#6942bb; }
+      .three .passkey-pane { padding:0 25px 20px; }
+      .three .passkey-pane p { color:#62565f; }
+      .three .action { background:transparent; }
+      .three .action:first-child { background:#6942bb; color:#fff; border-color:#6942bb; }
+      .three .action:hover { background:#e5d3b8; color:#2a2028; }
+      .three.is-passkey .headline { min-height:145px; }
+      .three.is-passkey h3.main { font-size:clamp(49px,7vw,79px); }
+      .three.is-passkey .lower { display:none; }
+
+      @keyframes sculpt-in { from { opacity:0; transform:rotate(13deg) scale(.87); } to { opacity:1; transform:rotate(0) scale(1); } }
+      @keyframes iris { to { transform:rotate(360deg); } }
+      @keyframes iris-reverse { to { transform:rotate(-360deg); } }
+      @media (max-width:1100px) { .concept { grid-template-columns:1fr; } .copy { position:static; max-width:760px; } .copy dl { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; } .copy dt { margin-top:15px; } .copy dd { grid-row:2; } }
+      @media (max-width:700px) { .mast { display:block; } .mast p { margin-top:15px; } .jump { overflow:auto; } .jump a { flex:none; } .stage { min-height:0; padding:35px 12px; } .stage-label,.stage-note { display:none; } .one { display:block; } .one .art { height:190px; border-right:0; border-bottom:2px solid var(--plum); } .one .sculpture { scale:.65; top:52%; } .one .art-foot { display:none; } .one .content { padding:20px; } .one h3.main { font-size:43px; margin:20px 0 10px; } .one .intro { margin-bottom:16px; } .two .visual { height:180px; margin:-12px 10px -4px; } .two .body { padding:0 17px 20px; } .two h3.main { font-size:37px; } .two .choices { grid-template-columns:1fr; } .two .choice { min-height:86px; } .three .headline { min-height:155px; padding:19px; } .three h3.main { font-size:clamp(54px,11vw,75px); } .three h3.main span { margin-left:30px; } .three .seal { right:20px; font-size:55px; } .three .lower { padding:17px; } .three .intro { display:block; } .three .intro span { display:block; margin-top:7px; } .three .choices { grid-template-columns:1fr; } .three .choice { min-height:89px; } .three .choice + .choice { border-left:0; border-top:1.5px dashed #8b718c; } .passkey-actions { grid-template-columns:1fr; } .copy dl { display:block; } .copy dd { margin-bottom:5px; } }
+      @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; scroll-behavior:auto !important; transition-duration:.01ms !important; } }
+    </style>
+  </head>
+  <body>
+    <main class="room">
+      <header class="mast">
+        <div><span class="mono label">DeltaMon / design room / 01 Oct 2026</span><h1 class="display">Three ways to<br />begin.</h1></div>
+        <p>Interactive art direction studies for the “Get started” popup. Select a passkey card to preview its next step. Wallet controls here are visual prototypes.</p>
+      </header>
+      <nav class="jump mono" aria-label="Concepts"><a href="#counterweight">01 / Counterweight</a><a href="#aperture">02 / Aperture</a><a href="#folio">03 / Folio</a></nav>
+
+      <section class="concept" id="counterweight" aria-labelledby="counterweight-title">
+        <div class="copy"><span class="mono number">Direction 01 / kinetic object</span><h2 class="display" id="counterweight-title">The Counterweight</h2><p>A tiny editorial sculpture turns the existing brand mark into a physical object. The beam arrives, settles imperfectly, and leaves the two wallet choices completely still and equal.</p><dl><dt class="mono">The memorable moment</dt><dd>A miniature mobile seems suspended inside a printed instrument case.</dd><dt class="mono">Art to produce</dt><dd>Custom vector sculpture, subtle paper grain, restrained beam entrance.</dd><dt class="mono">Product fit</dt><dd>Closest to the current warm cream identity. Decorative geometry never claims a live balance.</dd></dl></div>
+        <div class="stage stage-one"><span class="stage-label mono">01 / desktop study</span><button class="reopen" type="button">Open preview ↗</button><div class="modal one" role="group" aria-label="Counterweight Get started concept"><div class="art" aria-hidden="true"><span class="art-label mono">DeltaMon / access study</span><div class="ring"></div><div class="sculpture"><div class="beam"></div><div class="stem"></div><div class="base"></div><div class="hang left"></div><div class="hang right"></div><div class="weight left">◌</div><div class="weight right">·</div></div><div class="art-foot mono"><span>01 / your point of entry</span><span>↓</span></div></div><div class="content"><div class="top"><span class="mono">Strategy 01 / access</span><button class="x" type="button" aria-label="Close preview">×</button></div><div class="choice-pane"><h3 class="main display">A way in,<br />made yours.</h3><p class="intro">Choose the address you want to use. Your position stays with that address.</p><div class="choices"><button class="choice" type="button" data-next="passkey"><span><strong>Continue with passkey</strong><small>Use your device or password manager.</small></span><span class="arrow" aria-hidden="true">↗</span></button><button class="choice" type="button" data-next="wallet"><span><strong>Connect existing wallet</strong><small>Return with an address you already use.</small></span><span class="arrow" aria-hidden="true">↗</span></button></div></div><div class="passkey-pane"><span class="mono" style="color:#6942bb;font-size:9px">01 / passkey</span><h3 class="display">Your passkey wallet.</h3><p>Use the same passkey to return to your position. Creating a new one opens a new wallet address.</p><div class="passkey-actions"><button class="action" type="button" data-demo="existing">Use existing passkey</button><button class="action" type="button" data-demo="create">Create passkey wallet</button></div><button class="back" type="button">← Back to choices</button><p class="demo-feedback" role="status"></p></div></div></div><span class="stage-note mono">Decorative balance / no live reading</span></div>
+      </section>
+
+      <section class="concept" id="aperture" aria-labelledby="aperture-title">
+        <div class="copy"><span class="mono number">Direction 02 / luminous threshold</span><h2 class="display" id="aperture-title">The Aperture</h2><p>The invitation becomes a quiet, almost ceremonial opening. An etched iris of plum and violet rotates slowly around a warm center; the actual wallet choice sits on a stable instrument panel below it.</p><dl><dt class="mono">The memorable moment</dt><dd>A living aperture opens as the modal appears, then becomes ambient.</dd><dt class="mono">Art to produce</dt><dd>Native vector rings, precision linework, light bloom. No video or 3D dependency.</dd><dt class="mono">Product fit</dt><dd>Most immersive and premium; should stay short and still during wallet authentication.</dd></dl></div>
+        <div class="stage stage-two"><span class="stage-label mono">02 / desktop study</span><button class="reopen" type="button">Open preview ↗</button><div class="modal two" role="group" aria-label="Aperture Get started concept"><div class="top"><span class="mono">DeltaMon / access threshold</span><button class="x" type="button" aria-label="Close preview">×</button></div><div class="visual" aria-hidden="true"><span class="star"></span><span class="tiny mono">No signal / no status implied</span></div><div class="body"><div class="choice-pane"><h3 class="main display">Step into your position.</h3><p class="intro">Pick the address you’ll use. A new passkey creates a new wallet; an existing wallet keeps its current address.</p><div class="choices"><button class="choice" type="button" data-next="passkey"><span><strong>Continue with passkey</strong><small>Your device or password manager</small></span><span class="arrow" aria-hidden="true">↗</span></button><button class="choice" type="button" data-next="wallet"><span><strong>Connect existing wallet</strong><small>Use an address you already hold</small></span><span class="arrow" aria-hidden="true">↗</span></button></div></div><div class="passkey-pane"><span class="mono" style="color:#d1b3f4;font-size:9px">01 / passkey</span><h3 class="display">One key. One address.</h3><p>Use the same passkey to return. A new passkey opens a different wallet address.</p><div class="passkey-actions"><button class="action" type="button" data-demo="existing">Use existing passkey</button><button class="action" type="button" data-demo="create">Create passkey wallet</button></div><button class="back" type="button">← Back to choices</button><p class="demo-feedback" role="status"></p></div></div></div><span class="stage-note mono">Light as invitation / never transaction state</span></div>
+      </section>
+
+      <section class="concept" id="folio" aria-labelledby="folio-title">
+        <div class="copy"><span class="mono number">Direction 03 / expressive print</span><h2 class="display" id="folio-title">The Entry Folio</h2><p>A boldly typeset, collectible-feeling access folio. Oversized words, a hand-cut seal, and a printed stripe make the popup feel like a designed artifact while the two routes remain plainly named.</p><dl><dt class="mono">The memorable moment</dt><dd>The “STARTED” line slides into registration like a printing press landing on paper.</dd><dt class="mono">Art to produce</dt><dd>Typographic composition, bespoke seal, fine paper grain and stripe.</dd><dt class="mono">Product fit</dt><dd>Fastest, clearest path to production; strongest link to the Entry Ticket system.</dd></dl></div>
+        <div class="stage stage-three"><span class="stage-label mono">03 / desktop study</span><button class="reopen" type="button">Open preview ↗</button><div class="modal three" role="group" aria-label="Entry Folio Get started concept"><div class="top"><span class="mono">DeltaMon / admission folio / 01</span><button class="x" type="button" aria-label="Close preview">×</button></div><div class="headline"><span class="seal" aria-hidden="true">✳</span><h3 class="main display">GET<span>STARTED.</span></h3></div><div class="stripe" aria-hidden="true"></div><div class="lower choice-pane"><div class="intro"><strong>Choose your way in.</strong><span>Use an address you already hold, or open a new one with a passkey.</span></div><div class="choices"><button class="choice" type="button" data-next="passkey"><span><strong>Continue with passkey</strong><small>Your device or password manager</small></span><span class="arrow" aria-hidden="true">↗</span></button><button class="choice" type="button" data-next="wallet"><span><strong>Connect existing wallet</strong><small>Keep using your current address</small></span><span class="arrow" aria-hidden="true">↗</span></button></div></div><div class="passkey-pane"><span class="mono" style="color:#6942bb;font-size:9px">01 / passkey decision</span><h3 class="display">A key for your address.</h3><p>Use the same passkey to return. A new passkey makes a new wallet address.</p><div class="passkey-actions"><button class="action" type="button" data-demo="existing">Use existing passkey</button><button class="action" type="button" data-demo="create">Create passkey wallet</button></div><button class="back" type="button">← Back to choices</button><p class="demo-feedback" role="status"></p></div></div><span class="stage-note mono">Printed texture / no fake security claim</span></div>
+      </section>
+    </main>
+    <script>
+      document.querySelectorAll('.stage').forEach((stage) => {
+        const modal = stage.querySelector('.modal');
+        stage.querySelector('.x').addEventListener('click', () => stage.classList.add('is-closed'));
+        stage.querySelector('.reopen').addEventListener('click', () => stage.classList.remove('is-closed'));
+        stage.querySelector('[data-next="passkey"]').addEventListener('click', () => { modal.classList.add('is-passkey'); modal.querySelector('.back').focus(); });
+        stage.querySelector('.back').addEventListener('click', () => { modal.classList.remove('is-passkey'); modal.querySelector('[data-next="passkey"]').focus(); });
+        stage.querySelector('[data-next="wallet"]').addEventListener('click', () => { const note = stage.querySelector('.stage-note'); note.textContent = 'Preview only / would open wallet connector'; });
+        stage.querySelectorAll('[data-demo]').forEach((button) => button.addEventListener('click', () => { modal.querySelector('.demo-feedback').textContent = 'Preview only — this would open your device’s passkey prompt.'; }));
+      });
+    </script>
+  </body>
+</html>

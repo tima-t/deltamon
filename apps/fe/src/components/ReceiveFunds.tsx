@@ -58,9 +58,9 @@ export function ReceiveFunds({
   }
 
   return (
-    <div className="border-monad/40 bg-monad/5 rounded-xl border p-4 sm:p-5">
-      <p className="eyebrow">Fund your passkey wallet</p>
-      <h3 className="mt-1 text-lg font-semibold">Receive USDC and network gas</h3>
+    <div className="deposit-funding border-monad/40 bg-monad/5 rounded-xl border p-4 sm:p-5">
+      <p className="deposit-kicker">FUNDING NOTE / YOUR NEW ADDRESS</p>
+      <h3 className="mt-1 text-lg font-semibold">Give your wallet its first USDC.</h3>
       <p className="text-muted mt-1 text-sm">
         Send funds to this new address from another wallet or exchange. Your existing wallet and
         vault position stay at their original address.
