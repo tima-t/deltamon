@@ -178,12 +178,12 @@ export function VaultDashboard() {
       <section id="position" className="counter-your-position">
         <PositionPanel />
       </section>
-      <div className="counter-console-link border-line flex flex-wrap items-center justify-between gap-3 border-t py-7 text-sm">
+      {/* <div className="counter-console-link border-line flex flex-wrap items-center justify-between gap-3 border-t py-7 text-sm">
         <p className="text-muted">Inspect the underlying vault and all operational controls.</p>
         <Link href="/console" className="text-monad font-semibold underline underline-offset-4">
           Open vault console ↗
         </Link>
-      </div>
+      </div> */}
     </div>
   );
 }

@@ -13,7 +13,7 @@ DeltaMon pairs an approachable counterweight character with a precision instrume
 
 ## Current visual language: The Counterweight
 
-- Warm cream is the default for brand storytelling, with a fully designed dark mode through the visible theme switch. A dark plum chapter separates measured vault data from the illustrative character world.
+- Warm cream carries the hero and real-position chapter in light mode, with a fully designed dark mode through the visible theme switch. The bordered Exposure Plate, restrained supporting ledger, and clear source labels distinguish measured vault data from the illustrative character world without a full-width color break.
 - Use the CSS tokens in `apps/fe/src/app/globals.css`: ink plum, warm cream, MON violet, muted amber for the short leg, and green or coral only for status. Keep contrast strong on both themes.
 - Bricolage Grotesque is the bold display face; IBM Plex Sans is body copy; IBM Plex Mono is for measurements and small labels. Use tabular figures for live numbers.
 - **Tippet**, the little counterweight, is a **brand guide**, not the keeper, a guarantee of balance, or a transaction status indicator. Tippet's recurring question is “What's on the other side?” and its follow-up is “When was it measured?” Its silhouette and personality must remain useful when future strategies involve other assets and hedge methods. Today's MON vault is labeled Strategy 01; do not imply other strategies exist until they do.

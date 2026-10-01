@@ -591,17 +591,7 @@ html[data-theme="dark"] .button-primary:hover {
   padding-right: max(20px, calc((100vw - 1190px) / 2));
 }
 .counter-position {
-  --surface: #302638;
-  --surface-raised: #3f3348;
-  --ink: #fff7e9;
-  --ink-muted: #cbbdcc;
-  --line: #695874;
-  --monad: #c8adff;
-  --exposure-long: #c8adff;
-  --exposure-short: #efc17c;
-  --long: #8ce0b6;
-  --short: #f2998f;
-  background: #221a2a;
+  background: var(--paper);
   color: var(--ink);
   padding-top: 96px;
   padding-bottom: 82px;
@@ -636,14 +626,20 @@ html[data-theme="dark"] .button-primary:hover {
   line-height: 1.55;
 }
 .counter-position .counter-section-index {
-  color: #e5be82;
+  color: var(--monad-deep);
+}
+.counter-position .counter-section-heading h2 em {
+  color: var(--monad);
 }
 .counter-engine-wrap {
   display: block;
 }
+.counter-position .position-plate {
+  box-shadow: 8px 8px 0 color-mix(in srgb, var(--ink) 16%, transparent);
+}
 .counter-position .instrument-card {
   border-radius: 7px;
-  box-shadow: 9px 9px 0 #100d18;
+  box-shadow: 8px 8px 0 color-mix(in srgb, var(--ink) 16%, transparent);
 }
 .counter-position .instrument-card::after {
   border-radius: 2px;
@@ -662,8 +658,8 @@ html[data-theme="dark"] .button-primary:hover {
   gap: 16px;
   min-height: 72px;
   padding: 13px 20px;
-  border: 1px solid #806c89;
-  color: #fff7e9;
+  border: 1px solid var(--line);
+  color: var(--ink);
   cursor: pointer;
   list-style: none;
 }
@@ -671,7 +667,7 @@ html[data-theme="dark"] .button-primary:hover {
   display: none;
 }
 .counter-composition > summary:focus-visible {
-  outline: 2px solid #c8adff;
+  outline: 2px solid var(--monad);
   outline-offset: 3px;
 }
 .counter-composition > summary strong,
@@ -683,11 +679,11 @@ html[data-theme="dark"] .button-primary:hover {
 }
 .counter-composition > summary small {
   margin-top: 3px;
-  color: #cbbdcc;
+  color: var(--ink-muted);
   font-size: 12px;
 }
 .counter-composition > summary > span:last-child {
-  color: #c8adff;
+  color: var(--monad);
   font-size: 22px;
   transition: transform 180ms ease;
 }
@@ -1048,8 +1044,8 @@ html[data-theme="dark"] .button-primary:hover {
 .position-ledger {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  border: 1px solid #7d6b82;
-  background: #35293b;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--ink) 3%, var(--paper));
 }
 .position-ledger-item {
   min-width: 0;
@@ -1057,16 +1053,16 @@ html[data-theme="dark"] .button-primary:hover {
   padding: 17px 19px;
 }
 .position-ledger-item + .position-ledger-item {
-  border-left: 1px dashed #8c7991;
+  border-left: 1px dashed var(--line);
 }
 .position-ledger-index {
   display: block;
   margin-bottom: 12px;
-  color: #e5be82;
+  color: var(--monad-deep);
   font-size: 9px;
 }
 .position-ledger .metric-label {
-  color: #cbbdcc;
+  color: var(--ink-muted);
   font-size: 11px;
   text-transform: uppercase;
 }
@@ -1080,7 +1076,7 @@ html[data-theme="dark"] .button-primary:hover {
 }
 .position-ledger-hint {
   margin-top: 3px;
-  color: #cbbdcc;
+  color: var(--ink-muted);
   font-size: 10px;
   line-height: 1.35;
 }
@@ -3409,6 +3405,9 @@ html[data-theme="dark"] .position-ticket .status-pill {
   letter-spacing: -0.035em;
 }
 html[data-theme="dark"] .counter-hero {
+  background: #241c2b;
+}
+html[data-theme="dark"] .counter-position {
   background: #241c2b;
 }
 html[data-theme="dark"] .counter-hero h1 em {
