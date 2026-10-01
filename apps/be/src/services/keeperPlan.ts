@@ -23,6 +23,8 @@ export interface PerpMarkInput {
   nowSec: bigint;
   /** Re-mark early once the book has moved more than this share of what is deployed. */
   minChangeBps: bigint;
+  /** Movement cannot trigger a mark more often than this. Staleness and the due clock still do. */
+  minRemarkSec: bigint;
   /** A feed older than this is not marked from. */
   maxBookAgeSec: bigint;
   book: PerpBook | null;
@@ -75,6 +77,13 @@ export function planPerpMark(i: PerpMarkInput): PerpMarkPlan {
   // Refresh at half the vault's limit, so a slow tick or a busy RPC never lets the mark lapse.
   if (stale) return { kind: "report", pnl, reason: "mark is stale", alerts };
   if (age * 2n >= i.maxAgeSec) return { kind: "report", pnl, reason: "mark is due", alerts };
+
+  // Movement alone is rate limited. The band is measured against what was deployed, but the book
+  // moves with notional, and a levered position crosses 25bps of its collateral on a fraction of
+  // a percent of price: a 983 MON short re-marked on every 0.17% tick, hundreds of times a day.
+  if (age < i.minRemarkSec) {
+    return { kind: "skip", reason: "marked too recently to re-mark on movement", alerts };
+  }
   const moved = abs(pnl - i.reportedPnl);
   if (moved > (i.deployed * i.minChangeBps) / BPS) {
     return { kind: "report", pnl, reason: `book moved ${moved}`, alerts };

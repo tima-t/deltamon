@@ -30,6 +30,12 @@ const EnvSchema = z.object({
   PERP_BOOK_MAX_AGE_SEC: z.coerce.number().int().positive().default(300),
   /** Re-mark early once the book has moved more than this share of what is deployed. */
   PERP_MARK_MIN_CHANGE_BPS: z.coerce.number().int().nonnegative().default(25),
+  /**
+   * The shortest gap between marks driven by movement. Without it a levered book re-marks on every
+   * tick: the change is measured against what was deployed while the book moves with notional.
+   * A lapsing mark still re-marks regardless.
+   */
+  PERP_MARK_MIN_INTERVAL_SEC: z.coerce.number().int().nonnegative().default(1_800),
   /** Validators the vault delegates to. Rewards and unbonded MON are claimed from these. */
   VALIDATOR_IDS: z
     .string()

@@ -13,6 +13,8 @@ const base: PerpMarkInput = {
   nowSec: T0 + 60n,
   minChangeBps: 25n,
   maxBookAgeSec: 300n,
+  // The movement rate limit is off in the base case, so these exercise the movement rule itself.
+  minRemarkSec: 0n,
   book: { equity: 1_000n * USDC, asOfSec: T0 + 50n },
 };
 
@@ -109,5 +111,43 @@ describe("keeping the mark fresh", () => {
 
   it("leaves a fresh, unmoved mark alone", () => {
     expect(planPerpMark(base)).toMatchObject({ kind: "skip" });
+  });
+});
+
+describe("not re-marking on every tick", () => {
+  // The band is measured against what was deployed, but the book moves with notional. A levered
+  // short crossed 25bps on a 0.17% price move and marked hundreds of times a day.
+  const moved = { ...base, minRemarkSec: 1_800n, book: bookAt(1_200n), nowSec: base.nowSec };
+
+  it("holds off while the last mark is recent", () => {
+    const soon = planPerpMark({ ...moved, nowSec: T0 + 120n });
+    expect(soon).toMatchObject({ kind: "skip", reason: "marked too recently to re-mark on movement" });
+  });
+
+  it("marks the movement once the gap has passed", () => {
+    const later = planPerpMark({
+      ...moved,
+      nowSec: T0 + 1_900n,
+      book: { equity: 1_200n * USDC, asOfSec: T0 + 1_890n },
+    });
+    expect(later).toMatchObject({ kind: "report" });
+  });
+
+  it("never holds off a mark that is due or lapsing", () => {
+    const due = planPerpMark({
+      ...base,
+      minRemarkSec: 1_800n,
+      nowSec: T0 + 10_800n,
+      book: { equity: 1_000n * USDC, asOfSec: T0 + 10_790n },
+    });
+    expect(due).toMatchObject({ kind: "report", reason: "mark is due" });
+
+    const lapsed = planPerpMark({
+      ...base,
+      minRemarkSec: 1_800n,
+      nowSec: T0 + 21_601n,
+      book: { equity: 1_000n * USDC, asOfSec: T0 + 21_591n },
+    });
+    expect(lapsed).toMatchObject({ kind: "report", reason: "mark is stale" });
   });
 });

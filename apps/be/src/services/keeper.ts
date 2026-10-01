@@ -187,6 +187,7 @@ export class Keeper {
       bandBps: s.bandBps,
       nowSec: s.nowSec,
       minChangeBps: BigInt(env.PERP_MARK_MIN_CHANGE_BPS),
+      minRemarkSec: BigInt(env.PERP_MARK_MIN_INTERVAL_SEC),
       maxBookAgeSec: BigInt(env.PERP_BOOK_MAX_AGE_SEC),
       book,
     });
