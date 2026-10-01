@@ -20,12 +20,17 @@ import {
   signInPasskeyWallet,
 } from "@/lib/passkey";
 import { MERA_CONNECTOR_ID } from "@/lib/meraConnector";
+import { WalletEntryArt } from "./WalletEntryArt";
 
 type WalletEntryContextValue = {
   openEntry: () => void;
   openAccount: () => void;
   isPasskey: boolean;
 };
+type View = "closed" | "choose" | "passkey" | "account";
+type BusyAction = "existing" | "create" | "switch" | "export" | "disconnect" | null;
+type ErrorAction = Exclude<BusyAction, null> | "copy" | null;
+
 const WalletEntryContext = createContext<WalletEntryContextValue | null>(null);
 
 export function useWalletEntry() {
@@ -34,12 +39,22 @@ export function useWalletEntry() {
   return context;
 }
 
+function ChoiceArrow() {
+  return (
+    <span className="wallet-entry-arrow" aria-hidden="true">
+      ↗
+    </span>
+  );
+}
+
 export function WalletEntryProvider({ children }: { children: ReactNode }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [view, setView] = useState<"closed" | "choose" | "passkey" | "account">("closed");
-  const [busy, setBusy] = useState(false);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const [view, setView] = useState<View>("closed");
+  const [busyAction, setBusyAction] = useState<BusyAction>(null);
   const [error, setError] = useState("");
-  const [phrase, setPhrase] = useState("");
+  const [errorAction, setErrorAction] = useState<ErrorAction>(null);
+  const [phraseRecord, setPhraseRecord] = useState<{ address: string; words: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const { address, connector } = useAccount();
   const isPasskey = connector?.id === MERA_CONNECTOR_ID;
@@ -49,67 +64,99 @@ export function WalletEntryProvider({ children }: { children: ReactNode }) {
   const { openAccountModal } = useAccountModal();
 
   const available = passkeyEnabled();
+  const busy = busyAction !== null;
+  const phrase = phraseRecord && phraseRecord.address === address ? phraseRecord.words : "";
+
   useEffect(() => {
     if (view === "closed") dialog.current?.close();
-    else if (!dialog.current?.open) dialog.current?.showModal();
+    else {
+      if (!dialog.current?.open) dialog.current?.showModal();
+      heading.current?.focus();
+    }
   }, [view]);
 
   const close = useCallback(() => {
     if (busy) return;
     setView("closed");
     setError("");
-    setPhrase("");
+    setErrorAction(null);
+    setPhraseRecord(null);
     setCopied(false);
   }, [busy]);
+
   const openEntry = useCallback(() => {
     setError("");
+    setErrorAction(null);
+    setPhraseRecord(null);
+    setCopied(false);
     setView("choose");
   }, []);
+
   const openAccount = useCallback(() => {
     setError("");
+    setErrorAction(null);
+    setPhraseRecord(null);
+    setCopied(false);
     setView("account");
   }, []);
 
   async function enterPasskey(mode: "create" | "existing", another = false) {
-    setBusy(true);
+    setBusyAction(another ? "switch" : mode);
     setError("");
+    setErrorAction(null);
+    setPhraseRecord(null);
+    setCopied(false);
+    let disconnected = false;
     try {
       if (mode === "create") await createPasskeyWallet();
       else await signInPasskeyWallet(another);
-      if (connector?.id === MERA_CONNECTOR_ID || connector) await disconnectAsync();
+      if (connector) {
+        await disconnectAsync();
+        disconnected = true;
+      }
       const passkeyConnector = connectors.find((item) => item.id === MERA_CONNECTOR_ID);
       if (!passkeyConnector) throw new Error("The passkey connector is unavailable.");
       await connectAsync({ connector: passkeyConnector, chainId: 143 });
       setView("closed");
     } catch (cause) {
       setError(passkeyError(cause));
+      setErrorAction(another ? "switch" : mode);
+      if (disconnected) setView("passkey");
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   }
 
   async function revealPhrase() {
     if (!address) return;
-    setBusy(true);
+    setBusyAction("export");
     setError("");
-    setPhrase("");
+    setErrorAction(null);
+    setPhraseRecord(null);
+    setCopied(false);
     try {
-      setPhrase(await exportPasskeyRecoveryPhrase(address));
+      setPhraseRecord({ address, words: await exportPasskeyRecoveryPhrase(address) });
     } catch (cause) {
       setError(passkeyError(cause));
+      setErrorAction("export");
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   }
 
   async function signOut() {
-    setBusy(true);
+    setBusyAction("disconnect");
+    setError("");
+    setErrorAction(null);
     try {
       await disconnectAsync();
       setView("closed");
-      setPhrase("");
+      setPhraseRecord(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not disconnect this wallet.");
+      setErrorAction("disconnect");
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   }
 
@@ -128,210 +175,308 @@ export function WalletEntryProvider({ children }: { children: ReactNode }) {
           if (busy) event.preventDefault();
           else close();
         }}
-        className="deposit-wallet-dialog border-line bg-paper text-ink m-auto w-[min(92vw,440px)] rounded-2xl border p-0 shadow-2xl backdrop:bg-black/65"
-        aria-label={view === "account" ? "Account" : "Get started"}
+        className="wallet-entry-dialog"
+        data-view={view}
+        aria-label={
+          view === "account"
+            ? "Your account"
+            : view === "passkey"
+              ? "Passkey wallet"
+              : "Get started"
+        }
       >
-        <div className="border-line flex items-start justify-between gap-4 border-b px-6 py-5">
-          <div>
-            <p className="eyebrow">DeltaMon / Access ticket</p>
-            <h2 className="mt-1 text-xl font-semibold">
-              {view === "account"
-                ? "Your account"
-                : view === "passkey"
-                  ? "Passkey wallet"
-                  : "Get started"}
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={close}
-            disabled={busy}
-            className="border-line text-muted hover:text-ink grid size-9 place-items-center rounded-lg border text-lg disabled:opacity-50"
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </div>
-        <div className="space-y-3 p-6">
-          {view === "choose" ? (
-            <>
+        <div className="wallet-entry-layout">
+          <WalletEntryArt />
+          <div className="wallet-entry-content">
+            <div className="wallet-entry-topline">
+              <span>DELTAMON / {view === "account" ? "YOUR ACCOUNT" : "GET STARTED"}</span>
               <button
                 type="button"
-                disabled={!available}
-                onClick={() => setView("passkey")}
-                className="border-monad/40 bg-monad/10 hover:border-monad flex w-full items-center justify-between rounded-xl border px-4 py-4 text-left disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <span>
-                  <strong className="block">Continue with passkey</strong>
-                  <span className="text-muted mt-1 block text-xs">
-                    Use your device or password manager. A new passkey creates a new wallet address.
-                  </span>
-                </span>
-                <span aria-hidden="true" className="text-monad ml-3">
-                  ↗
-                </span>
-              </button>
-              {!available ? (
-                <p className="text-muted text-xs">
-                  Passkey wallets are available on app.deltamon.xyz after launch, or on localhost
-                  when enabled.
-                </p>
-              ) : null}
-              <button
-                type="button"
-                onClick={externalWallet}
-                className="border-line hover:border-monad/50 flex w-full items-center justify-between rounded-xl border px-4 py-4 text-left"
-              >
-                <span>
-                  <strong className="block">Connect existing wallet</strong>
-                  <span className="text-muted mt-1 block text-xs">
-                    Keep using the address that already holds your vault position.
-                  </span>
-                </span>
-                <span aria-hidden="true" className="text-muted ml-3">
-                  ↗
-                </span>
-              </button>
-            </>
-          ) : view === "passkey" ? (
-            <>
-              <p className="text-muted text-sm">
-                Each passkey opens its own wallet. Use the same passkey to return to an existing
-                position.
-              </p>
-              <button
-                type="button"
+                onClick={close}
                 disabled={busy}
-                onClick={() => void enterPasskey("existing")}
-                className="button-primary w-full rounded-lg px-4 py-3 font-semibold disabled:opacity-50"
+                className="wallet-entry-close"
+                aria-label="Close"
               >
-                {busy ? "Waiting for passkey…" : "Use existing passkey"}
+                ×
               </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void enterPasskey("create")}
-                className="border-line w-full rounded-lg border px-4 py-3 font-semibold disabled:opacity-50"
-              >
-                Create passkey wallet
-              </button>
-              {readPasskeyRecord() ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void enterPasskey("existing", true)}
-                  className="text-monad text-sm underline disabled:opacity-50"
-                >
-                  Choose a different passkey
-                </button>
-              ) : null}
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => setView("choose")}
-                className="text-muted block text-sm underline disabled:opacity-50"
-              >
-                Back to choices
-              </button>
-            </>
-          ) : view === "account" ? (
-            <>
-              <div className="border-line rounded-xl border p-4">
-                <p className="text-muted text-xs uppercase tracking-widest">
-                  {isPasskey ? "Passkey wallet" : "Connected wallet"}
-                </p>
-                <p className="font-data mt-2 break-all text-sm">{address}</p>
+            </div>
+
+            {view === "choose" ? (
+              <div className="wallet-entry-view wallet-entry-view-choose">
+                <div className="wallet-entry-intro">
+                  <h2 ref={heading} tabIndex={-1}>
+                    A way in,
+                    <br />
+                    made yours.
+                  </h2>
+                  <p>Choose the address you want to use. Your position stays with that address.</p>
+                </div>
+                <div className="wallet-entry-choices">
+                  <button
+                    type="button"
+                    disabled={!available}
+                    onClick={() => setView("passkey")}
+                    className="wallet-entry-choice"
+                  >
+                    <span>
+                      <strong>Continue with passkey</strong>
+                      <small>Use your device or password manager.</small>
+                    </span>
+                    <ChoiceArrow />
+                  </button>
+                  <button type="button" onClick={externalWallet} className="wallet-entry-choice">
+                    <span>
+                      <strong>Connect existing wallet</strong>
+                      <small>Keep using an address you already hold.</small>
+                    </span>
+                    <ChoiceArrow />
+                  </button>
+                  {!available ? (
+                    <p className="wallet-entry-availability">
+                      Passkey wallets are available on app.deltamon.xyz after launch, or on
+                      localhost when enabled.
+                    </p>
+                  ) : null}
+                </div>
               </div>
-              {isPasskey ? (
-                <>
-                  <p className="text-muted text-sm">
-                    If your passkey is lost and not synced, this wallet may be unrecoverable. You
-                    can export a recovery phrase while you still have access.
+            ) : view === "passkey" ? (
+              <div className="wallet-entry-view wallet-entry-view-passkey">
+                <div className="wallet-entry-intro">
+                  <span className="wallet-entry-step">01 / PASSKEY</span>
+                  <h2 ref={heading} tabIndex={-1}>
+                    Your passkey
+                    <br />
+                    wallet.
+                  </h2>
+                  <p>
+                    Use the same passkey to return to your position. Creating a new passkey opens a
+                    new wallet address.
                   </p>
-                  {!phrase ? (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void revealPhrase()}
-                      className="border-line w-full rounded-lg border px-4 py-3 text-left font-medium disabled:opacity-50"
-                    >
-                      {busy ? "Verifying passkey…" : "Export recovery phrase"}
-                    </button>
-                  ) : (
-                    <div className="border-short/40 bg-short/5 rounded-xl border p-4">
-                      <p className="font-semibold">Recovery phrase</p>
-                      <p className="text-muted mt-1 text-xs">
-                        Anyone with these words can take your funds. Store them privately. They are
-                        never saved by DeltaMon.
-                      </p>
-                      <p
-                        className="font-data mt-3 break-words text-sm leading-7"
-                        aria-label="Recovery phrase"
-                      >
-                        {phrase}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPhrase("");
-                          setCopied(false);
-                        }}
-                        className="text-monad mt-3 text-sm underline"
-                      >
-                        Hide phrase
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void navigator.clipboard
-                            .writeText(phrase)
-                            .then(() => setCopied(true))
-                            .catch(() =>
-                              setError("Could not copy the phrase. Record it manually."),
-                            );
-                        }}
-                        className="text-monad ml-4 text-sm underline"
-                      >
-                        {copied ? "Copied" : "Copy phrase"}
-                      </button>
-                    </div>
-                  )}
+                </div>
+                <div className="wallet-entry-actions" aria-busy={busy}>
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => void enterPasskey("existing", true)}
-                    className="text-monad block text-sm underline disabled:opacity-50"
+                    onClick={() => void enterPasskey("existing")}
+                    className="wallet-entry-action wallet-entry-action-primary"
                   >
-                    Switch passkey wallet
+                    <span>
+                      <strong>Use existing passkey</strong>
+                      <small>Return to its wallet address</small>
+                    </span>
+                    <ChoiceArrow />
                   </button>
-                </>
-              ) : (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void enterPasskey("create")}
+                    className="wallet-entry-action"
+                  >
+                    <span>
+                      <strong>Create passkey wallet</strong>
+                      <small>Open a new wallet address</small>
+                    </span>
+                    <ChoiceArrow />
+                  </button>
+                  {busyAction === "existing" || busyAction === "create" ? (
+                    <p className="wallet-entry-status" role="status">
+                      Waiting for your passkey confirmation…
+                    </p>
+                  ) : null}
+                  {error && errorAction !== null ? (
+                    <p role="alert" className="wallet-entry-error">
+                      {error}
+                    </p>
+                  ) : null}
+                  {readPasskeyRecord() ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void enterPasskey("existing", true)}
+                      className="wallet-entry-text-action"
+                    >
+                      Choose a different passkey <span aria-hidden="true">↗</span>
+                    </button>
+                  ) : null}
+                  {busyAction === "switch" ? (
+                    <p className="wallet-entry-status" role="status">
+                      Waiting for the other passkey…
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      setError("");
+                      setErrorAction(null);
+                      setView("choose");
+                    }}
+                    className="wallet-entry-text-action wallet-entry-back"
+                  >
+                    <span aria-hidden="true">←</span> Back to choices
+                  </button>
+                </div>
+              </div>
+            ) : view === "account" ? (
+              <div className="wallet-entry-view wallet-entry-view-account">
+                <div className="wallet-entry-intro">
+                  <span className="wallet-entry-step">01 / ACTIVE ADDRESS</span>
+                  <h2 ref={heading} tabIndex={-1}>
+                    Your account.
+                  </h2>
+                  <p>Use this address to return to your position.</p>
+                </div>
+                <section
+                  className="wallet-entry-address"
+                  aria-label={isPasskey ? "Passkey wallet address" : "Connected wallet address"}
+                >
+                  <span>{isPasskey ? "PASSKEY WALLET" : "CONNECTED WALLET"}</span>
+                  <p className="font-data">{address ?? "Address unavailable"}</p>
+                </section>
+                {isPasskey ? (
+                  <div className="wallet-entry-account-actions">
+                    <p className="wallet-entry-recovery-explain">
+                      If your passkey is lost and not synced, this wallet may be unrecoverable. You
+                      can export a recovery phrase while you still have access.
+                    </p>
+                    {!phrase ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void revealPhrase()}
+                        className="wallet-entry-action"
+                      >
+                        <span>
+                          <strong>Export recovery phrase</strong>
+                          <small>Requires a fresh passkey check</small>
+                        </span>
+                        <ChoiceArrow />
+                      </button>
+                    ) : (
+                      <section className="wallet-entry-recovery" aria-label="Recovery phrase">
+                        <h3>Recovery phrase</h3>
+                        <p>
+                          Anyone with these words can take your funds. Store them privately. They
+                          are never saved by DeltaMon.
+                        </p>
+                        <p
+                          className="wallet-entry-phrase font-data"
+                          aria-label="Recovery phrase words"
+                        >
+                          {phrase}
+                        </p>
+                        <div className="wallet-entry-recovery-controls">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPhraseRecord(null);
+                              setCopied(false);
+                              setError("");
+                              setErrorAction(null);
+                            }}
+                            className="wallet-entry-text-action"
+                          >
+                            Hide phrase
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCopied(false);
+                              setError("");
+                              setErrorAction(null);
+                              void navigator.clipboard
+                                .writeText(phrase)
+                                .then(() => setCopied(true))
+                                .catch(() => {
+                                  setError("Could not copy the phrase. Record it manually.");
+                                  setErrorAction("copy");
+                                });
+                            }}
+                            className="wallet-entry-text-action"
+                          >
+                            {copied ? "Copied" : "Copy phrase"}
+                          </button>
+                        </div>
+                        {copied ? (
+                          <p className="wallet-entry-status" role="status">
+                            Recovery phrase copied.
+                          </p>
+                        ) : null}
+                        {error && errorAction === "copy" ? (
+                          <p role="alert" className="wallet-entry-error">
+                            {error}
+                          </p>
+                        ) : null}
+                      </section>
+                    )}
+                    {busyAction === "export" ? (
+                      <p className="wallet-entry-status" role="status">
+                        Verifying your passkey…
+                      </p>
+                    ) : null}
+                    {error && errorAction === "export" ? (
+                      <p role="alert" className="wallet-entry-error">
+                        {error}
+                      </p>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void enterPasskey("existing", true)}
+                      className="wallet-entry-text-action"
+                    >
+                      Switch passkey wallet <span aria-hidden="true">↗</span>
+                    </button>
+                    {busyAction === "switch" ? (
+                      <p className="wallet-entry-status" role="status">
+                        Waiting for the other passkey…
+                      </p>
+                    ) : null}
+                    {error && errorAction === "switch" ? (
+                      <p role="alert" className="wallet-entry-error">
+                        {error}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      close();
+                      window.setTimeout(() => openAccountModal?.(), 0);
+                    }}
+                    className="wallet-entry-action"
+                  >
+                    <span>
+                      <strong>Wallet details</strong>
+                      <small>Open connected wallet controls</small>
+                    </span>
+                    <ChoiceArrow />
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => {
-                    close();
-                    window.setTimeout(() => openAccountModal?.(), 0);
-                  }}
-                  className="border-line w-full rounded-lg border px-4 py-3 text-left font-medium"
+                  disabled={busy}
+                  onClick={() => void signOut()}
+                  className="wallet-entry-disconnect"
                 >
-                  Wallet details
+                  {busyAction === "disconnect" ? "Disconnecting…" : "Disconnect"}
+                  <span aria-hidden="true">↗</span>
                 </button>
-              )}
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void signOut()}
-                className="border-line w-full rounded-lg border px-4 py-3 text-left font-medium disabled:opacity-50"
-              >
-                Disconnect
-              </button>
-            </>
-          ) : null}
-          {error ? (
-            <p role="alert" className="text-short rounded-lg border border-short/30 p-3 text-sm">
-              {error}
-            </p>
-          ) : null}
+                {busyAction === "disconnect" ? (
+                  <p className="wallet-entry-status" role="status">
+                    Disconnecting this wallet…
+                  </p>
+                ) : null}
+                {error && errorAction === "disconnect" ? (
+                  <p role="alert" className="wallet-entry-error">
+                    {error}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
       </dialog>
     </WalletEntryContext.Provider>
