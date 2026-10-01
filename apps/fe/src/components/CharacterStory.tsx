@@ -65,9 +65,6 @@ export function CharacterStory() {
             <strong>Chapter 01 follows MON and an offsetting short.</strong> If more strategies join
             the book, each will have its own exposures, measurements, and risks.
           </p>
-          <a href="#how">
-            Read chapter 01 <span aria-hidden="true">↗</span>
-          </a>
         </div>
       </div>
     </section>

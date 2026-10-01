@@ -11,7 +11,8 @@ DeltaMon pairs an approachable counterweight character with a precision instrume
 - Label examples as illustrative. State the manager-report trust boundary near the relevant data.
 - Explain risk and exit paths in plain language.
 - Keep consumer copy focused on shares, the MON position, the reported short, report freshness, and exit liquidity. Do not explain the API or contract limitation behind the separate trading account in the public journey. Use protocol role names such as "perp manager" only in operator controls where they identify an actual permission.
-- State the material custody and reporting boundary once beside the live position and in the risk section: funds backing the short leave the vault's direct control, and the separate account's report can be delayed or inaccurate. Avoid repeating that warning in every deposit step.
+- State the material custody and reporting boundary beside the live position: funds backing the short leave the vault's direct control, and the separate account's report can be delayed or inaccurate. Avoid repeating that warning in every deposit step.
+- Keep the standalone How it works and Risks sections hidden for now; they do not add enough value to the current public page. Do not show links to those sections while they are hidden.
 - Describe the short as automated only when that matches the deployed operating state. A deposit confirmation means shares were minted; it does not mean allocation or hedging has completed.
 - Use literal labels for money actions and exits. Keep event or hackathon credits out of the consumer footer. Label simple annualized staking and funding estimates as estimates, not APY, and make the current performance fee rate visible before a deposit and beside redemption.
 - Lead with concrete holdings and reported short data. Use the counterweight metaphor in the illustration and supporting explanation; do not make a first-time visitor decode "both sides" in a headline or tagline.

@@ -34,9 +34,6 @@ export function VaultDashboard() {
             <a href="#vault" className="counter-primary">
               View the position <span aria-hidden="true">↗</span>
             </a>
-            <a href="#how" className="counter-text-link">
-              How it works <span aria-hidden="true">↗</span>
-            </a>
           </div>
           <p className="counter-hero-footnote">
             The hedge targets low net MON exposure; actual exposure can change.
@@ -162,10 +159,7 @@ export function VaultDashboard() {
           </div>
           <p>
             Start with USDC. Review the route and expected shares before your wallet signs. A
-            deposit is complete only when the vault confirms it.{" "}
-            <a href="#risks" className="underline underline-offset-2">
-              Read the risks before depositing.
-            </a>
+            deposit is complete only when the vault confirms it.
           </p>
         </div>
         <div id="deposit" className="counter-deposit-wrap">
