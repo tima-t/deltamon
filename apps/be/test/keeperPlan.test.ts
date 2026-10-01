@@ -81,3 +81,33 @@ describe("planPerpMark", () => {
     expect(loss.kind === "report" && loss.alerts[0]).toContain("admin must mark it");
   });
 });
+
+describe("keeping the mark fresh", () => {
+  // Deposits are blocked while the mark is stale, so the keeper refreshes at half the vault's
+  // limit rather than waiting for it to lapse.
+  // The book has to keep pace with the clock: a feed older than maxBookAgeSec is refused, which
+  // is correct and is not what these cases are about.
+  const at = (seconds: bigint) => ({
+    ...base,
+    nowSec: T0 + seconds,
+    book: { equity: 1_000n * USDC, asOfSec: T0 + seconds - 10n },
+  });
+
+  it("re-marks at half the max age, before anything is blocked", () => {
+    expect(planPerpMark(at(10_800n))).toMatchObject({ kind: "report", reason: "mark is due" });
+  });
+
+  it("still re-marks once it has actually lapsed", () => {
+    expect(planPerpMark(at(21_601n))).toMatchObject({ kind: "report", reason: "mark is stale" });
+  });
+
+  it("cannot mark at all without a book, and says deposits stay paused", () => {
+    const blind = planPerpMark({ ...at(21_601n), book: null });
+    expect(blind.kind).toBe("skip");
+    expect(blind.kind === "skip" && blind.alerts.join(" ")).toContain("deposits stay paused");
+  });
+
+  it("leaves a fresh, unmoved mark alone", () => {
+    expect(planPerpMark(base)).toMatchObject({ kind: "skip" });
+  });
+});

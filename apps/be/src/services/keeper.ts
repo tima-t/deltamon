@@ -16,6 +16,7 @@ import { env } from "../config.js";
 import { getKeeperWallet, publicClient } from "../chain.js";
 import { logger } from "../lib/logger.js";
 import { fetchPerpBook, type PerpBook } from "./perpBook.js";
+import { perpBookNow } from "./vault.js";
 import { planPerpMark } from "./keeperPlan.js";
 
 const abi = deltaMonVaultAbi;
@@ -30,6 +31,7 @@ interface VaultState {
   maxAgeSec: bigint;
   bandBps: bigint;
   oracleLive: boolean;
+  monPriceUsd: number;
   totalAssets: bigint;
   totalSupply: bigint;
   liquidity: bigint;
@@ -163,13 +165,19 @@ export class Keeper {
     alerts: string[],
   ): Promise<string[]> {
     if (s.deployed === 0n) return [];
-    let book: PerpBook | null = null;
-    if (env.PERP_BOOK_URL) {
+    // The backend holds the Perpl account itself, so the book comes from that socket. Without it
+    // the keeper has nothing to mark from and the mark lapses, which stops deposits: that is the
+    // whole reason a stale mark used to need marking by hand.
+    let book: PerpBook | null = await perpBookNow(s.monPriceUsd).catch(() => null);
+    if (!book && env.PERP_BOOK_URL) {
       try {
         book = await fetchPerpBook(env.PERP_BOOK_URL);
       } catch (err) {
         alerts.push(`perp book feed unreachable: ${describe(err)}`);
       }
+    }
+    if (!book) {
+      alerts.push("no perp book: the Perpl socket is not connected and no feed is configured");
     }
     const plan = planPerpMark({
       deployed: s.deployed,
@@ -294,6 +302,7 @@ async function readState(vault: Address): Promise<VaultState> {
         { ...c, functionName: "perpReportMaxAge" },
         { ...c, functionName: "perpPnlBandBps" },
         { ...c, functionName: "oracleIsLive" },
+        { ...c, functionName: "monPrice" },
         { ...c, functionName: "totalAssets" },
         { ...c, functionName: "totalSupply" },
         { ...c, functionName: "availableLiquidity" },
@@ -310,6 +319,7 @@ async function readState(vault: Address): Promise<VaultState> {
     maxAge,
     bandBps,
     oracleLive,
+    monPrice,
     totalAssets,
     totalSupply,
     liquidity,
@@ -331,6 +341,7 @@ async function readState(vault: Address): Promise<VaultState> {
     maxAgeSec: BigInt(maxAge),
     bandBps: BigInt(bandBps),
     oracleLive,
+    monPriceUsd: Number(formatUnits(monPrice, 18)),
     totalAssets,
     totalSupply,
     liquidity,
