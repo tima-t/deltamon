@@ -35,7 +35,10 @@ import { DepositStepIndicator, type DepositStep } from "./DepositStepIndicator";
 import { ReceiveFunds } from "./ReceiveFunds";
 import { useWalletEntry } from "./WalletEntry";
 import { assertContractGas } from "@/lib/nativeGas";
-import { showReturnRouteAfterDeposit } from "@/lib/depositConfirmation";
+import {
+  revealReturnRouteAfterDeposit,
+  showReturnRouteAfterDeposit,
+} from "@/lib/depositConfirmation";
 import {
   DepositSourceConstellation,
   DepositSelectedSource,
@@ -174,7 +177,8 @@ export function CrossChainDepositPanel({
   const [session, setSession] = useState<Session | null>(null);
   const [recentSession, setRecentSession] = useState<Session | null>(null);
   const restoredSessionId = useRef<string | null>(null);
-  const startedSessionId = useRef<string | null>(null);
+  const [startedSessionId, setStartedSessionId] = useState<string | null>(null);
+  const refreshedSessionId = useRef<string | null>(null);
   const revealedSessionId = useRef<string | null>(null);
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [busy, setBusy] = useState(false);
@@ -262,7 +266,7 @@ export function CrossChainDepositPanel({
       setAmountText("");
       setQuote(null);
       setStatus(null);
-      startedSessionId.current = null;
+      setStartedSessionId(null);
       const active = restoreSession(SESSION_KEY, address);
       const recent = restoreSession(RECENT_SESSION_KEY, address);
       onSourceChange?.(active?.sourceName ?? "Monad");
@@ -296,7 +300,7 @@ export function CrossChainDepositPanel({
           const settled = { ...session!, terminalStatus: executionStatus };
           if (
             restoredSessionId.current === session!.id &&
-            startedSessionId.current !== session!.id &&
+            startedSessionId !== session!.id &&
             !session!.recoveryId
           ) {
             saveSession(settled, RECENT_SESSION_KEY);
@@ -321,7 +325,7 @@ export function CrossChainDepositPanel({
       active = false;
       clearInterval(timer);
     };
-  }, [address, session]);
+  }, [address, session, startedSessionId]);
 
   useEffect(() => {
     if (!address || !session?.recoveryId) return;
@@ -474,7 +478,7 @@ export function CrossChainDepositPanel({
         initialShares: fresh.initialShares,
       };
       saveSession(current);
-      startedSessionId.current = current.id;
+      setStartedSessionId(current.id);
       setSession(current);
       setStatus({ execution, intermediaryBalance: null, shares: null });
       await authorizeAndSend(current, execution);
@@ -487,7 +491,7 @@ export function CrossChainDepositPanel({
 
   async function continueDeposit() {
     if (!address || !session || !status || busy) return;
-    startedSessionId.current = session.id;
+    setStartedSessionId(session.id);
     setBusy(true);
     setError("");
     try {
@@ -608,7 +612,7 @@ export function CrossChainDepositPanel({
     }
     saveSession(null);
     restoredSessionId.current = null;
-    startedSessionId.current = null;
+    setStartedSessionId(null);
     setSession(null);
     setStatus(null);
     setQuote(null);
@@ -619,11 +623,17 @@ export function CrossChainDepositPanel({
   const mintConfirmed = Boolean(status && session && mintConfirmedFor(status, session));
 
   useEffect(() => {
-    if (!mintConfirmed || !session || startedSessionId.current !== session.id) return;
+    if (!mintConfirmed || !session || startedSessionId !== session.id) return;
+    if (refreshedSessionId.current === session.id) return;
+    refreshedSessionId.current = session.id;
+    showReturnRouteAfterDeposit({ reveal: false });
+  }, [mintConfirmed, session, startedSessionId]);
+  const revealReturnRoute = useCallback(() => {
+    if (!mintConfirmed || !session || startedSessionId !== session.id) return;
     if (revealedSessionId.current === session.id) return;
     revealedSessionId.current = session.id;
-    showReturnRouteAfterDeposit();
-  }, [mintConfirmed, session]);
+    revealReturnRouteAfterDeposit();
+  }, [mintConfirmed, session, startedSessionId]);
   const fundingNeeded = Boolean(
     address &&
     isPasskey &&
@@ -719,6 +729,10 @@ export function CrossChainDepositPanel({
             sourceName={session.sourceName}
             sourceTxSent={Boolean(session.sourceTxHash)}
             mintConfirmed={mintConfirmed}
+            strategyAutoPlayKey={
+              mintConfirmed && startedSessionId === session.id ? session.id : undefined
+            }
+            onStrategyEnd={revealReturnRoute}
           />
           <p className="text-muted flex items-center gap-2 text-xs">
             {!mintConfirmed &&
@@ -1018,7 +1032,8 @@ export function CrossChainDepositPanel({
                 maximumFractionDigits: 4,
               })}{" "}
               sdMON goes to {short(address)} on Monad. The vault share price may change before
-              settlement.
+              settlement. These shares represent your share of the whole vault; MON allocation and
+              the offsetting short happen separately after deposit.
             </p>
             {quote.execution.details?.networkFee ? (
               <p className="text-muted">
