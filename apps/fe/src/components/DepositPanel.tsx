@@ -23,7 +23,6 @@ import { showReturnRouteAfterDeposit } from "@/lib/depositConfirmation";
 import { CrossChainDepositPanel } from "./CrossChainDepositPanel";
 import { ReceiveFunds } from "./ReceiveFunds";
 import { useWalletEntry } from "./WalletEntry";
-import { DepositRoute } from "./DepositRoute";
 import { DepositStepIndicator, type DepositStep } from "./DepositStepIndicator";
 
 const USDC_DECIMALS = 6;
@@ -422,7 +421,9 @@ function MonadDepositPanel({
               </dl>
               <p className="deposit-review-note">
                 Shares are an estimate until the vault confirms. Approval, if needed, is a separate
-                wallet transaction. Network gas is paid separately. {performanceFeeText}.
+                wallet transaction. Network gas is paid separately. {performanceFeeText}. sdMON
+                represents your share of the whole vault. MON allocation and the offsetting short
+                happen separately after deposit.
               </p>
             </div>
             {receipt?.status === "success" && lastAction === "approve" && hash ? (
@@ -551,21 +552,9 @@ export function DepositPanel() {
   return (
     <section className="deposit-docket" aria-labelledby="deposit-title">
       <div className="deposit-docket-topline">
-        <span>DELTA / FIELD NOTE 01</span>
-        <span>ENTRY TICKET ↗</span>
+        <h2 id="deposit-title">DEPOSIT / STRATEGY 01</h2>
+        <span>{routeSource.toUpperCase()} USDC → sdMON / MONAD</span>
       </div>
-      <div className="deposit-docket-intro">
-        <div>
-          <p className="deposit-kicker">STRATEGY 01 / YOUR ENTRY</p>
-          <h2 id="deposit-title">
-            Make your
-            <br />
-            <em>deposit.</em>
-          </h2>
-        </div>
-        <p>Choose your USDC amount, review the shares you expect, and follow the confirmation.</p>
-      </div>
-      <DepositRoute source={routeSource} />
       <div className="deposit-docket-form">
         {crossChainEnabled ? (
           <CrossChainDepositPanel

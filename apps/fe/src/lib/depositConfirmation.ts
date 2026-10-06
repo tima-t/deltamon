@@ -1,8 +1,11 @@
 export const DEPOSIT_CONFIRMED_EVENT = "deltamon:deposit-confirmed";
 
-export function showReturnRouteAfterDeposit() {
+export function showReturnRouteAfterDeposit({ reveal = true }: { reveal?: boolean } = {}) {
   window.dispatchEvent(new Event(DEPOSIT_CONFIRMED_EVENT));
+  if (reveal) revealReturnRouteAfterDeposit();
+}
 
+export function revealReturnRouteAfterDeposit() {
   const returnRoute = document.getElementById("position");
   if (!returnRoute) return;
 

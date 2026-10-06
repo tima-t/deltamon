@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { showReturnRouteAfterDeposit } from "@/lib/depositConfirmation";
 import { DepositJourney } from "./DepositJourney";
-import { DepositRoute } from "./DepositRoute";
 import {
   DepositSourceConstellation,
   DepositSelectedSource,
@@ -105,6 +104,9 @@ export function DepositFlowLab({
   const [amount, setAmount] = useState("");
   const [errorAt, setErrorAt] = useState<"none" | "approval" | "deposit" | "vault">("none");
   const [routeStudy, setRouteStudy] = useState(false);
+  const [journeyAppearance, setJourneyAppearance] = useState("light");
+  const [reduceJourneyMotion, setReduceJourneyMotion] = useState(false);
+  const [previewLiveAutoplay, setPreviewLiveAutoplay] = useState(false);
   const sourceStar = mockSources.find((item) => item.name === source) ?? mockSources[0]!;
   const sourceBalance = Number(sourceStar.balance) / 10 ** sourceStar.decimals;
   const valid = Number(amount) > 0 && Number(amount) <= sourceBalance;
@@ -115,8 +117,9 @@ export function DepositFlowLab({
       ? stage
       : "track";
   useEffect(() => {
-    if (stage === "success" && !routeStudy) showReturnRouteAfterDeposit();
-  }, [stage, routeStudy]);
+    if (stage === "success" && !routeStudy && (!previewLiveAutoplay || !crossChain))
+      showReturnRouteAfterDeposit();
+  }, [stage, routeStudy, previewLiveAutoplay, crossChain]);
   function reset() {
     setStage("connect");
     setSource("Monad");
@@ -156,104 +159,94 @@ export function DepositFlowLab({
         <span>DEVELOPMENT PREVIEW · SIMULATED FLOW · NO WALLET OR FUNDS</span>
       </div>
       <div className="deposit-lab-grid">
-        <div>
+        <div className="deposit-lab-workbench">
           <p className="counter-section-index">STRATEGY 01 / EXPERIENCE LAB</p>
-          <h1>
-            ENTER ON
-            <br />
-            <em>YOUR TERMS.</em>
-          </h1>
+          <h1>Deposit flow lab.</h1>
           <p>
             Walk through the full deposit journey. Every balance, quote, transaction, and outcome
             here is fictional.
           </p>
-          <div className="deposit-lab-controls">
-            <label>
-              Simulate an error at{" "}
-              <select
-                value={errorAt}
-                onChange={(e) => setErrorAt(e.target.value as typeof errorAt)}
-              >
-                <option value="none">No error</option>
-                <option value="approval">Wallet approval</option>
-                <option value="deposit">Deposit transaction</option>
-                <option value="vault">Cross-chain vault call</option>
-              </select>
-            </label>
-            <button type="button" onClick={reset}>
-              Start again
-            </button>
-            <button type="button" onClick={() => setStage("source")}>
-              Inspect source atlas
-            </button>
-            <Link className="deposit-lab-source-link" href="/deposit-lab/source">
-              Direct source preview ↗
-            </Link>
-          </div>
-          <section className="deposit-lab-route-controls" aria-labelledby="route-study-heading">
-            <h2 id="route-study-heading" className="deposit-kicker">
-              CROSS-CHAIN MOTION STUDY / MANUAL SIGNALS
-            </h2>
-            <p>
-              Jump to any fictional Aurora state to inspect the route. No wallet or network calls
-              run.
-            </p>
-            <div className="deposit-lab-route-buttons">
-              {routePhases.map((phase) => (
-                <button
-                  key={phase.stage}
-                  type="button"
-                  aria-pressed={stage === phase.stage && crossChain}
-                  onClick={() => jumpToRoute(phase.stage)}
+          <details className="deposit-lab-tools">
+            <summary>Simulation controls</summary>
+            <div className="deposit-lab-controls">
+              <label>
+                Simulate an error at{" "}
+                <select
+                  value={errorAt}
+                  onChange={(e) => setErrorAt(e.target.value as typeof errorAt)}
                 >
-                  {phase.label}
-                </button>
-              ))}
+                  <option value="none">No error</option>
+                  <option value="approval">Wallet approval</option>
+                  <option value="deposit">Deposit transaction</option>
+                  <option value="vault">Cross-chain vault call</option>
+                </select>
+              </label>
+              <button type="button" onClick={reset}>
+                Start again
+              </button>
+              <button type="button" onClick={() => setStage("source")}>
+                Inspect source atlas
+              </button>
+              <Link className="deposit-lab-source-link" href="/deposit-lab/source">
+                Direct source preview ↗
+              </Link>
             </div>
-          </section>
-          <ol className="deposit-lab-stages">
-            <li data-active={stage === "connect"}>Connect</li>
-            <li data-active={stage === "source"}>Source</li>
-            <li data-active={stage === "amount"}>Amount</li>
-            <li data-active={stage === "review"}>Review</li>
-            <li
-              data-active={[
-                "approval",
-                "deposit",
-                "pending",
-                "source-sent",
-                "routing",
-                "arrived",
-                "vault",
-                "mint-check",
-              ].includes(stage)}
-            >
-              Wallet + chain
-            </li>
-            <li data-active={["success", "error", "route-failed", "expired"].includes(stage)}>
-              Outcome
-            </li>
-          </ol>
+            <section className="deposit-lab-route-controls" aria-labelledby="route-study-heading">
+              <h2 id="route-study-heading" className="deposit-kicker">
+                CROSS-CHAIN MOTION STUDY / MANUAL SIGNALS
+              </h2>
+              <p>
+                Jump to any fictional Aurora state to inspect the route. No wallet or network calls
+                run.
+              </p>
+              <div className="deposit-lab-route-buttons">
+                {routePhases.map((phase) => (
+                  <button
+                    key={phase.stage}
+                    type="button"
+                    aria-pressed={stage === phase.stage && crossChain}
+                    onClick={() => jumpToRoute(phase.stage)}
+                  >
+                    {phase.label}
+                  </button>
+                ))}
+              </div>
+              <div className="deposit-lab-controls">
+                <label>
+                  Diagram appearance{" "}
+                  <select
+                    value={journeyAppearance}
+                    onChange={(event) => setJourneyAppearance(event.target.value)}
+                  >
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                  </select>
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={reduceJourneyMotion}
+                    onChange={(event) => setReduceJourneyMotion(event.target.checked)}
+                  />{" "}
+                  Preview reduced motion
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={previewLiveAutoplay}
+                    onChange={(event) => setPreviewLiveAutoplay(event.target.checked)}
+                  />{" "}
+                  Preview live autoplay
+                </label>
+              </div>
+            </section>
+          </details>
         </div>
         <section className="deposit-docket" aria-label="Simulated deposit flow">
           <div className="deposit-docket-topline">
-            <span>DELTA / FIELD NOTE 01</span>
-            <span>SIMULATION ↗</span>
+            <h2>DEPOSIT / STRATEGY 01</h2>
+            <span>{source.toUpperCase()} USDC → sdMON / MONAD</span>
           </div>
-          <div className="deposit-docket-intro">
-            <div>
-              <p className="deposit-kicker">STRATEGY 01 / YOUR ENTRY</p>
-              <h2>
-                Make your
-                <br />
-                <em>first move.</em>
-              </h2>
-            </div>
-            <p>
-              Start with USDC. Know where it goes, what you receive, and when it is actually yours.
-            </p>
-          </div>
-          <DepositRoute source={source} />
           <div className="deposit-docket-form">
             <DepositStepIndicator current={currentStep} includeSource />
             <div key={stage} className="deposit-stage-screen">
@@ -379,7 +372,9 @@ export function DepositFlowLab({
                   <p className="deposit-review-note">
                     {crossChain
                       ? "The route needs a wallet authorization and source-chain transfer. Routing fees and share amount can change until settlement."
-                      : "USDC approval and deposit are separate wallet transactions. Network gas is paid separately. Shares are an estimate until confirmation."}
+                      : "USDC approval and deposit are separate wallet transactions. Network gas is paid separately. Shares are an estimate until confirmation."}{" "}
+                    sdMON represents your share of the whole vault. MON allocation and the
+                    offsetting short happen separately after deposit.
                   </p>
                   <button className="deposit-primary-action" onClick={nextAfterReview}>
                     Start wallet authorization ↗
@@ -440,7 +435,7 @@ export function DepositFlowLab({
                 </div>
               ) : null}
               {routePhase ? (
-                <div className="deposit-lab-route-state">
+                <div className="deposit-lab-route-state" data-appearance={journeyAppearance}>
                   <div className="deposit-lab-route-state-heading">
                     <span className="deposit-kicker">
                       SIMULATED AURORA STATUS / {routePhase.status}
@@ -453,6 +448,16 @@ export function DepositFlowLab({
                     sourceTxSent={routePhase.sourceTxSent}
                     mintConfirmed={routePhase.mintConfirmed}
                     simulated
+                    reducedMotion={reduceJourneyMotion}
+                    strategyAutoPlayKey={
+                      previewLiveAutoplay && routePhase.mintConfirmed
+                        ? "lab-confirmed-deposit"
+                        : undefined
+                    }
+                    onStrategyEnd={() => {
+                      if (previewLiveAutoplay && stage === "success" && !routeStudy)
+                        showReturnRouteAfterDeposit();
+                    }}
                   />
                   <p className="deposit-lab-route-disclaimer">
                     This is a design preview. The live route only advances when Aurora, the vault,
