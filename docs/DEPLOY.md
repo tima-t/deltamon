@@ -53,21 +53,28 @@ Both apps compile `@deltamon/shared`, so a change there has to rebuild both.
 Railway injects `PORT`. The server already defaults `HOST` to `0.0.0.0`, so it binds correctly
 without help.
 
-| Variable                                 | Required         | Notes                                                       |
-| ---------------------------------------- | ---------------- | ----------------------------------------------------------- |
-| `CHAIN_ID`                               | yes              | `143` for Monad mainnet                                     |
-| `RPC_URL`                                | yes              | `https://rpc.monad.xyz`                                     |
-| `VAULT_ADDRESS`                          | yes              | the deployed vault                                          |
-| `CORS_ORIGIN`                            | yes              | the frontend's public URL, exactly, no trailing slash       |
-| `MONGO_CONNECTION_STRING`                | for automation   | add a Railway MongoDB and reference its URL                 |
-| `MONGO_DB_NAME`                          | no               | defaults to `deltamon`                                      |
-| `ADMIN_PRIVATE_KEY`                      | for automation   | signs the vault's swaps, staking and manager funding        |
-| `PERP_MANAGER_PRIVATE_KEY`               | for automation   | signs the AUSD approve and the Perpl deposit                |
-| `PERP_MANAGER_ADDRESS`                   | for automation   | must already be a manager on the vault                      |
-| `PERPL_MANAGERS`                         | for the perp tab | comma separated public addresses allowed to sign in         |
-| `PERPL_API_KEY` / `PERPL_API_KEY_SECRET` | for the perp tab | from `pnpm --filter @deltamon/be perpl:enroll`              |
-| `KEEPER_ENABLED` / `KEEPER_PRIVATE_KEY`  | no               | the perp mark and reward keeper                             |
-| `VALIDATOR_IDS`                          | for staking      | comma separated, the first is what the pipeline stakes with |
+| Variable                                 | Required                  | Notes                                                                   |
+| ---------------------------------------- | ------------------------- | ----------------------------------------------------------------------- |
+| `CHAIN_ID`                               | yes                       | `143` for Monad mainnet                                                 |
+| `RPC_URL`                                | yes                       | `https://rpc.monad.xyz`                                                 |
+| `VAULT_ADDRESS`                          | yes                       | the deployed vault                                                      |
+| `CORS_ORIGIN`                            | yes                       | the frontend's public URL, exactly, no trailing slash                   |
+| `MONGO_CONNECTION_STRING`                | for automation/accounting | add a Railway MongoDB and reference its URL                             |
+| `MONGO_DB_NAME`                          | no                        | defaults to `deltamon`                                                  |
+| `ACCOUNTING_ENABLED`                     | no                        | defaults to `true`; collector requires vault and Mongo                  |
+| `ACCOUNTING_INTERVAL_MS`                 | no                        | defaults to `300000` (five minutes)                                     |
+| `ACCOUNTING_STAKING_APY_BPS`             | for staking estimates     | `1200` = assumed 12% APY; unset means unavailable                       |
+| `ACCOUNTING_PERPL_ACCOUNT_ID`            | for multiple accounts     | dedicated vault account; otherwise the sole account                     |
+| `ACCOUNTING_PERPL_PROFILE`               | no                        | explicit enrolled profile, otherwise vault/configured manager           |
+| `ACCOUNTING_HISTORY_FROM`                | no                        | ISO timestamp excluding unrelated old activity; set before initial sync |
+| `ACCOUNTING_HISTORY_PAGES_PER_TICK`      | no                        | defaults to 10 pages per stream per collection                          |
+| `ADMIN_PRIVATE_KEY`                      | for automation            | signs the vault's swaps, staking and manager funding                    |
+| `PERP_MANAGER_PRIVATE_KEY`               | for automation            | signs the AUSD approve and the Perpl deposit                            |
+| `PERP_MANAGER_ADDRESS`                   | for automation            | must already be a manager on the vault                                  |
+| `PERPL_MANAGERS`                         | for the perp tab          | comma separated public addresses allowed to sign in                     |
+| `PERPL_API_KEY` / `PERPL_API_KEY_SECRET` | for the perp tab          | from `pnpm --filter @deltamon/be perpl:enroll`                          |
+| `KEEPER_ENABLED` / `KEEPER_PRIVATE_KEY`  | no                        | the perp mark and reward keeper                                         |
+| `VALIDATOR_IDS`                          | for staking               | comma separated, the first is what the pipeline stakes with             |
 
 **Run one replica.** The automation pins transaction nonces and holds a single Perpl socket; a
 second instance would compete for both. Trigger keys stop it duplicating a pipeline run, but the
@@ -115,8 +122,13 @@ frontend uses Next's `output: "standalone"`, which traces only the modules the s
 loads, and comes out at 328 MB.
 
 Both run as the `node` user and exec node directly with no shell wrapper, so `SIGTERM` reaches the
-process. The backend closes the keeper, the automation runner, the Perpl socket and the Mongo
+process. The backend closes the keeper, the automation runner, the accounting collector, the Perpl socket and the Mongo
 connection on the way out.
+
+Historical accounting starts automatically with the backend and requires no trading or admin key.
+Its Perpl requests use the existing enrolled key's read permission. For a manual first collection,
+run `pnpm --filter @deltamon/be accounting:sync`. Actual venue events can be backfilled; historical
+vault valuations and staking estimates start with collection. See [ACCOUNTING.md](ACCOUNTING.md).
 
 ## After the first deploy
 

@@ -15,7 +15,8 @@
     "lint": "eslint src test",
     "test": "vitest run",
     "clean": "rm -rf dist",
-    "perpl:enroll": "tsx scripts/enroll-perpl-key.ts"
+    "perpl:enroll": "tsx scripts/enroll-perpl-key.ts",
+    "accounting:sync": "tsx scripts/sync-accounting.ts"
   },
   "dependencies": {
     "@deltamon/shared": "workspace:*",

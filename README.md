@@ -16,6 +16,7 @@ USDC ──▶ DeltaMonVault (ERC-4626) ──▶ MON held and staked
 - **Measured exposure.** The public Balance Engine compares the vault's onchain MON value with a fresh, manager-reported short notional. It shows “within target” only inside a ±2% net exposure band. A missing or stale report is shown as unknown.
 - **Visible trust boundary.** The vault cannot claw back capital sent to a perp manager. Allocation caps and delayed changes limit this risk; they do not remove it. See [docs/VAULT.md](docs/VAULT.md).
 - **Exit path.** Holders can redeem from idle USDC or queue a redemption. If the admin has not funded a queued exit within 36 hours, vault allocation actions freeze until the queue clears.
+- **Historical accounting.** A read-only backend collector backfills actual Perpl funding and fill fees, then records vault holdings and share value every five minutes. MON staking income is estimated from recorded stake and an explicitly configured APY. See [docs/ACCOUNTING.md](docs/ACCOUNTING.md) for setup and the `/api/vault/history` endpoint.
 
 Details: [docs/STRATEGY.md](docs/STRATEGY.md) · Submission plan: [docs/SUBMISSION.md](docs/SUBMISSION.md)
 

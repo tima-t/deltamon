@@ -101,6 +101,30 @@ const EnvSchema = z.object({
    */
   MONGO_CONNECTION_STRING: z.preprocess(emptyToUndefined, z.string().optional()),
   MONGO_DB_NAME: z.string().default("deltamon"),
+  /** Read-only accounting collector. It never signs transactions or submits orders. */
+  ACCOUNTING_ENABLED: z
+    .string()
+    .default("true")
+    .transform((v) => v === "true" || v === "1"),
+  ACCOUNTING_INTERVAL_MS: z.coerce.number().int().min(60_000).max(3_600_000).default(300_000),
+  /** Assumed effective annual staking yield. Unset means no staking estimate, not zero yield. */
+  ACCOUNTING_STAKING_APY_BPS: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().min(0).max(100_000).optional(),
+  ),
+  /** Optional selection when the enrolled profile owns more than one Perpl account. */
+  ACCOUNTING_PERPL_ACCOUNT_ID: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
+  ),
+  /** Otherwise the enrolled profile must be the vault or an allowed manager. */
+  ACCOUNTING_PERPL_PROFILE: z.preprocess(emptyToUndefined, address.optional()),
+  /** Exclude activity before this UTC/offset timestamp when an account predates this strategy. */
+  ACCOUNTING_HISTORY_FROM: z.preprocess(
+    emptyToUndefined,
+    z.iso.datetime({ offset: true }).optional(),
+  ),
+  ACCOUNTING_HISTORY_PAGES_PER_TICK: z.coerce.number().int().min(1).max(100).default(10),
   /**
    * Signs the automation's vault transactions. Full admin power: it can swap, stake and fund perp
    * managers. Keep it off any machine that does not need to run the pipeline.

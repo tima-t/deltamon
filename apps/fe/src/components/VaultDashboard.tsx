@@ -1,9 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { BalanceEngine } from "./BalanceEngine";
-import { StatsRow } from "./StatsRow";
-import { HoldingsPanel } from "./HoldingsPanel";
+import { HedgeStatus } from "./HedgeStatus";
+import { VaultPerformance } from "./VaultPerformance";
 import { DepositPanel } from "./DepositPanel";
 import { PositionPanel } from "./PositionPanel";
 import { useVaultStats } from "@/hooks/useVaultStats";
@@ -95,22 +94,9 @@ export function VaultDashboard() {
         </div>
         <div className="counter-engine-wrap">
           {stats ? (
-            <BalanceEngine stats={stats} />
+            <HedgeStatus stats={stats} />
           ) : (
-            <div
-              className="instrument-card flex min-h-[500px] flex-col items-center justify-center p-8 text-center"
-              role="status"
-            >
-              {isOffline ? (
-                <div className="counter-empty-mark mb-5" aria-hidden="true">
-                  ?
-                </div>
-              ) : (
-                <div
-                  className="mb-5 size-20 rounded-full border-8 border-line border-t-monad"
-                  aria-hidden="true"
-                />
-              )}
+            <div className="hedge-strip hedge-strip-empty" role="status">
               <h3 className="text-2xl font-semibold">
                 {isOffline ? "Live readings unavailable" : "Reading the vault"}
               </h3>
@@ -125,26 +111,7 @@ export function VaultDashboard() {
             </div>
           )}
         </div>
-        {stats ? (
-          <div className="counter-stats">
-            <StatsRow stats={stats} />
-            {stats.source === "demo" ? (
-              <p className="mt-4 text-xs font-medium" style={{ color: "var(--exposure-short)" }}>
-                Example figures. Live readings require a deployed vault and a short position report.
-              </p>
-            ) : null}
-            <details className="counter-composition" id="vault-composition">
-              <summary>
-                <span>
-                  <strong>Vault composition</strong>
-                  <small>MON, idle USDC, and the short account</small>
-                </span>
-                <span aria-hidden="true">↗</span>
-              </summary>
-              <HoldingsPanel stats={stats} />
-            </details>
-          </div>
-        ) : null}
+        <VaultPerformance stats={stats} />
       </section>
 
       <section className="counter-action-section" aria-labelledby="counter-action-title">

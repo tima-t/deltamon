@@ -3,8 +3,7 @@ import { env } from "../config.js";
 import { logger } from "./logger.js";
 
 /**
- * The automation's memory. Everything that must survive a restart without being replayed lives
- * here: the config, each pipeline run and its steps, and the activity log.
+ * Persistent automation and accounting records, shared by API readers and background workers.
  */
 
 let client: MongoClient | null = null;
@@ -19,12 +18,23 @@ export async function db(): Promise<Db> {
   if (database) return database;
   if (!env.MONGO_CONNECTION_STRING) throw new Error("MONGO_CONNECTION_STRING is not set");
   connecting ??= (async () => {
-    client = new MongoClient(env.MONGO_CONNECTION_STRING!, { serverSelectionTimeoutMS: 8_000 });
-    await client.connect();
-    database = client.db(env.MONGO_DB_NAME);
-    await ensureIndexes(database);
-    logger.info({ db: env.MONGO_DB_NAME }, "mongo connected");
-    return database;
+    const candidate = new MongoClient(env.MONGO_CONNECTION_STRING!, {
+      serverSelectionTimeoutMS: 8_000,
+    });
+    client = candidate;
+    try {
+      await candidate.connect();
+      const ready = candidate.db(env.MONGO_DB_NAME);
+      await ensureIndexes(ready);
+      database = ready;
+      logger.info({ db: env.MONGO_DB_NAME }, "mongo connected");
+      return ready;
+    } catch (err) {
+      await candidate.close().catch(() => undefined);
+      client = null;
+      connecting = null;
+      throw err;
+    }
   })();
   return connecting;
 }
@@ -41,9 +51,20 @@ export const collections = {
   flows: "automation_flows",
   activity: "activity",
   sessions: "console_sessions",
+  accountingVault: "accounting_vault_snapshots",
+  accountingFunding: "accounting_funding_observations",
+  accountingEvents: "accounting_perpl_events",
+  accountingState: "accounting_state",
 } as const;
 
 async function ensureIndexes(d: Db): Promise<void> {
+  for (const name of [
+    collections.accountingVault,
+    collections.accountingFunding,
+    collections.accountingEvents,
+  ]) {
+    await d.collection(name).createIndex({ scope: 1, at: 1 }, { name: "accounting_timeline" });
+  }
   // One flow per trigger, enforced by the database rather than by a check-then-act in the worker.
   await d
     .collection(collections.flows)

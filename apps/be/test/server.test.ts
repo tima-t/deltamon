@@ -41,4 +41,21 @@ describe("api", () => {
     const res = await app.inject({ method: "GET", url: "/api/prices/DOGE-USD" });
     expect(res.statusCode).toBe(404);
   });
+
+  it("does not invent accounting history for the demo vault", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/vault/history?days=7" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ status: "not_configured", latest: null, daily: [] });
+  });
+
+  it("bounds historical queries and exposes read-only collection status", async () => {
+    for (const days of ["0", "91", "NaN", "1.5"]) {
+      expect(
+        (await app.inject({ method: "GET", url: `/api/vault/history?days=${days}` })).statusCode,
+      ).toBe(400);
+    }
+    const res = await app.inject({ method: "GET", url: "/api/vault/history/status" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ configured: false, running: false });
+  });
 });
