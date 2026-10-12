@@ -1,0 +1,493 @@
+.live {
+  min-height: 0;
+  background: transparent;
+  --deposit-paper: var(--sheet);
+  --deposit-ink: var(--text);
+  --deposit-rule: var(--rule);
+  --deposit-violet: var(--purple);
+}
+.hero {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  align-items: center;
+  gap: 24px;
+  padding: 20px 0 35px;
+}
+.hero h2 {
+  font: 800 clamp(48px, 5.9vw, 86px)/0.98 var(--font-bricolage);
+  letter-spacing: -0.065em;
+  text-transform: uppercase;
+  margin: 0;
+}
+.hero h2 em {
+  color: var(--purple);
+  font-style: normal;
+}
+.intro {
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 24px 0;
+}
+.ready,
+.inMotion,
+.heroArt,
+.intro,
+.hero :global([class*="signature"]) {
+  transition:
+    max-height 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.25s,
+    margin 0.38s;
+}
+.ready {
+  display: block;
+  max-height: 220px;
+  opacity: 1;
+}
+.inMotion {
+  display: block;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+.heroArt {
+  max-height: 440px;
+}
+.intro,
+.hero :global([class*="signature"]) {
+  max-height: 120px;
+}
+.live:has([data-press-track]) .ready,
+.live:has([data-press-track]) .heroArt,
+.live:has([data-press-track]) .intro,
+.live:has([data-press-track]) .hero :global([class*="signature"]) {
+  max-height: 0;
+  opacity: 0;
+  margin: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+.live:has([data-press-track]) .inMotion {
+  max-height: 180px;
+  opacity: 1;
+  visibility: visible;
+}
+.hero h2 {
+  transition: font-size 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.live:has([data-press-track]) .hero h2 {
+  font-size: clamp(38px, 4vw, 56px);
+}
+.completedTitle {
+  display: none;
+}
+.live:has([data-complete="true"]) .pendingTitle {
+  display: none;
+}
+.live:has([data-complete="true"]) .completedTitle {
+  display: inline;
+}
+.motionControl {
+  display: flex;
+  justify-content: flex-end;
+  margin: -10px 0 16px;
+  font: 10px var(--font-plex-mono);
+  color: var(--muted);
+}
+.motionControl button {
+  min-height: 40px;
+  padding: 0 8px;
+}
+.live.live :global(.deposit-docket) {
+  --deposit-paper: var(--sheet);
+  --deposit-ink: var(--text);
+  --deposit-rule: var(--rule);
+  --deposit-violet: var(--purple);
+  border: 0;
+  border-top: 8px solid var(--text);
+  border-radius: 0;
+  box-shadow:
+    0 14px 30px #4935270b,
+    0 2px 3px #49352710;
+  overflow: visible;
+}
+.live.live :global(.deposit-docket)::before {
+  inset: -15px -9px auto;
+  height: 8px;
+  border: 0;
+  background: var(--text);
+  border-radius: 5px 5px 0 0;
+}
+.live.live :global(.deposit-docket-topline),
+.live.live :global(.deposit-docket-footer) {
+  background: transparent;
+  color: var(--text);
+  font-weight: 400;
+  font-size: 9px;
+  padding: 16px 25px;
+  border-bottom: 1px solid var(--rule);
+  letter-spacing: 0.04em;
+}
+.live.live :global(.deposit-docket-footer) {
+  border-top: 1px dashed var(--rule);
+  border-bottom: 0;
+  color: var(--muted);
+}
+.live.live :global(.deposit-docket-form) {
+  padding: 0 26px 26px;
+}
+.live.live :global(.deposit-step-nav) {
+  position: relative;
+  border-top: 0;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 28px;
+}
+.live.live :global(.deposit-step-item) {
+  background: transparent;
+  color: var(--muted);
+  border: 0;
+  justify-content: center;
+  gap: 10px;
+  padding: 15px 4px;
+  font-weight: 400;
+  text-transform: none;
+}
+.live.live :global(.deposit-step-item[data-state="current"]) {
+  color: var(--purple);
+  background: transparent;
+}
+.live.live :global(.deposit-step-number) {
+  border-color: var(--rule);
+  background: transparent;
+}
+.live.live :global(.deposit-step-item[data-state="current"] .deposit-step-number) {
+  background: var(--purple);
+  border-color: var(--purple);
+  color: var(--sheet);
+}
+.live.live :global(.deposit-step-item[data-state="past"] .deposit-step-number) {
+  background: transparent;
+  border-color: var(--rule);
+}
+.live.live :global(.deposit-step-underline) {
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  height: 3px;
+  pointer-events: none;
+}
+.live.live :global(.deposit-step-underline)::after {
+  content: "";
+  display: block;
+  width: 70%;
+  height: 100%;
+  margin: auto;
+  background: var(--purple);
+}
+.live.live :global(.deposit-stage-screen) {
+  animation: none;
+  min-height: 240px;
+  padding: 12px;
+}
+.live.live :global(.deposit-entry) {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  column-gap: 70px;
+  align-items: center;
+  padding: 24px 12px 38px;
+}
+.live.live :global(.deposit-entry-badge),
+.live.live :global(.deposit-entry h3),
+.live.live :global(.deposit-entry p) {
+  grid-column: 1;
+}
+.live.live :global(.deposit-entry h3) {
+  font-size: 32px;
+  letter-spacing: -0.045em;
+  line-height: 1.1;
+}
+.live.live :global(.deposit-entry .deposit-primary-action) {
+  grid-column: 2;
+  grid-row: 2 / 4;
+}
+.live.live :global(.deposit-entry-note) {
+  grid-column: 2;
+  font-size: 9px;
+}
+.live.live :global(.deposit-primary-action) {
+  border: 0;
+  border-radius: 0;
+  background: var(--purple);
+  color: var(--sheet);
+  box-shadow: none;
+  min-height: 58px;
+  padding: 16px 22px;
+  font-weight: 500;
+}
+.live.live :global(.deposit-kicker),
+.live.live :global(.deposit-entry-badge) {
+  color: var(--purple);
+  font-weight: 400;
+}
+.live.live :global(.deposit-review) {
+  border: 0;
+  background: transparent;
+  padding: 12px 0;
+}
+.live.live :global(.deposit-review h4),
+.live.live :global(.deposit-form-heading h3) {
+  font-family: var(--font-bricolage);
+  font-size: 32px;
+  letter-spacing: -0.045em;
+}
+.live.live :global(.deposit-amount-field) {
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.live.live :global(.deposit-state) {
+  border-radius: 0;
+  box-shadow: none;
+}
+.live.live :global(.deposit-state-pending) {
+  border: 0;
+  background: transparent;
+}
+.live.live :global(.deposit-session-title) {
+  font-family: var(--font-bricolage);
+}
+.trackingBody {
+  padding: 16px 12px 28px;
+  gap: 48px;
+}
+.trackingBody h3 {
+  font: 600 32px/1.1 var(--font-bricolage);
+  letter-spacing: -0.045em;
+  margin: 0 0 18px;
+}
+.trackingBody li > div {
+  flex: 1;
+  min-width: 0;
+}
+.trackingBody li p {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+  margin-top: 5px;
+}
+.trackingBody li small {
+  align-self: center;
+}
+.trackingActions {
+  align-self: center;
+  min-width: 0;
+}
+.caption {
+  font: 9px/1.7 var(--font-plex-mono);
+  color: var(--purple);
+}
+.caption span {
+  color: var(--muted);
+  font-size: 8px;
+}
+.sources {
+  display: grid;
+  gap: 8px;
+  margin: 22px 0;
+}
+.sources button {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  border: 1px solid var(--rule);
+  padding: 20px;
+  text-align: left;
+  min-height: 78px;
+}
+.sources button:hover {
+  background: color-mix(in srgb, var(--purple) 7%, transparent);
+  border-color: var(--purple);
+}
+.sources button > span:first-child {
+  font-size: 26px;
+  color: var(--purple);
+}
+.sources button > span:nth-child(2) {
+  flex: 1;
+}
+.sources strong {
+  display: block;
+  font: 600 21px var(--font-bricolage);
+}
+.sources small {
+  display: block;
+  color: var(--muted);
+  font: 11px var(--font-plex-mono);
+  margin-top: 5px;
+}
+.live[data-motion="paused"] :global(li[data-state="active"]) > span::before {
+  animation-play-state: paused;
+}
+@media (max-width: 700px) {
+  .hero {
+    grid-template-columns: 1fr;
+    padding-top: 10px;
+    gap: 0;
+  }
+  .heroArt {
+    height: 300px;
+  }
+  .hero h2 {
+    font-size: clamp(44px, 10vw, 68px);
+  }
+  .heroArt :global([class*="artOrbit"]) {
+    width: 240px;
+    height: 240px;
+  }
+  .live.live :global(.deposit-docket-form) {
+    padding: 0 14px 20px;
+  }
+  .live.live :global(.deposit-docket-topline),
+  .live.live :global(.deposit-docket-footer) {
+    padding: 14px;
+    font-size: 8px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .live.live :global(.deposit-entry) {
+    display: block;
+    padding: 16px 0 24px;
+  }
+  .live.live :global(.deposit-entry .deposit-primary-action) {
+    margin-top: 24px;
+  }
+  .live.live :global(.deposit-entry-note) {
+    display: block;
+    margin-top: 12px;
+  }
+  .live.live :global(.deposit-step-item) {
+    flex-direction: column;
+    font-size: 8px;
+    gap: 7px;
+  }
+  .live.live :global(.deposit-stage-screen) {
+    padding: 4px;
+  }
+  .trackingBody {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 8px 0 24px;
+  }
+  .trackingBody li {
+    flex-wrap: nowrap;
+  }
+  .trackingBody li small {
+    font-size: 7px;
+  }
+}
+.live.live :global(.deposit-entry) {
+  border-top: 0;
+}
+.live.live :global(.deposit-entry-badge) {
+  background: transparent;
+  padding: 0;
+  align-self: start;
+  justify-self: start;
+}
+.live.live :global(.deposit-primary-action:hover) {
+  transform: none;
+  box-shadow: none;
+  background: color-mix(in srgb, var(--purple) 86%, var(--text));
+}
+.live.live :global(.deposit-session),
+.live.live :global(.deposit-source-section) {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+.stepLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 64px;
+  padding: 22px 12px 36px;
+  align-items: start;
+}
+.stepCopy h3 {
+  font: 600 32px/1.1 var(--font-bricolage);
+  letter-spacing: -0.045em;
+  margin: 0 0 18px;
+}
+.stepCopy > p:last-child {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+  max-width: 38ch;
+}
+.stepActions {
+  min-width: 0;
+}
+.stepActions :global(.deposit-form-heading h3),
+.stepActions :global(.deposit-review h4),
+.stepActions :global(.deposit-source-section > div:first-child > div) {
+  display: none;
+}
+.stepActions :global(.deposit-source-section > div:first-child) {
+  justify-content: flex-end;
+}
+.stepActions :global(.deposit-form-heading) {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.stepActions :global(.deposit-amount-input) {
+  font-size: clamp(32px, 4vw, 56px);
+  min-width: 0;
+}
+.stepActions :global(.deposit-stage-screen) {
+  padding: 0;
+}
+.live.live :global(.deposit-review-note),
+.live.live :global(.deposit-review dt),
+.live.live :global(.deposit-step-help),
+.live.live :global(.deposit-fineprint),
+.live.live :global(.deposit-entry-note) {
+  color: var(--muted);
+}
+@media (max-width: 700px) {
+  .stepLayout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+    padding: 18px 0 26px;
+  }
+}
+
+.receipt {
+  padding: 20px 0 25px;
+  border-bottom: 1px dashed var(--rule);
+  margin-bottom: 10px;
+}
+.receipt h4 {
+  font: 600 clamp(30px, 3vw, 48px)/1.1 var(--font-bricolage);
+  letter-spacing: -0.05em;
+  margin: 18px 0 12px;
+}
+.receipt p {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 22px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .live * {
+    transition: none !important;
+  }
+}
+.live[data-motion="paused"] * {
+  transition: none !important;
+}
+
+@media (max-width: 700px) {
+  .heroScene {
+    inset: 0;
+  }
+}

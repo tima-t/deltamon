@@ -30,7 +30,12 @@ import {
   SESSION_KEY,
   type DepositSession,
 } from "@/lib/crosschain/session";
-import { DepositJourney } from "./DepositJourney";
+import {
+  DepositPressTracking,
+  DepositPressSources,
+  DepositScreenTransition,
+} from "./deposit-press/DepositPress";
+import { getDepositStages } from "@/lib/crosschain/progress";
 import { DepositStepIndicator, type DepositStep } from "./DepositStepIndicator";
 import { ReceiveFunds } from "./ReceiveFunds";
 import { useWalletEntry } from "./WalletEntry";
@@ -39,11 +44,7 @@ import {
   revealReturnRouteAfterDeposit,
   showReturnRouteAfterDeposit,
 } from "@/lib/depositConfirmation";
-import {
-  DepositSourceConstellation,
-  DepositSelectedSource,
-  type DepositSourceStar,
-} from "./DepositSourceConstellation";
+import { DepositSelectedSource, type DepositSourceStar } from "./DepositSourceConstellation";
 
 interface Execution {
   id?: string;
@@ -688,268 +689,418 @@ export function CrossChainDepositPanel({
   return (
     <div className="deposit-crosschain space-y-4">
       <DepositStepIndicator current={currentStep} includeSource />
-      {!address ? (
-        <div className="deposit-entry">
-          <div className="deposit-entry-badge">
-            01 <span>/</span> CONNECT
-          </div>
-          <h3>Where is your USDC?</h3>
-          <p>
-            Connect a wallet to find your supported USDC balances. Then choose a chain and see the
-            complete route before signing.
-          </p>
-          <button type="button" onClick={openEntry} className="deposit-primary-action">
-            Get started ↗
-          </button>
-          <span className="deposit-entry-note">NO FUNDS MOVE WHEN YOU CONNECT</span>
-        </div>
-      ) : session ? (
-        <div className="deposit-session space-y-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="deposit-kicker">
-                {mintConfirmed
-                  ? "Deposit complete"
-                  : ["OPERATION_FAILED", "DEPOSIT_FAILED", "EXPIRED"].includes(
-                        status?.execution.status ?? "",
-                      )
-                    ? "Deposit needs attention"
-                    : "Deposit in progress"}
-              </p>
-              <p role="status" aria-live="polite" className="deposit-session-title">
-                {stage(status?.execution.status, session.sourceTxHash, mintConfirmed)}
-              </p>
+      <DepositScreenTransition
+        step={
+          !address
+            ? 0
+            : session
+              ? 4
+              : currentStep === "source"
+                ? 1
+                : isMonadSelected
+                  ? 5
+                  : quote
+                    ? 3
+                    : 2
+        }
+      >
+        {!address ? (
+          <div className="deposit-entry">
+            <div className="deposit-entry-badge">
+              01 <span>/</span> CONNECT
             </div>
-            <span className="text-muted shrink-0 rounded-full border border-line px-2.5 py-1 font-mono text-[11px]">
-              {short(session.account)}
-            </span>
+            <h3 data-step-heading tabIndex={-1}>
+              Every move starts somewhere.
+            </h3>
+            <p>
+              Connect a wallet to find your supported USDC balances. Then choose a chain and see the
+              complete route before signing.
+            </p>
+            <button type="button" onClick={openEntry} className="deposit-primary-action">
+              Get started ↗
+            </button>
+            <span className="deposit-entry-note">NO FUNDS MOVE WHEN YOU CONNECT</span>
           </div>
-          <DepositJourney
-            status={status?.execution.status}
-            sourceName={session.sourceName}
-            sourceTxSent={Boolean(session.sourceTxHash)}
-            mintConfirmed={mintConfirmed}
-            strategyAutoPlayKey={
-              mintConfirmed && startedSessionId === session.id ? session.id : undefined
-            }
-            onStrategyEnd={revealReturnRoute}
-          />
-          <p className="text-muted flex items-center gap-2 text-xs">
-            {!mintConfirmed &&
-            !["OPERATION_FAILED", "DEPOSIT_FAILED", "EXPIRED"].includes(
-              status?.execution.status ?? "",
-            ) ? (
+        ) : session ? (
+          <div className="deposit-session space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="deposit-kicker">
+                  {mintConfirmed
+                    ? "Deposit complete"
+                    : ["OPERATION_FAILED", "DEPOSIT_FAILED", "EXPIRED"].includes(
+                          status?.execution.status ?? "",
+                        )
+                      ? "Deposit needs attention"
+                      : "Deposit in progress"}
+                </p>
+                <p role="status" aria-live="polite" className="deposit-session-title">
+                  {stage(status?.execution.status, session.sourceTxHash, mintConfirmed)}
+                </p>
+              </div>
+              <span className="text-muted shrink-0 rounded-full border border-line px-2.5 py-1 font-mono text-[11px]">
+                {short(session.account)}
+              </span>
+            </div>
+            <DepositPressTracking
+              stages={getDepositStages(
+                status?.execution.status,
+                session.sourceName,
+                Boolean(session.sourceTxHash),
+                mintConfirmed,
+              )}
+              sourceName={session.sourceName}
+              halted={Boolean(error) && !session.sourceTxHash && !mintConfirmed}
+              autoPlayKey={
+                mintConfirmed && startedSessionId === session.id ? session.id : undefined
+              }
+              onStrategyEnd={revealReturnRoute}
+            />
+            <p className="text-muted flex items-center gap-2 text-xs">
+              {!mintConfirmed &&
+              !["OPERATION_FAILED", "DEPOSIT_FAILED", "EXPIRED"].includes(
+                status?.execution.status ?? "",
+              ) ? (
+                <span
+                  aria-hidden="true"
+                  className="deposit-live-dot bg-long inline-block size-1.5 rounded-full"
+                />
+              ) : null}
+              {mintConfirmed ? "sdMON arrived" : "Status updates automatically"}. Shares go to{" "}
+              {short(session.account)} on Monad.
+            </p>
+            <div className="border-line grid grid-cols-2 gap-x-3 gap-y-2 border-t pt-4 text-sm">
+              <span className="text-muted">Source amount</span>
+              <span className="text-right tabular-nums">
+                {formatUnits(BigInt(session.amount), session.sourceDecimals ?? 6)} USDC
+              </span>
+              <span className="text-muted">Funding address · {session.sourceName} USDC</span>
               <span
-                aria-hidden="true"
-                className="deposit-live-dot bg-long inline-block size-1.5 rounded-full"
-              />
-            ) : null}
-            {mintConfirmed ? "sdMON arrived" : "Status updates automatically"}. Shares go to{" "}
-            {short(session.account)} on Monad.
-          </p>
-          <div className="border-line grid grid-cols-2 gap-x-3 gap-y-2 border-t pt-4 text-sm">
-            <span className="text-muted">Source amount</span>
-            <span className="text-right tabular-nums">
-              {formatUnits(BigInt(session.amount), session.sourceDecimals ?? 6)} USDC
-            </span>
-            <span className="text-muted">Funding address · {session.sourceName} USDC</span>
-            <span className="truncate text-right font-mono text-xs" title={session.depositAddress}>
-              {short(session.depositAddress)}
-            </span>
-            {session.sourceTxHash ? (
-              <>
-                <span className="text-muted">Source transaction</span>
-                <a
-                  className="text-monad text-right font-mono text-xs underline"
-                  href={`${sourceChainById(session.sourceChainId)?.blockExplorers?.default.url}/tx/${session.sourceTxHash}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {short(session.sourceTxHash)}
-                </a>
-              </>
-            ) : null}
-            {status?.execution.destinationChainTxHashes?.[0] ? (
-              <>
-                <span className="text-muted">Monad transaction</span>
-                <a
-                  className="text-monad text-right font-mono text-xs underline"
-                  href={`https://monadvision.com/tx/${status.execution.destinationChainTxHashes[0]}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {short(status.execution.destinationChainTxHashes[0])}
-                </a>
-              </>
-            ) : null}
-            {status?.mintTxHash ? (
-              <>
-                <span className="text-muted">Monad mint transaction</span>
-                <a
-                  className="text-monad text-right font-mono text-xs underline"
-                  href={`https://monadvision.com/tx/${status.mintTxHash}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {short(status.mintTxHash)}
-                </a>
-              </>
-            ) : null}
-          </div>
-          <p className="text-muted text-xs leading-5 text-pretty">
-            The funding address is supplied by Aurora for this {session.sourceName} USDC route. It
-            is separate from your wallet, the vault, and your Monad intermediary account. Send only
-            USDC on {session.sourceName} for this quote; do not reuse the address for another
-            deposit.
-          </p>
-          {status?.execution.status === "SUCCESS" ? (
-            <p className={mintConfirmed ? "text-long text-sm" : "text-muted text-sm"}>
-              {status.mintTxHash
-                ? "Vault Deposit event confirmed."
-                : mintConfirmed
-                  ? "sdMON balance increased."
-                  : "Aurora reports success. Checking the vault mint."}{" "}
-              {status.shares
-                ? `Your wallet holds ${Number(formatUnits(BigInt(status.shares), 18)).toLocaleString(undefined, { maximumFractionDigits: 4 })} sdMON.`
-                : ""}
-            </p>
-          ) : null}
-          {status?.execution.status === "OPERATION_FAILED" ? (
-            <p className="text-short text-sm">
-              USDC reached Monad, but the vault call failed.{" "}
-              {status.intermediaryBalance
-                ? `${formatUnits(BigInt(status.intermediaryBalance), 6)} USDC remains in your Aurora intermediary account.`
-                : "Check the intermediary account before retrying."}
-            </p>
-          ) : null}
-          {status?.intermediaryBalance && BigInt(status.intermediaryBalance) > 0n ? (
-            <div className="border-line space-y-2 border-t pt-3 text-sm">
-              <p>
-                {formatUnits(BigInt(status.intermediaryBalance), 6)} USDC remains in your
-                wallet-controlled Aurora intermediary account on Monad.
-              </p>
-              <p className="text-muted text-xs leading-5">
-                {status.execution.status === "SUCCESS"
-                  ? "A route can deliver more than its quoted minimum, and this balance may include earlier leftovers. It will be included automatically in your next deposit from another chain. You can also withdraw it now for an execution fee."
-                  : "The vault call did not use this USDC. You can authorize a transfer back to your wallet on Monad."}
-              </p>
-              {session.recoveryId ? (
+                className="truncate text-right font-mono text-xs"
+                title={session.depositAddress}
+              >
+                {short(session.depositAddress)}
+              </span>
+              {session.sourceTxHash ? (
                 <>
-                  <p className={recoveryStatus?.status === "SUCCESS" ? "text-long" : "text-muted"}>
-                    Recovery:{" "}
-                    {recoveryStatus?.status === "SUCCESS"
-                      ? "USDC returned to your connected address on Monad."
-                      : (recoveryStatus?.status ?? "waiting for status")}
-                  </p>
-                  {recoveryStatus?.details?.messageSigned === false &&
-                  recoveryStatus.details.payload?.payload_json ? (
+                  <span className="text-muted">Source transaction</span>
+                  <a
+                    className="text-monad text-right font-mono text-xs underline"
+                    href={`${sourceChainById(session.sourceChainId)?.blockExplorers?.default.url}/tx/${session.sourceTxHash}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {short(session.sourceTxHash)}
+                  </a>
+                </>
+              ) : null}
+              {status?.execution.destinationChainTxHashes?.[0] ? (
+                <>
+                  <span className="text-muted">Monad transaction</span>
+                  <a
+                    className="text-monad text-right font-mono text-xs underline"
+                    href={`https://monadvision.com/tx/${status.execution.destinationChainTxHashes[0]}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {short(status.execution.destinationChainTxHashes[0])}
+                  </a>
+                </>
+              ) : null}
+              {status?.mintTxHash ? (
+                <>
+                  <span className="text-muted">Monad mint transaction</span>
+                  <a
+                    className="text-monad text-right font-mono text-xs underline"
+                    href={`https://monadvision.com/tx/${status.mintTxHash}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {short(status.mintTxHash)}
+                  </a>
+                </>
+              ) : null}
+            </div>
+            <p className="text-muted text-xs leading-5 text-pretty">
+              The funding address is supplied by Aurora for this {session.sourceName} USDC route. It
+              is separate from your wallet, the vault, and your Monad intermediary account. Send
+              only USDC on {session.sourceName} for this quote; do not reuse the address for another
+              deposit.
+            </p>
+            {status?.execution.status === "SUCCESS" ? (
+              <p className={mintConfirmed ? "text-long text-sm" : "text-muted text-sm"}>
+                {status.mintTxHash
+                  ? "Vault Deposit event confirmed."
+                  : mintConfirmed
+                    ? "sdMON balance increased."
+                    : "Aurora reports success. Checking the vault mint."}{" "}
+                {status.shares
+                  ? `Your wallet holds ${Number(formatUnits(BigInt(status.shares), 18)).toLocaleString(undefined, { maximumFractionDigits: 4 })} sdMON.`
+                  : ""}
+              </p>
+            ) : null}
+            {status?.execution.status === "OPERATION_FAILED" ? (
+              <p className="text-short text-sm">
+                USDC reached Monad, but the vault call failed.{" "}
+                {status.intermediaryBalance
+                  ? `${formatUnits(BigInt(status.intermediaryBalance), 6)} USDC remains in your Aurora intermediary account.`
+                  : "Check the intermediary account before retrying."}
+              </p>
+            ) : null}
+            {status?.intermediaryBalance && BigInt(status.intermediaryBalance) > 0n ? (
+              <div className="border-line space-y-2 border-t pt-3 text-sm">
+                <p>
+                  {formatUnits(BigInt(status.intermediaryBalance), 6)} USDC remains in your
+                  wallet-controlled Aurora intermediary account on Monad.
+                </p>
+                <p className="text-muted text-xs leading-5">
+                  {status.execution.status === "SUCCESS"
+                    ? "A route can deliver more than its quoted minimum, and this balance may include earlier leftovers. It will be included automatically in your next deposit from another chain. You can also withdraw it now for an execution fee."
+                    : "The vault call did not use this USDC. You can authorize a transfer back to your wallet on Monad."}
+                </p>
+                {session.recoveryId ? (
+                  <>
+                    <p
+                      className={recoveryStatus?.status === "SUCCESS" ? "text-long" : "text-muted"}
+                    >
+                      Recovery:{" "}
+                      {recoveryStatus?.status === "SUCCESS"
+                        ? "USDC returned to your connected address on Monad."
+                        : (recoveryStatus?.status ?? "waiting for status")}
+                    </p>
+                    {recoveryStatus?.details?.messageSigned === false &&
+                    recoveryStatus.details.payload?.payload_json ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void resumeRecovery()}
+                        className="border-line w-full rounded-lg border px-3 py-2 font-medium disabled:opacity-50"
+                      >
+                        Sign recovery authorization
+                      </button>
+                    ) : null}
+                    {["SUCCESS", "OPERATION_FAILED", "EXPIRED"].includes(
+                      recoveryStatus?.status ?? "",
+                    ) ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const retry = { ...session, recoveryId: undefined };
+                          saveSession(retry);
+                          setSession(retry);
+                          setRecoveryStatus(null);
+                          setRecoveryQuote(null);
+                        }}
+                        className="border-line w-full rounded-lg border px-3 py-2 font-medium"
+                      >
+                        Review remaining USDC
+                      </button>
+                    ) : null}
+                  </>
+                ) : recoveryQuote ? (
+                  <>
+                    <p className="text-muted">
+                      Recover about {formatUnits(BigInt(recoveryQuote.amount), 6)} USDC to{" "}
+                      {short(session.account)} on Monad. Estimated execution fee:{" "}
+                      {formatUnits(BigInt(recoveryQuote.fee), 6)} USDC.
+                    </p>
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => void resumeRecovery()}
-                      className="border-line w-full rounded-lg border px-3 py-2 font-medium disabled:opacity-50"
+                      onClick={() => void startRecovery()}
+                      className="bg-monad w-full rounded-lg px-3 py-2 font-medium text-white disabled:opacity-50"
                     >
-                      Sign recovery authorization
+                      Authorize recovery
                     </button>
-                  ) : null}
-                  {["SUCCESS", "OPERATION_FAILED", "EXPIRED"].includes(
-                    recoveryStatus?.status ?? "",
-                  ) ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const retry = { ...session, recoveryId: undefined };
-                        saveSession(retry);
-                        setSession(retry);
-                        setRecoveryStatus(null);
-                        setRecoveryQuote(null);
-                      }}
-                      className="border-line w-full rounded-lg border px-3 py-2 font-medium"
-                    >
-                      Review remaining USDC
-                    </button>
-                  ) : null}
-                </>
-              ) : recoveryQuote ? (
-                <>
-                  <p className="text-muted">
-                    Recover about {formatUnits(BigInt(recoveryQuote.amount), 6)} USDC to{" "}
-                    {short(session.account)} on Monad. Estimated execution fee:{" "}
-                    {formatUnits(BigInt(recoveryQuote.fee), 6)} USDC.
-                  </p>
+                  </>
+                ) : (
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => void startRecovery()}
-                    className="bg-monad w-full rounded-lg px-3 py-2 font-medium text-white disabled:opacity-50"
+                    onClick={() => void reviewRecovery()}
+                    className="border-line w-full rounded-lg border px-3 py-2 font-medium disabled:opacity-50"
                   >
-                    Authorize recovery
+                    {status.execution.status === "SUCCESS"
+                      ? "Review withdrawal instead"
+                      : "Review USDC recovery"}
                   </button>
-                </>
-              ) : (
+                )}
+              </div>
+            ) : null}
+            {status?.execution.status === "EXPIRED" ||
+            status?.execution.status === "DEPOSIT_FAILED" ? (
+              <p className="text-short text-sm">
+                Aurora reports this transfer as expired or failed. Check its refund status before
+                starting another deposit.
+              </p>
+            ) : null}
+            {!session.sourceTxHash &&
+            !["SUCCESS", "EXPIRED", "DEPOSIT_FAILED", "OPERATION_FAILED"].includes(
+              status?.execution.status ?? "",
+            ) ? (
+              <button
+                type="button"
+                disabled={busy || !status}
+                onClick={() => void continueDeposit()}
+                className="bg-monad hover:bg-monad-deep w-full rounded-lg px-4 py-2.5 font-medium text-white disabled:opacity-50"
+              >
+                {busy ? "Waiting for wallet…" : "Continue in wallet"}
+              </button>
+            ) : null}
+            {session.sourceTxHash && status?.execution.status !== "SUCCESS" ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void continueDeposit()}
+                className="border-line w-full rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+              >
+                Refresh source transaction tracking
+              </button>
+            ) : null}
+            {["SUCCESS", "EXPIRED", "DEPOSIT_FAILED", "OPERATION_FAILED"].includes(
+              status?.execution.status ?? "",
+            ) &&
+            (!session.recoveryId ||
+              ["SUCCESS", "OPERATION_FAILED", "EXPIRED"].includes(recoveryStatus?.status ?? "")) ? (
+              <button type="button" onClick={clearSession} className="text-muted text-sm underline">
+                Start another deposit
+              </button>
+            ) : null}
+          </div>
+        ) : fundingNeeded ? (
+          <div key="fund" className="deposit-stage-screen">
+            <ReceiveFunds
+              key={selected?.chainId ?? 143}
+              address={address}
+              sources={assets}
+              selectedChainId={selected?.chainId ?? 143}
+              onRefresh={() => void refreshBalances(address)}
+            />
+            {selectedId && hasUsdc ? (
+              <button
+                type="button"
+                className="deposit-lab-back"
+                onClick={() => setSourceView("source")}
+              >
+                ← Change source
+              </button>
+            ) : null}
+          </div>
+        ) : sourceView === "source" || !selectedId ? (
+          <div key="source" className="deposit-stage-screen">
+            <div className="deposit-source-section space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="deposit-kicker">01 / CHOOSE THE STARTING POINT</p>
+                  <h3>Your USDC starts here.</h3>
+                  <p className="text-muted mt-0.5 text-xs">
+                    Choose the network where your USDC is held.
+                  </p>
+                </div>
                 <button
                   type="button"
-                  disabled={busy}
-                  onClick={() => void reviewRecovery()}
-                  className="border-line w-full rounded-lg border px-3 py-2 font-medium disabled:opacity-50"
+                  disabled={loadingBalances}
+                  onClick={() => void refreshBalances(address)}
+                  className="text-monad hover:text-monad-deep min-h-10 px-2 text-xs font-medium disabled:opacity-50"
                 >
-                  {status.execution.status === "SUCCESS"
-                    ? "Review withdrawal instead"
-                    : "Review USDC recovery"}
+                  Refresh
                 </button>
-              )}
+              </div>
+              {recentSession ? (
+                <div className="border-line bg-paper/40 flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-xs">
+                  <p className="text-muted">
+                    {recentSession.terminalStatus === "SUCCESS"
+                      ? "Last deposit completed."
+                      : "Previous deposit needs attention."}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      restoredSessionId.current = null;
+                      setStatus(null);
+                      setSession(recentSession);
+                    }}
+                    className="text-monad shrink-0 font-medium underline"
+                  >
+                    View details
+                  </button>
+                </div>
+              ) : null}
+              <DepositPressSources
+                sources={sourceStars}
+                onSelect={chooseSource}
+                loading={loadingBalances || loadingMonadBalance}
+              />
             </div>
-          ) : null}
-          {status?.execution.status === "EXPIRED" ||
-          status?.execution.status === "DEPOSIT_FAILED" ? (
-            <p className="text-short text-sm">
-              Aurora reports this transfer as expired or failed. Check its refund status before
-              starting another deposit.
-            </p>
-          ) : null}
-          {!session.sourceTxHash &&
-          !["SUCCESS", "EXPIRED", "DEPOSIT_FAILED", "OPERATION_FAILED"].includes(
-            status?.execution.status ?? "",
-          ) ? (
-            <button
-              type="button"
-              disabled={busy || !status}
-              onClick={() => void continueDeposit()}
-              className="bg-monad hover:bg-monad-deep w-full rounded-lg px-4 py-2.5 font-medium text-white disabled:opacity-50"
-            >
-              {busy ? "Waiting for wallet…" : "Continue in wallet"}
+          </div>
+        ) : isMonadSelected ? null : quote ? (
+          <div key="review" className="deposit-stage-screen">
+            <button type="button" className="deposit-lab-back" onClick={() => setQuote(null)}>
+              ← Edit amount
             </button>
-          ) : null}
-          {session.sourceTxHash && status?.execution.status !== "SUCCESS" ? (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void continueDeposit()}
-              className="border-line w-full rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
-            >
-              Refresh source transaction tracking
-            </button>
-          ) : null}
-          {["SUCCESS", "EXPIRED", "DEPOSIT_FAILED", "OPERATION_FAILED"].includes(
-            status?.execution.status ?? "",
-          ) &&
-          (!session.recoveryId ||
-            ["SUCCESS", "OPERATION_FAILED", "EXPIRED"].includes(recoveryStatus?.status ?? "")) ? (
-            <button type="button" onClick={clearSession} className="text-muted text-sm underline">
-              Start another deposit
-            </button>
-          ) : null}
-        </div>
-      ) : fundingNeeded ? (
-        <div key="fund" className="deposit-stage-screen">
-          <ReceiveFunds
-            key={selected?.chainId ?? 143}
-            address={address}
-            sources={assets}
-            selectedChainId={selected?.chainId ?? 143}
-            onRefresh={() => void refreshBalances(address)}
-          />
-          {selectedId && hasUsdc ? (
+            <div className="deposit-review space-y-2 text-sm">
+              <p className="deposit-kicker">03 / REVIEW BEFORE SIGNING</p>
+              <h4>Review your route.</h4>
+              <p className="text-muted">
+                Send {amountText} USDC on {selected?.chainName}. The vault will receive{" "}
+                {formatUnits(BigInt(quote.depositAmount), 6)} USDC on Monad.
+              </p>
+              {BigInt(quote.reusedUsdc) > 0n ? (
+                <p className="text-muted">
+                  This includes {formatUnits(BigInt(quote.reusedUsdc), 6)} USDC already in your
+                  Monad intermediary account. It will join this deposit in the same
+                  wallet-authorized vault call.
+                </p>
+              ) : null}
+              <p className="text-muted">
+                About{" "}
+                {Number(formatUnits(BigInt(quote.minShares), 18)).toLocaleString(undefined, {
+                  maximumFractionDigits: 4,
+                })}{" "}
+                sdMON goes to {short(address)} on Monad. The vault share price may change before
+                settlement. These shares represent your share of the whole vault; MON allocation and
+                the offsetting short happen separately after deposit.
+              </p>
+              {quote.execution.details?.networkFee ? (
+                <p className="text-muted">
+                  Estimated Monad execution fee:{" "}
+                  {formatUnits(BigInt(quote.execution.details.networkFee), 6)} USDC, already
+                  accounted for in Aurora’s minimum output.
+                </p>
+              ) : null}
+              {quote.execution.quote?.deadline ? (
+                <p className="text-muted">
+                  Quote expires {new Date(quote.execution.quote.deadline).toLocaleString()}.
+                </p>
+              ) : null}
+              <p className="text-muted">
+                You will sign an authorization and send USDC on {selected?.chainName}. Source-chain
+                gas is required; no Monad gas is needed.
+              </p>
+              <p className="text-muted">
+                {performanceFeeBps === undefined
+                  ? "The current performance fee rate is unavailable."
+                  : performanceFeeBps === 0
+                    ? "No performance fee applies when you redeem."
+                    : `A ${performanceFeeBps / 100}% performance fee applies to profit when you redeem.`}
+              </p>
+              <button
+                type="button"
+                disabled={busy || (isPasskey && (!sourceGas || sourceGas.value === 0n))}
+                onClick={() => void start()}
+                className="deposit-primary-action"
+              >
+                {busy
+                  ? isPasskey
+                    ? "Preparing passkey…"
+                    : "Preparing wallet…"
+                  : "Start wallet authorization ↗"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div key="amount" className="deposit-stage-screen">
+            {selectedStar ? <DepositSelectedSource source={selectedStar} /> : null}
             <button
               type="button"
               className="deposit-lab-back"
@@ -957,176 +1108,56 @@ export function CrossChainDepositPanel({
             >
               ← Change source
             </button>
-          ) : null}
-        </div>
-      ) : sourceView === "source" || !selectedId ? (
-        <div key="source" className="deposit-stage-screen">
-          <div className="deposit-source-section space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="deposit-kicker">01 / CHOOSE THE STARTING POINT</p>
-                <h3>Your USDC starts here.</h3>
-                <p className="text-muted mt-0.5 text-xs">
-                  Choose the network where your USDC is held.
-                </p>
-              </div>
+            {selected ? (
+              <label className="deposit-amount-label">
+                <span className="deposit-kicker">
+                  02 / AMOUNT FROM {selected.chainName.toUpperCase()}
+                </span>
+                <div className="deposit-amount-field">
+                  <input
+                    inputMode="decimal"
+                    value={amountText}
+                    onChange={(event) => {
+                      setAmountText(event.target.value.replace(/[^0-9.]/g, ""));
+                      setQuote(null);
+                    }}
+                    placeholder="0.00"
+                    className="deposit-amount-input"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAmountText(
+                        formatUnits(BigInt(selected.balance ?? "0"), selected.decimals),
+                      );
+                      setQuote(null);
+                    }}
+                    className="deposit-max-button"
+                  >
+                    MAX
+                  </button>
+                  <span className="deposit-amount-unit">
+                    USDC <small>{selected.chainName.toUpperCase()}</small>
+                  </span>
+                </div>
+              </label>
+            ) : null}
+            {overBalance ? (
+              <p className="text-short text-sm">Amount exceeds your balance.</p>
+            ) : null}
+            {selected ? (
               <button
                 type="button"
-                disabled={loadingBalances}
-                onClick={() => void refreshBalances(address)}
-                className="text-monad hover:text-monad-deep min-h-10 px-2 text-xs font-medium disabled:opacity-50"
+                disabled={!canQuote}
+                onClick={() => void review()}
+                className="deposit-primary-action"
               >
-                Refresh
+                {busy ? "Getting route quote…" : "Review route ↗"}
               </button>
-            </div>
-            {recentSession ? (
-              <div className="border-line bg-paper/40 flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-xs">
-                <p className="text-muted">
-                  {recentSession.terminalStatus === "SUCCESS"
-                    ? "Last deposit completed."
-                    : "Previous deposit needs attention."}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    restoredSessionId.current = null;
-                    setStatus(null);
-                    setSession(recentSession);
-                  }}
-                  className="text-monad shrink-0 font-medium underline"
-                >
-                  View details
-                </button>
-              </div>
             ) : null}
-            <DepositSourceConstellation
-              sources={sourceStars}
-              selectedId={selectedId}
-              onSelect={chooseSource}
-              loading={loadingBalances || loadingMonadBalance}
-            />
           </div>
-        </div>
-      ) : isMonadSelected ? null : quote ? (
-        <div key="review" className="deposit-stage-screen">
-          <button type="button" className="deposit-lab-back" onClick={() => setQuote(null)}>
-            ← Edit amount
-          </button>
-          <div className="deposit-review space-y-2 text-sm">
-            <p className="deposit-kicker">03 / REVIEW BEFORE SIGNING</p>
-            <h4>Review your route.</h4>
-            <p className="text-muted">
-              Send {amountText} USDC on {selected?.chainName}. The vault will receive{" "}
-              {formatUnits(BigInt(quote.depositAmount), 6)} USDC on Monad.
-            </p>
-            {BigInt(quote.reusedUsdc) > 0n ? (
-              <p className="text-muted">
-                This includes {formatUnits(BigInt(quote.reusedUsdc), 6)} USDC already in your Monad
-                intermediary account. It will join this deposit in the same wallet-authorized vault
-                call.
-              </p>
-            ) : null}
-            <p className="text-muted">
-              About{" "}
-              {Number(formatUnits(BigInt(quote.minShares), 18)).toLocaleString(undefined, {
-                maximumFractionDigits: 4,
-              })}{" "}
-              sdMON goes to {short(address)} on Monad. The vault share price may change before
-              settlement. These shares represent your share of the whole vault; MON allocation and
-              the offsetting short happen separately after deposit.
-            </p>
-            {quote.execution.details?.networkFee ? (
-              <p className="text-muted">
-                Estimated Monad execution fee:{" "}
-                {formatUnits(BigInt(quote.execution.details.networkFee), 6)} USDC, already accounted
-                for in Aurora’s minimum output.
-              </p>
-            ) : null}
-            {quote.execution.quote?.deadline ? (
-              <p className="text-muted">
-                Quote expires {new Date(quote.execution.quote.deadline).toLocaleString()}.
-              </p>
-            ) : null}
-            <p className="text-muted">
-              You will sign an authorization and send USDC on {selected?.chainName}. Source-chain
-              gas is required; no Monad gas is needed.
-            </p>
-            <p className="text-muted">
-              {performanceFeeBps === undefined
-                ? "The current performance fee rate is unavailable."
-                : performanceFeeBps === 0
-                  ? "No performance fee applies when you redeem."
-                  : `A ${performanceFeeBps / 100}% performance fee applies to profit when you redeem.`}
-            </p>
-            <button
-              type="button"
-              disabled={busy || (isPasskey && (!sourceGas || sourceGas.value === 0n))}
-              onClick={() => void start()}
-              className="deposit-primary-action"
-            >
-              {busy
-                ? isPasskey
-                  ? "Preparing passkey…"
-                  : "Preparing wallet…"
-                : "Start wallet authorization ↗"}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div key="amount" className="deposit-stage-screen">
-          {selectedStar ? <DepositSelectedSource source={selectedStar} /> : null}
-          <button
-            type="button"
-            className="deposit-lab-back"
-            onClick={() => setSourceView("source")}
-          >
-            ← Change source
-          </button>
-          {selected ? (
-            <label className="deposit-amount-label">
-              <span className="deposit-kicker">
-                02 / AMOUNT FROM {selected.chainName.toUpperCase()}
-              </span>
-              <div className="deposit-amount-field">
-                <input
-                  inputMode="decimal"
-                  value={amountText}
-                  onChange={(event) => {
-                    setAmountText(event.target.value.replace(/[^0-9.]/g, ""));
-                    setQuote(null);
-                  }}
-                  placeholder="0.00"
-                  className="deposit-amount-input"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAmountText(formatUnits(BigInt(selected.balance ?? "0"), selected.decimals));
-                    setQuote(null);
-                  }}
-                  className="deposit-max-button"
-                >
-                  MAX
-                </button>
-                <span className="deposit-amount-unit">
-                  USDC <small>{selected.chainName.toUpperCase()}</small>
-                </span>
-              </div>
-            </label>
-          ) : null}
-          {overBalance ? <p className="text-short text-sm">Amount exceeds your balance.</p> : null}
-          {selected ? (
-            <button
-              type="button"
-              disabled={!canQuote}
-              onClick={() => void review()}
-              className="deposit-primary-action"
-            >
-              {busy ? "Getting route quote…" : "Review route ↗"}
-            </button>
-          ) : null}
-        </div>
-      )}
+        )}
+      </DepositScreenTransition>
       {isMonadSelected && address && !session ? (
         <div className="deposit-stage-screen" hidden={sourceView !== "amount" || fundingNeeded}>
           {selectedStar && sourceView === "amount" && !fundingNeeded ? (

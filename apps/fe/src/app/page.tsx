@@ -3,10 +3,11 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { VaultDashboard } from "@/components/VaultDashboard";
 import { CharacterStory } from "@/components/CharacterStory";
 import { SHOW_TIPPET_LORE } from "@/lib/featureFlags";
+import styles from "./home.module.css";
 
 export default function Home() {
   return (
-    <main id="top" className="flex flex-1 flex-col">
+    <main id="top" className={`${styles.publication} flex flex-1 flex-col`}>
       <SiteHeader />
 
       <VaultDashboard />

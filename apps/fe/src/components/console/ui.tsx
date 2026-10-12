@@ -21,7 +21,7 @@ export function Card({ title, subtitle, collapsible = false, children }: CardPro
 
   if (!collapsible) {
     return (
-      <section className="border-line bg-surface rounded-xl border p-5">
+      <section className="console-card border-line bg-surface rounded-xl border p-5">
         {heading}
         <div className="mt-4 space-y-4">{children}</div>
       </section>
@@ -29,7 +29,7 @@ export function Card({ title, subtitle, collapsible = false, children }: CardPro
   }
 
   return (
-    <details className="border-line bg-surface group rounded-xl border p-5">
+    <details className="console-card border-line bg-surface group rounded-xl border p-5">
       <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
         {heading}
         <span
@@ -51,7 +51,7 @@ export function CollapsibleCard(props: Omit<CardProps, "collapsible">) {
 
 export function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
   return (
-    <div>
+    <div className="console-stat">
       <div className="text-muted text-sm">{label}</div>
       <div className="mt-0.5 text-lg tabular-nums">{value}</div>
       {hint ? <div className="text-muted text-xs">{hint}</div> : null}
@@ -124,7 +124,7 @@ export function ActionForm({
   }
 
   return (
-    <div className="border-line rounded-lg border p-4">
+    <div className="console-action-form border-line rounded-lg border p-4">
       <div className="font-medium">{title}</div>
       {note ? <p className="text-muted mt-1 text-sm">{note}</p> : null}
       {fields.length > 0 ? (
@@ -132,7 +132,7 @@ export function ActionForm({
           {fields.map((field) => (
             <label key={field.name} className="block">
               <span className="text-muted text-xs">{field.label}</span>
-              <div className="border-line focus-within:border-monad mt-1 flex items-center rounded-md border">
+              <div className="console-input-wrap border-line focus-within:border-monad mt-1 flex items-center rounded-md border">
                 <input
                   value={values[field.name] ?? ""}
                   placeholder={field.placeholder}
@@ -161,7 +161,7 @@ export function ActionForm({
         type="button"
         disabled={disabled || busy}
         onClick={submit}
-        className="border-line hover:border-ink mt-3 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+        className="console-action-button border-line hover:border-ink mt-3 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
       >
         {busy ? "Working…" : button}
       </button>
@@ -184,7 +184,7 @@ export function TxBanner({
 }) {
   if (!label && !error) return null;
   return (
-    <div className="border-line bg-surface sticky bottom-4 z-10 mt-6 rounded-lg border p-3 text-sm">
+    <div className="console-tx-banner border-line bg-surface sticky bottom-4 z-10 mt-6 rounded-lg border p-3 text-sm">
       {error ? (
         <span className="text-short">{error}</span>
       ) : (

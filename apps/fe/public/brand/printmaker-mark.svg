@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" role="img" aria-labelledby="title">
+  <title id="title">DeltaMon printmaker mark</title>
+  <rect width="80" height="80" rx="4" fill="#fff9e9"/>
+  <path d="M27 59v9m18-9v9M20 68h10m12 0h10" fill="none" stroke="#29202b" stroke-width="5" stroke-linecap="round"/>
+  <path d="M45 38q9 3 14-11M20 41Q8 42 13 53" fill="none" stroke="#29202b" stroke-width="5" stroke-linecap="round"/>
+  <path d="M28 13q5-7 10 0l16 38q4 11-8 11H24q-12 0-9-11z" fill="#7447c6" stroke="#29202b" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M28 34v5m12-5v5" stroke="#fff9e9" stroke-width="4" stroke-linecap="round"/>
+  <path d="M29 46q5 5 11-1" fill="none" stroke="#29202b" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="m58 23 17 3-5 33-17-3z" fill="#fff9e9" stroke="#29202b" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="m61 33 9 1m-10 6 9 1m-10 6 7 1" stroke="#7447c6" stroke-width="2.5"/>
+  <path d="m13 49 1 8m-7 1 15-2" stroke="#b58a43" stroke-width="4" stroke-linecap="round"/>
+  <rect x="4" y="57" width="20" height="10" rx="3" transform="rotate(-8 14 62)" fill="#7447c6" stroke="#29202b" stroke-width="2.5"/>
+</svg>

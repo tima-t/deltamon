@@ -26,7 +26,7 @@ export function SiteHeader() {
       <div className="counter-header-main">
         <Link href="/" className="counter-brand" aria-label="DeltaMon home">
           <span className="counter-brand-stamp">
-            <Image src="/brand/deltamon-mark.svg" alt="" width={48} height={48} />
+            <Image src="/brand/printmaker-mark.svg" alt="" width={48} height={48} />
           </span>
           <span className="counter-brand-copy">
             <span className="counter-brand-name">

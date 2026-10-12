@@ -1,0 +1,1286 @@
+.root {
+  --bg: #f2e8d1;
+  --sheet: #fff9e9;
+  --text: #2b2230;
+  --muted: #706572;
+  --rule: #c8bca6;
+  --purple: #6942bb;
+  --accent: #dec096;
+  --studio: #e9dcc1;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 15px;
+}
+.dark {
+  --bg: #211b27;
+  --sheet: #302737;
+  --text: #f5ecd7;
+  --muted: #c3b3c7;
+  --rule: #594b61;
+  --purple: #bd9aef;
+  --accent: #b79974;
+  --studio: #2c2233;
+  color-scheme: dark;
+}
+.root button,
+.root a {
+  touch-action: manipulation;
+}
+.root button {
+  cursor: pointer;
+}
+.root button:focus-visible,
+.root a:focus-visible,
+.root input:focus-visible {
+  outline: 3px solid var(--purple);
+  outline-offset: 5px;
+}
+.root button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.root button {
+  transition:
+    background-color 0.18s,
+    color 0.18s,
+    scale 0.18s;
+}
+.root button:active {
+  scale: 0.96;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 32px;
+  gap: 20px;
+  background: var(--text);
+  color: var(--bg);
+  min-height: 76px;
+}
+.back {
+  font-size: 13px;
+}
+.switcher {
+  display: flex;
+  padding: 4px;
+  background: #ffffff12;
+  border: 1px solid #ffffff25;
+  border-radius: 7px;
+  gap: 4px;
+}
+.switcher button {
+  padding: 10px 18px;
+  border-radius: 3px;
+  font-size: 13px;
+  min-height: 42px;
+}
+.switcher button[aria-pressed="true"] {
+  background: #f2e8d1;
+  color: #2b2230;
+  box-shadow: 0 2px 8px #0002;
+}
+.switcher button span {
+  font-family: var(--font-plex-mono);
+  margin-right: 10px;
+  opacity: 0.55;
+}
+.studyBadge,
+.kicker,
+.masthead > span,
+.artIndex,
+.artNote,
+.ticketHeader,
+.progress,
+.fine,
+.ticketFooter,
+.returnRoute > span,
+.studyFooter > div > span {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.previewTools {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 32px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--muted);
+  font-size: 11px;
+}
+.previewTools p {
+  margin: 0;
+}
+.previewTools > div {
+  display: flex;
+  gap: 16px;
+}
+.previewTools button {
+  min-height: 32px;
+}
+.previewTools button[aria-pressed="true"] {
+  color: var(--purple);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.preview {
+  max-width: 1440px;
+  margin: auto;
+  padding: 0 64px;
+  container-type: inline-size;
+}
+.phone {
+  max-width: 454px;
+  padding: 0 24px;
+  border-inline: 1px solid var(--rule);
+  box-shadow: 0 24px 100px #0001;
+}
+.masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--rule);
+  padding: 27px 0;
+}
+.masthead > strong {
+  font-family: var(--font-bricolage);
+  font-weight: 800;
+  letter-spacing: -1.7px;
+  font-size: 30px;
+}
+.masthead > strong span {
+  font-weight: 500;
+}
+.masthead i {
+  font: 10px var(--font-plex-mono);
+  vertical-align: top;
+  display: inline-block;
+  margin: 6px;
+}
+.masthead > span {
+  display: flex;
+  gap: 20px;
+}
+.masthead b {
+  font-weight: 400;
+  color: var(--muted);
+}
+.edition {
+  font-size: 9px !important;
+  color: var(--muted);
+}
+.hero {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  min-height: 445px;
+  position: relative;
+  align-items: center;
+}
+.heroCopy {
+  position: relative;
+  z-index: 1;
+  padding: 35px 0;
+}
+.kicker {
+  color: var(--purple);
+  margin: 0 0 19px;
+}
+.heroCopy > .kicker {
+  display: flex;
+  gap: 55px;
+  align-items: center;
+}
+.heroCopy > .kicker span {
+  font-size: 24px;
+}
+.hero h1 {
+  font-size: clamp(48px, 5.9vw, 86px);
+  font-weight: 800;
+  line-height: 0.98;
+  letter-spacing: -0.065em;
+  text-transform: uppercase;
+  margin: 0;
+}
+.hero h1 em {
+  font-style: normal;
+  color: var(--purple);
+}
+.intro {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 24px 0;
+}
+.signature {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-top: 30px;
+}
+.signature > span {
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  font: 10px var(--font-plex-mono);
+}
+.signature p {
+  font-family: var(--font-bricolage);
+  font-weight: 600;
+  font-size: 17px;
+  margin: 0;
+}
+.signature small {
+  display: block;
+  font: 8px var(--font-plex-mono);
+  letter-spacing: 0.13em;
+  color: var(--muted);
+  margin-top: 5px;
+}
+.art {
+  height: 440px;
+  position: relative;
+  isolation: isolate;
+}
+.artOrbit {
+  position: absolute;
+  width: 340px;
+  height: 340px;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  top: 35px;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0.4;
+}
+.artOrbit:after {
+  content: "";
+  position: absolute;
+  inset: 28px;
+  border: 1px dashed var(--rule);
+  border-radius: 50%;
+}
+.scene {
+  position: absolute;
+  inset: -10px -40px 0;
+  z-index: 1;
+}
+.artIndex {
+  position: absolute;
+  left: 8px;
+  top: 30px;
+  color: var(--muted);
+  font-size: 8px;
+}
+.artNote {
+  position: absolute;
+  bottom: 20px;
+  right: 0;
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.7;
+  text-align: right;
+}
+.loading {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font: 10px var(--font-plex-mono);
+  color: var(--muted);
+}
+.ticket {
+  position: relative;
+  background: var(--sheet);
+  box-shadow:
+    0 14px 30px #4935270b,
+    0 2px 3px #49352710;
+  margin-bottom: 32px;
+}
+.pressTicket {
+  border-top: 8px solid var(--text);
+}
+.pressTicket:before {
+  content: "";
+  position: absolute;
+  top: -15px;
+  left: -9px;
+  right: -9px;
+  height: 8px;
+  border-radius: 5px 5px 0 0;
+  background: var(--text);
+  box-shadow: 0 3px 0 #0002;
+}
+.sculptureTicket {
+  border: 1px solid var(--rule);
+  border-top: 3px solid var(--purple);
+}
+.ticketHeader {
+  padding: 16px 25px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 9px;
+}
+.ticketHeader b {
+  margin: 0 10px;
+  font-weight: 500;
+}
+.progress {
+  display: flex;
+  margin: 0 26px;
+  border-bottom: 1px solid var(--rule);
+  letter-spacing: 0.01em;
+}
+.progress button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 15px 4px;
+  color: var(--muted);
+  position: relative;
+  font-size: 10px;
+}
+.progress button[aria-current="step"] {
+  color: var(--purple);
+}
+.progress button[aria-current="step"]:after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  height: 3px;
+  background: var(--purple);
+  left: 15%;
+  right: 15%;
+}
+.progress button span {
+  border: 1px solid var(--rule);
+  width: 23px;
+  height: 23px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 9px;
+}
+.progress button[aria-current="step"] span {
+  background: var(--purple);
+  color: var(--sheet);
+  border-color: var(--purple);
+}
+.ticketBody {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: 65px;
+  padding: 34px 38px 32px;
+  min-height: 278px;
+}
+.stepIntro h2 {
+  font-size: 34px;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+  margin: 0 0 16px;
+  max-width: 310px;
+  font-weight: 650;
+}
+.stepIntro > p:not(.kicker) {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--muted);
+  max-width: 305px;
+}
+.stepIntro .kicker {
+  font-size: 9px;
+  margin-bottom: 15px;
+}
+.actionArea {
+  min-width: 0;
+  align-self: center;
+}
+.primary {
+  width: 100%;
+  background: #6942bb;
+  color: #fff9eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 22px;
+  min-height: 54px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 2px;
+}
+.primary:hover {
+  background: #58359f;
+}
+.primary span {
+  font-size: 22px;
+  font-weight: 400;
+}
+.fine {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.7;
+  letter-spacing: 0.01em;
+  margin: 10px 0;
+}
+.actionArea > .fine {
+  text-align: center;
+}
+.accessMark {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  height: 92px;
+}
+.accessMark > span {
+  font: 70px var(--font-bricolage);
+  line-height: 1;
+  color: var(--purple);
+}
+.accessMark i {
+  font: 9px var(--font-plex-mono);
+  letter-spacing: 0.15em;
+  color: var(--muted);
+}
+.ticketFooter {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px dashed var(--rule);
+  padding: 15px 25px;
+  color: var(--muted);
+  font-size: 8px;
+}
+.sources {
+  display: grid;
+  gap: 7px;
+}
+.sources button {
+  display: flex;
+  align-items: center;
+  text-align: left;
+  gap: 14px;
+  border: 1px solid var(--rule);
+  padding: 12px 15px;
+  min-height: 63px;
+}
+.sources button:hover {
+  background: color-mix(in srgb, var(--purple) 8%, var(--sheet));
+  border-color: var(--purple);
+}
+.sources strong {
+  font-weight: 500;
+  flex: 1;
+  font-size: 13px;
+}
+.sources small {
+  display: block;
+  color: var(--muted);
+  font: 10px var(--font-plex-mono);
+  margin-top: 3px;
+}
+.chainSymbol {
+  font-size: 25px;
+  color: var(--purple);
+  width: 35px;
+}
+.textButton {
+  display: block;
+  font-size: 11px;
+  min-height: 40px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.amountTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font: 9px var(--font-plex-mono);
+  align-items: center;
+}
+.amountTop button {
+  color: var(--purple);
+  min-height: 40px;
+}
+.amountField {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.amountField input {
+  min-width: 0;
+  width: 100%;
+  font: 500 52px var(--font-bricolage);
+  letter-spacing: -0.04em;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.amountField > span {
+  font: 13px var(--font-plex-mono);
+  text-align: right;
+}
+.amountField small {
+  display: block;
+  font-size: 8px;
+  margin-top: 5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.review {
+  margin: 0;
+}
+.review > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 12px;
+}
+.review dt {
+  color: var(--muted);
+}
+.review dd {
+  text-align: right;
+  font-weight: 500;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.review small {
+  font-weight: 400;
+  font-size: 10px;
+}
+.violet {
+  color: var(--purple);
+}
+.disclosure {
+  font-size: 10px;
+  line-height: 1.65;
+  color: var(--muted);
+  margin: 15px 0;
+}
+.tracking {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.tracking li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 11px;
+  color: var(--muted);
+}
+.tracking li > span {
+  display: grid;
+  place-items: center;
+  flex: 0 0 22px;
+  height: 22px;
+  font: 10px/1 var(--font-plex-mono);
+  width: 22px;
+}
+.tracking strong {
+  font-weight: 500;
+  flex: 1;
+}
+.tracking small {
+  font: 8px var(--font-plex-mono);
+}
+.tracking li[data-state="active"] {
+  color: var(--purple);
+}
+.tracking li[data-state="done"] {
+  color: var(--text);
+}
+.receipt {
+  position: relative;
+}
+.receipt > .kicker {
+  font-size: 8px;
+  padding-right: 60px;
+}
+.receipt > strong {
+  display: block;
+  font: 600 50px var(--font-bricolage);
+  letter-spacing: -0.04em;
+  margin: 15px 0;
+}
+.receipt > strong small {
+  font-size: 19px;
+  font-weight: 400;
+}
+.receiptStamp {
+  position: absolute;
+  right: 0;
+  top: -8px;
+  border: 2px solid var(--purple);
+  color: var(--purple);
+  border-radius: 50%;
+  height: 65px;
+  width: 65px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transform: rotate(12deg);
+  font-size: 20px;
+}
+.receiptStamp span {
+  font: 8px var(--font-plex-mono);
+}
+.receiptDetail {
+  display: flex;
+  justify-content: space-between;
+  font: 9px var(--font-plex-mono);
+  border-block: 1px dashed var(--rule);
+  padding: 12px 0;
+  gap: 10px;
+}
+.barcode {
+  height: 22px;
+  width: 70%;
+  margin: 18px auto;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--text) 0 2px,
+    transparent 2px 5px,
+    var(--text) 5px 6px,
+    transparent 6px 9px,
+    var(--text) 9px 13px,
+    transparent 13px 17px
+  );
+  opacity: 0.6;
+}
+.returnRoute {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0 38px;
+  border-bottom: 1px solid var(--rule);
+}
+.returnRoute p {
+  font: 500 24px var(--font-bricolage);
+  letter-spacing: -0.04em;
+  margin: 0;
+}
+.returnRoute b {
+  font-size: 20px;
+  color: var(--purple);
+  padding: 0 10px;
+  font-weight: 400;
+}
+.studyFooter {
+  max-width: 1312px;
+  display: flex;
+  justify-content: space-between;
+  gap: 50px;
+  margin: auto;
+  padding: 35px 64px 55px;
+  color: var(--muted);
+}
+.studyFooter h3 {
+  font-size: 21px;
+  color: var(--text);
+  letter-spacing: -0.025em;
+  margin: 12px 0;
+}
+.studyFooter p {
+  font-size: 12px;
+  line-height: 1.7;
+  max-width: 550px;
+  margin: 8px 0;
+}
+.studyFooter > div:last-child {
+  min-width: 220px;
+}
+.studyFooter button,
+.studyFooter a {
+  font-size: 12px;
+  display: inline-block;
+  min-height: 40px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  margin-right: 20px;
+}
+.studyFooter > div:last-child p {
+  font-size: 10px;
+}
+.scene canvas {
+  display: block;
+}
+@container (max-width:760px) {
+  .masthead {
+    padding: 20px 0;
+  }
+  .masthead .edition {
+    display: none;
+  }
+  .hero {
+    grid-template-columns: 1fr 1fr;
+    min-height: 360px;
+  }
+  .hero h1 {
+    font-size: 50px;
+  }
+  .art {
+    height: 340px;
+  }
+  .artOrbit {
+    width: 260px;
+    height: 260px;
+  }
+  .signature {
+    margin-top: 20px;
+  }
+  .heroCopy {
+    padding: 28px 0;
+  }
+  .intro {
+    font-size: 13px;
+  }
+  .ticketBody {
+    gap: 30px;
+    padding: 28px;
+  }
+  .stepIntro h2 {
+    font-size: 30px;
+  }
+  .ticketHeader > span:last-child {
+    display: none;
+  }
+  .returnRoute p {
+    font-size: 21px;
+  }
+}
+@container (max-width:520px) {
+  .masthead > strong {
+    font-size: 26px;
+  }
+  .masthead > span {
+    font-size: 8px;
+    gap: 8px;
+    flex-direction: column;
+    text-align: right;
+  }
+  .hero {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .heroCopy {
+    padding: 30px 0 0;
+  }
+  .heroCopy > .kicker {
+    margin-bottom: 12px;
+  }
+  .hero h1 {
+    font-size: clamp(34px, 12cqw, 53px);
+  }
+  .intro {
+    font-size: 13px;
+    margin: 16px 0;
+  }
+  .signature {
+    display: none;
+  }
+  .art {
+    height: 260px;
+    margin-top: -8px;
+  }
+  .scene {
+    inset: -25px -20px -10px;
+  }
+  .artOrbit {
+    width: 220px;
+    height: 220px;
+    top: 15px;
+  }
+  .artIndex {
+    top: 30px;
+    font-size: 7px;
+    left: 0;
+  }
+  .artNote {
+    font-size: 7px;
+    bottom: 12px;
+  }
+  .ticketHeader {
+    padding: 14px 15px;
+    font-size: 8px;
+    flex-wrap: wrap;
+  }
+  .ticketHeader b {
+    margin: 0 5px;
+  }
+  .progress {
+    margin: 0 14px;
+  }
+  .progress button {
+    flex-direction: column;
+    gap: 6px;
+    font-size: 8px;
+    padding: 12px 2px;
+  }
+  .ticketBody {
+    grid-template-columns: 1fr;
+    padding: 25px 21px;
+    gap: 20px;
+  }
+  .stepIntro h2 {
+    font-size: 32px;
+    max-width: 280px;
+  }
+  .stepIntro > p:not(.kicker) {
+    margin-bottom: 0;
+  }
+  .stepIntro .kicker {
+    font-size: 8px;
+  }
+  .accessMark {
+    height: 48px;
+    margin-bottom: 15px;
+  }
+  .accessMark > span {
+    font-size: 44px;
+  }
+  .ticketFooter {
+    padding: 12px 15px;
+    gap: 12px;
+    font-size: 6px;
+  }
+  .returnRoute {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 3px 0 25px;
+  }
+  .returnRoute > span:first-child {
+    width: 100%;
+    font-size: 8px;
+  }
+  .returnRoute p {
+    font-size: 21px;
+  }
+  .returnRoute > span:last-child {
+    font-size: 9px;
+  }
+  .amountField input {
+    font-size: 46px;
+  }
+  .tracking small {
+    font-size: 7px;
+  }
+  .tracking li {
+    gap: 7px;
+    font-size: 10px;
+  }
+  .receiptDetail {
+    font-size: 8px;
+  }
+}
+@media (max-width: 850px) {
+  .preview {
+    padding: 0 28px;
+  }
+  .toolbar {
+    padding: 12px 20px;
+    gap: 10px;
+  }
+  .studyBadge {
+    display: none;
+  }
+  .previewTools {
+    padding: 10px 20px;
+  }
+  .previewTools p span {
+    display: none;
+  }
+  .studyFooter {
+    padding: 30px 28px;
+  }
+  .switcher button {
+    padding: 10px 12px;
+  }
+}
+@media (max-width: 520px) {
+  .toolbar {
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 12px;
+  }
+  .back {
+    font-size: 11px;
+  }
+  .switcher {
+    width: 100%;
+    justify-content: center;
+    order: 2;
+  }
+  .switcher button {
+    flex: 1;
+    font-size: 12px;
+  }
+  .previewTools {
+    padding: 8px 16px;
+    gap: 8px;
+    font-size: 9px;
+  }
+  .previewTools > div {
+    gap: 12px;
+  }
+  .previewTools button:first-child {
+    display: none;
+  }
+  .preview {
+    padding: 0 21px;
+  }
+  .studyFooter {
+    padding: 28px 22px;
+    display: block;
+  }
+  .studyFooter > div:last-child {
+    margin-top: 20px;
+  }
+  .phone {
+    border: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .root * {
+    scroll-behavior: auto;
+    transition: none !important;
+  }
+}
+
+.receipt {
+  animation: receipt-arrive 450ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.receiptStamp {
+  animation: stamp-arrive 500ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.root[data-motion="paused"] .receipt,
+.root[data-motion="paused"] .receiptStamp {
+  animation-play-state: paused;
+}
+@keyframes receipt-arrive {
+  from {
+    opacity: 0;
+    translate: 0 -8px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@keyframes stamp-arrive {
+  from {
+    opacity: 0;
+    scale: 1.12;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .receipt,
+  .receiptStamp {
+    animation: none;
+  }
+}
+
+/* Tracking keeps the machine in view, beside its literal transaction states. */
+.trackingHero {
+  min-height: 130px;
+  display: block;
+}
+.trackingHero .heroCopy {
+  padding: 28px 0 32px;
+}
+.trackingHero h1 {
+  font-size: clamp(30px, 4vw, 48px);
+}
+.trackingHero .kicker {
+  margin-bottom: 10px;
+}
+.trackingHero .art,
+.trackingHero .intro,
+.trackingHero .signature {
+  display: none;
+}
+.trackingBody {
+  gap: 36px;
+  padding-bottom: 20px;
+}
+.trackingBody .stepIntro h2 {
+  max-width: none;
+}
+.trackingBody .stepIntro > p:not(.kicker) {
+  max-width: 380px;
+}
+.trackingPress {
+  margin-top: 8px;
+}
+.trackingScene {
+  height: 300px;
+  margin: -10px -28px -8px;
+}
+.pressCaption {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font: 8px var(--font-plex-mono);
+  letter-spacing: 0.06em;
+}
+.pressSignal {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--purple);
+  flex: none;
+}
+.trackingBody[data-working="true"] .pressSignal {
+  animation: press-pulse 1.6s ease-in-out infinite;
+}
+.trackingBody[data-working="true"] .tracking li[data-state="active"] > span {
+  position: relative;
+  color: var(--purple);
+}
+.trackingBody[data-working="true"] .tracking li[data-state="active"] > span::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid var(--purple);
+  border-right-color: transparent;
+  animation: press-orbit 1.8s linear infinite;
+}
+.trackingBody .tracking li[data-state="done"] > span {
+  animation: receipt-arrive 0.35s ease-out both;
+}
+.strategy {
+  --journey-map: var(--sheet);
+  --journey-map-ink: var(--text);
+  --journey-muted: var(--muted);
+  --journey-active: var(--purple);
+  --journey-long: var(--purple);
+  --journey-short: #996523;
+  padding: 0 38px 22px;
+  margin-top: 0;
+  border-top: 1px dashed var(--rule);
+}
+.dark .strategy {
+  --journey-short: #e2b876;
+}
+.vaultOrigin {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  font: 10px var(--font-plex-mono);
+  padding: 18px 0 0;
+}
+.vaultOrigin > span {
+  color: var(--purple);
+  font-size: 23px;
+}
+.vaultOrigin small {
+  color: var(--muted);
+  font-size: 8px;
+}
+.strategyConnector {
+  width: 100%;
+  height: 32px;
+  display: block;
+  overflow: visible;
+}
+.strategyConnector path {
+  fill: none;
+  stroke: var(--rule);
+  stroke-width: 1.5px;
+}
+.strategyConnector .strategyCarrier {
+  stroke: var(--purple);
+  stroke-width: 4px;
+  stroke-dasharray: 0.12 0.88;
+  stroke-dashoffset: 1;
+  opacity: 0;
+}
+.strategy[data-playing="true"] .strategyCarrier {
+  animation: strategy-feed 0.75s ease-in-out both;
+}
+.strategyBoundary {
+  font-size: 10px;
+  color: var(--muted);
+  margin: -5px 0 0;
+  line-height: 1.6;
+}
+.strategy[data-motion="paused"] *,
+.root[data-motion="paused"] .pressSignal,
+.root[data-motion="paused"] .tracking li::before,
+.root[data-motion="paused"] .tracking li > span::before {
+  animation-play-state: paused !important;
+}
+.root[data-reduced-motion="true"] *,
+.root[data-reduced-motion="true"] *::before,
+.strategy[data-reduced-motion="true"] * {
+  animation: none !important;
+  transition: none !important;
+}
+@keyframes press-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--purple) 25%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--purple) 0%, transparent);
+  }
+}
+@keyframes press-orbit {
+  to {
+    rotate: 360deg;
+  }
+}
+@keyframes strategy-feed {
+  0% {
+    opacity: 0;
+    stroke-dashoffset: 1;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    stroke-dashoffset: -0.1;
+  }
+}
+@container (max-width:520px) {
+  .trackingHero {
+    min-height: 0;
+  }
+  .trackingHero h1 {
+    font-size: 34px;
+    line-height: 1.05;
+  }
+  .trackingHero h1 em {
+    display: block;
+  }
+  .trackingScene {
+    height: 250px;
+    margin-inline: -15px;
+  }
+  .trackingBody {
+    gap: 25px;
+  }
+  .strategy {
+    padding-inline: 21px;
+  }
+  .strategy :global(.deposit-strategy-leg) {
+    grid-template-columns: 1fr;
+  }
+  .vaultOrigin {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .vaultOrigin small {
+    font-size: 7px;
+  }
+}
+@media (max-width: 520px) {
+  .previewTools {
+    flex-wrap: wrap;
+  }
+  .previewTools > div {
+    flex-wrap: wrap;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pressSignal,
+  .tracking li > span::before,
+  .strategy *,
+  .strategy *::before {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* A paused decorative reveal must never hide the receipt itself. */
+.root[data-motion="paused"] .receipt,
+.root[data-motion="paused"] .receiptStamp {
+  animation: none;
+}
+.trackingBody {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+}
+.trackingBody .stepIntro {
+  min-width: 0;
+}
+.pressCaption {
+  line-height: 1.6;
+}
+.pressCaption > span:last-child {
+  min-width: 0;
+}
+@container (max-width:520px) {
+  .trackingBody {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The rail stays fixed while its marker and the ticket's individual faces travel. */
+.progress {
+  position: relative;
+}
+.progress button[aria-current="step"]:after {
+  display: none;
+}
+.progressIndicator {
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 20%;
+  height: 3px;
+  pointer-events: none;
+}
+.progressIndicator > i {
+  display: block;
+  height: 100%;
+  width: 70%;
+  margin: auto;
+  background: var(--purple);
+}
+.progress button span {
+  transition:
+    background-color 250ms,
+    color 250ms,
+    border-color 250ms;
+}
+.stepViewport {
+  position: relative;
+  overflow: clip;
+}
+.stepPanel {
+  width: 100%;
+  display: flow-root;
+}
+.stepIntro h2:focus {
+  outline: none;
+}

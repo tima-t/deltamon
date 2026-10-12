@@ -9,6 +9,7 @@ import { redemptionPayout } from "@/lib/positionFeedback";
 import { DEPOSIT_CONFIRMED_EVENT } from "@/lib/depositConfirmation";
 import { VAULT_ABI, fmtShares, fmtUsdc, useVaultAction } from "@/lib/vault";
 import { useWalletEntry } from "./WalletEntry";
+import styles from "./PositionReceipt.module.css";
 
 type PositionIntent = {
   kind: "redeem" | "redeemInKind";
@@ -200,172 +201,194 @@ export function PositionPanel() {
   };
 
   return (
-    <div className="panel position-ticket p-6 sm:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="eyebrow">The return route / Strategy 01</p>
-          <h2 id="return-route-title" tabIndex={-1} className="mt-2 text-2xl font-semibold">
-            See what you
-            <br />
-            <em>can redeem now.</em>
-          </h2>
-          <p className="text-muted mt-2 max-w-2xl text-sm">
-            Redemptions use the vault&apos;s available USDC. If there is not enough for your full
-            position, you can redeem the available portion and wait for the admin to return more
-            funds to the vault.
-          </p>
-        </div>
-        <span className="status-pill" data-tone="muted">
-          MONAD VAULT
+    <div className={styles.receipt}>
+      <div className={styles.registration}>
+        <span>03 / THE RETURN ROUTE</span>
+        <span>
+          POSITION RECORD <i aria-hidden="true">↙</i> MONAD
         </span>
       </div>
-      {!address ? (
-        <div className="position-ticket-empty">
-          <button
-            type="button"
-            onClick={openEntry}
-            className="button-primary position-ticket-action mt-6 rounded-xl px-5 py-3 font-semibold"
-          >
-            Get started to view position
-          </button>
-          <div
-            className="position-ticket-return"
-            aria-label="sdMON shares redeem to USDC, subject to available idle liquidity"
-          >
-            <span>
-              sdMON <small>YOUR SHARES</small>
-            </span>
-            <b aria-hidden="true">↘</b>
-            <span>
-              USDC <small>AVAILABLE IDLE CASH</small>
-            </span>
+      <div className={styles.paperBody}>
+        <div className={styles.heading}>
+          <div>
+            <p className={styles.eyebrow}>DELTAMON / STRATEGY 01</p>
+            <h2 id="return-route-title" tabIndex={-1} className={styles.title}>
+              Your share.
+              <br />
+              <em>Your next move.</em>
+            </h2>
+            <p className={styles.description}>
+              Redemptions use the vault&apos;s available USDC. If there is not enough for your full
+              position, you can redeem the available portion and wait for the admin to return more
+              funds to the vault.
+            </p>
+          </div>
+          <div className={styles.stamp} aria-label="MON vault on Monad">
+            <span>MONAD</span>
+            <strong>MON</strong>
+            <span>VAULT</span>
           </div>
         </div>
-      ) : !vault ? (
-        <p className="text-muted mt-6 text-sm">Vault address is not configured.</p>
-      ) : !positionReady ? (
-        <p role="status" className="text-muted mt-6 text-sm">
-          {isPending
-            ? "Reading your vault position…"
-            : "Your position could not be read from Monad right now. Try again shortly."}
+        {!address ? (
+          <div className={styles.empty}>
+            <button type="button" onClick={openEntry} className={styles.primary}>
+              Get started to view position
+            </button>
+            <div
+              className={styles.returnPath}
+              aria-label="sdMON shares redeem to USDC, subject to available idle liquidity"
+            >
+              <span>
+                sdMON <small>YOUR SHARES</small>
+              </span>
+              <b aria-hidden="true">↘</b>
+              <span>
+                USDC <small>AVAILABLE IDLE CASH</small>
+              </span>
+            </div>
+          </div>
+        ) : !vault ? (
+          <p className="text-muted mt-6 text-sm">Vault address is not configured.</p>
+        ) : !positionReady ? (
+          <p role="status" className="text-muted mt-6 text-sm">
+            {isPending
+              ? "Reading your vault position…"
+              : "Your position could not be read from Monad right now. Try again shortly."}
+          </p>
+        ) : (
+          <>
+            <div className={styles.metrics}>
+              <div className={styles.metric}>
+                <p className={styles.metricLabel}>Your shares</p>
+                <p className={styles.metricValue}>{fmtShares(shares)}</p>
+                <p className="text-muted text-xs">sdMON</p>
+              </div>
+              <div className={styles.metric}>
+                <p className={styles.metricLabel}>Redeemable now</p>
+                <p className={styles.metricValue}>
+                  {data?.[1]?.status === "success" ? fmtShares(maxRedeem) : "—"}
+                </p>
+                <p className="text-muted text-xs">sdMON limited by idle USDC</p>
+              </div>
+              <div className={styles.metric}>
+                <p className={styles.metricLabel}>Paid in</p>
+                <p className={styles.metricValue}>
+                  {data?.[2]?.status === "success" ? fmtUsdc(costBasis) : "—"}
+                </p>
+                <p className="text-muted text-xs">USDC cost basis</p>
+              </div>
+            </div>
+            <div className={styles.redeem}>
+              <div className={styles.redeemIntro}>
+                <p className={styles.eyebrow}>THE RETURN / sdMON → USDC</p>
+                <h3>Redeem your shares.</h3>
+                <p className="text-muted mt-1 text-xs">
+                  The vault currently has{" "}
+                  {data?.[3]?.status === "success" ? fmtUsdc(liquidity) : "—"} USDC available for
+                  exits. {performanceFeeText}
+                </p>
+              </div>
+              <div className={styles.controls}>
+                <label className={styles.amountLabel} htmlFor="redeem-amount">
+                  Amount in sdMON
+                </label>
+                <div className={styles.amountField}>
+                  <input
+                    id="redeem-amount"
+                    inputMode="decimal"
+                    value={amountText}
+                    disabled={action.busy}
+                    onChange={(event) => {
+                      setAmountText(event.target.value.replace(/[^0-9.]/g, ""));
+                      setIntent(null);
+                    }}
+                    placeholder="0.00"
+                    className="min-w-0 flex-1 bg-transparent px-3 py-3 text-lg tabular-nums outline-none disabled:opacity-60"
+                  />
+                  <button
+                    type="button"
+                    disabled={action.busy}
+                    onClick={() => {
+                      setAmountText(formatUnits(maxRedeem, 18));
+                      setIntent(null);
+                    }}
+                    className="text-monad px-3 text-xs font-semibold disabled:opacity-50"
+                  >
+                    MAX
+                  </button>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={
+                      action.busy ||
+                      data?.[1]?.status !== "success" ||
+                      amount <= 0n ||
+                      amount > maxRedeem
+                    }
+                    onClick={() =>
+                      startAction(
+                        { kind: "redeem", shares: amount },
+                        [amount, address, address],
+                        "redeem sdMON",
+                      )
+                    }
+                    className={styles.primary}
+                  >
+                    {intent?.kind === "redeem" && action.awaitingWallet
+                      ? "Confirm in wallet…"
+                      : intent?.kind === "redeem" && action.preparing
+                        ? "Preparing…"
+                        : intent?.kind === "redeem" && action.awaitingChain
+                          ? "Redeeming…"
+                          : "Redeem now"}
+                  </button>
+                  {oracleDown ? (
+                    <button
+                      type="button"
+                      disabled={action.busy || amount <= 0n || amount > shares}
+                      onClick={() =>
+                        startAction(
+                          { kind: "redeemInKind", shares: amount },
+                          [amount, address],
+                          "redeem in kind",
+                        )
+                      }
+                      className={styles.secondary}
+                    >
+                      Exit in kind
+                    </button>
+                  ) : null}
+                </div>
+                <PositionActionFeedback intent={intent} action={action} payout={payout} />
+                {amount > maxRedeem && amount <= shares ? (
+                  <p className="text-muted mt-3 text-xs">
+                    That is more than the idle USDC can pay right now. Redeem up to{" "}
+                    {fmtShares(maxRedeem)} sdMON, or wait for the admin to bring liquidity back.
+                  </p>
+                ) : null}
+                {oracleDown ? (
+                  <p className="text-short mt-2 text-xs">
+                    The oracle is down. An in-kind exit returns your share of idle USDC, wrapped MON
+                    and AUSD; staked MON and the manager book stay with remaining holders. No
+                    performance fee applies.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+      <div className={styles.footer}>
+        <div>
+          <span className={styles.barcode} aria-hidden="true" />
+          <span>DELTAMON / POSITION RECORD</span>
+        </div>
+        <p>
+          sdMON IN <span aria-hidden="true">↗</span> USDC OUT
+          <small>Subject to available vault liquidity</small>
         </p>
-      ) : (
-        <>
-          <div className="mt-8 grid gap-5 sm:grid-cols-3">
-            <div className="metric-card">
-              <p className="metric-label">Your shares</p>
-              <p className="metric-value">{fmtShares(shares)}</p>
-              <p className="text-muted text-xs">sdMON</p>
-            </div>
-            <div className="metric-card">
-              <p className="metric-label">Redeemable now</p>
-              <p className="metric-value">
-                {data?.[1]?.status === "success" ? fmtShares(maxRedeem) : "—"}
-              </p>
-              <p className="text-muted text-xs">sdMON limited by idle USDC</p>
-            </div>
-            <div className="metric-card">
-              <p className="metric-label">Paid in</p>
-              <p className="metric-value">
-                {data?.[2]?.status === "success" ? fmtUsdc(costBasis) : "—"}
-              </p>
-              <p className="text-muted text-xs">USDC cost basis</p>
-            </div>
-          </div>
-          <div className="border-line mt-8 rounded-xl border p-5">
-            <h3 className="text-lg font-semibold">Redeem</h3>
-            <p className="text-muted mt-1 text-xs">
-              The vault currently has {data?.[3]?.status === "success" ? fmtUsdc(liquidity) : "—"}{" "}
-              USDC available for exits. {performanceFeeText}
-            </p>
-            <label className="mt-4 block text-sm" htmlFor="redeem-amount">
-              Amount in sdMON
-            </label>
-            <div className="border-line mt-1 flex overflow-hidden rounded-lg border">
-              <input
-                id="redeem-amount"
-                inputMode="decimal"
-                value={amountText}
-                disabled={action.busy}
-                onChange={(event) => {
-                  setAmountText(event.target.value.replace(/[^0-9.]/g, ""));
-                  setIntent(null);
-                }}
-                placeholder="0.00"
-                className="min-w-0 flex-1 bg-transparent px-3 py-3 text-lg tabular-nums outline-none disabled:opacity-60"
-              />
-              <button
-                type="button"
-                disabled={action.busy}
-                onClick={() => {
-                  setAmountText(formatUnits(maxRedeem, 18));
-                  setIntent(null);
-                }}
-                className="text-monad px-3 text-xs font-semibold disabled:opacity-50"
-              >
-                MAX
-              </button>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={
-                  action.busy ||
-                  data?.[1]?.status !== "success" ||
-                  amount <= 0n ||
-                  amount > maxRedeem
-                }
-                onClick={() =>
-                  startAction(
-                    { kind: "redeem", shares: amount },
-                    [amount, address, address],
-                    "redeem sdMON",
-                  )
-                }
-                className="button-primary rounded-lg px-4 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                {intent?.kind === "redeem" && action.awaitingWallet
-                  ? "Confirm in wallet…"
-                  : intent?.kind === "redeem" && action.preparing
-                    ? "Preparing…"
-                    : intent?.kind === "redeem" && action.awaitingChain
-                      ? "Redeeming…"
-                      : "Redeem now"}
-              </button>
-              {oracleDown ? (
-                <button
-                  type="button"
-                  disabled={action.busy || amount <= 0n || amount > shares}
-                  onClick={() =>
-                    startAction(
-                      { kind: "redeemInKind", shares: amount },
-                      [amount, address],
-                      "redeem in kind",
-                    )
-                  }
-                  className="button-secondary rounded-lg px-4 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  Exit in kind
-                </button>
-              ) : null}
-            </div>
-            <PositionActionFeedback intent={intent} action={action} payout={payout} />
-            {amount > maxRedeem && amount <= shares ? (
-              <p className="text-muted mt-3 text-xs">
-                That is more than the idle USDC can pay right now. Redeem up to{" "}
-                {fmtShares(maxRedeem)} sdMON, or wait for the admin to bring liquidity back.
-              </p>
-            ) : null}
-            {oracleDown ? (
-              <p className="text-short mt-2 text-xs">
-                The oracle is down. An in-kind exit returns your share of idle USDC, wrapped MON and
-                AUSD; staked MON and the manager book stay with remaining holders. No performance
-                fee applies.
-              </p>
-            ) : null}
-          </div>
-        </>
-      )}
+      </div>
     </div>
   );
 }
