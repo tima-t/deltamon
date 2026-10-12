@@ -1,0 +1,217 @@
+/* The public chapters share paper and print details; receipts retain their own edges. */
+.publication {
+  --print-paper: #fff9e9;
+  --print-rule: #c8bca6;
+  --print-shadow: 0 1px 2px rgb(43 34 48 / 5%), 0 8px 24px rgb(43 34 48 / 3%);
+}
+
+:global(html[data-theme="dark"]) .publication {
+  --print-paper: #302737;
+  --print-rule: #594b61;
+  --print-shadow: 0 1px 2px rgb(0 0 0 / 10%), 0 8px 24px rgb(0 0 0 / 8%);
+}
+
+.publication :global(.counter-header) {
+  border-bottom: 1px solid var(--print-rule);
+}
+
+.publication :global(.counter-header)::after {
+  display: none;
+}
+
+.publication :global(.counter-header-register) {
+  border-color: var(--print-rule);
+  font-weight: 400;
+}
+
+.publication :global(.counter-brand-stamp) {
+  border-color: var(--print-rule);
+  background: #fff9e9;
+  box-shadow: none;
+  transform: none;
+}
+
+.publication :global(.printmaker-hero-art) {
+  position: relative;
+  align-self: center;
+  min-width: 0;
+}
+
+.publication :global(.printmaker-hero-image) {
+  display: block;
+  width: 120%;
+  max-width: none;
+  height: auto;
+  margin-left: -8%;
+}
+
+.publication :global(.counter-header-link),
+.publication :global(.counter-header-link:last-child) {
+  border-color: var(--print-rule);
+  font-weight: 500;
+}
+
+.publication :global(.counter-header-link)::after {
+  height: 1px;
+}
+
+.publication :global(.counter-header-wallet),
+.publication :global(.counter-header .theme-toggle) {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.publication :global(.counter-header .theme-toggle) {
+  border-color: var(--print-rule);
+  background: transparent;
+}
+
+.publication :global(.counter-primary) {
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: #6942bb;
+  font-weight: 500;
+}
+
+.publication :global(.counter-primary:hover) {
+  background: #51318f;
+}
+
+.publication :global(.counter-primary:focus-visible) {
+  outline: 2px solid var(--monad);
+  outline-offset: 4px;
+}
+
+.publication :global(.counter-hero-intro) {
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.publication :global(.counter-hero-rail) {
+  border-top: 1px solid var(--print-rule);
+  color: var(--ink-muted);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.publication :global(.counter-hero-rail span) {
+  border-color: var(--print-rule);
+}
+
+.publication :global(.hedge-strip),
+.publication :global(.performance-field) {
+  --line: var(--print-rule);
+  background: var(--print-paper);
+  border: 0;
+  box-shadow: var(--print-shadow);
+}
+
+.publication :global(.hedge-strip) {
+  padding: clamp(20px, 3vw, 34px);
+}
+
+.publication :global(.hedge-strip-header) {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--print-rule);
+}
+
+.publication :global(.hedge-strip-readings > div + div) {
+  border-left-style: dashed;
+}
+
+.publication :global(.hedge-strip-account),
+.publication :global(.performance-readout),
+.publication :global(.performance-asset-ledger button) {
+  border-bottom-style: dashed;
+}
+
+.publication :global(.performance-period button),
+.publication :global(.performance-funding-view button) {
+  border-bottom: 1px solid var(--print-rule);
+  color: var(--ink-muted);
+}
+
+.publication :global(.performance-period button[aria-pressed="true"]),
+.publication :global(.performance-funding-view button[aria-pressed="true"]) {
+  border-color: var(--monad);
+  color: var(--monad);
+  background: color-mix(in srgb, var(--monad) 7%, transparent);
+  box-shadow: 0 1px 0 var(--monad);
+}
+
+.publication :global(.site-footer) {
+  margin-inline: max(20px, calc((100vw - 1190px) / 2));
+  border-color: var(--print-rule);
+}
+
+.publication :global(.footer-inner) {
+  gap: 24px;
+  padding: 28px 0 36px;
+}
+
+.publication :global(.footer-imprint) {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.publication :global(.footer-name) {
+  color: var(--ink);
+  font:
+    750 26px/1 var(--font-bricolage),
+    sans-serif;
+  letter-spacing: -0.06em;
+}
+
+.publication :global(.footer-edition),
+.publication :global(.footer-links) {
+  font:
+    10px/1.6 var(--font-plex-mono),
+    monospace;
+}
+
+.publication :global(.footer-edition) {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.publication :global(.footer-links) {
+  flex-wrap: wrap;
+  gap: 8px 24px;
+}
+
+.publication :global(.footer-links a) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  text-decoration: underline;
+  text-decoration-color: var(--print-rule);
+  text-underline-offset: 5px;
+}
+
+.publication :global(.footer-links a:hover) {
+  color: var(--monad);
+  text-decoration-color: currentColor;
+}
+
+.publication :global(.footer-links a:focus-visible) {
+  outline: 2px solid var(--monad);
+  outline-offset: 4px;
+}
+
+@media (max-width: 700px) {
+  .publication :global(.printmaker-hero-art) {
+    margin: -24px -12px 12px;
+  }
+
+  .publication :global(.printmaker-hero-image) {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .publication :global(.hedge-strip-readings > div:last-child) {
+    border-left: 0;
+  }
+}

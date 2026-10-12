@@ -43,26 +43,16 @@ export function VaultDashboard() {
             </a>
           ) : null}
         </div>
-        <div className="counter-hero-art">
-          <div className="counter-orbit" aria-hidden="true" />
-          <div className="counter-art-label counter-art-label-top">
-            {SHOW_TIPPET_LORE ? "TIPPET / THE LITTLE" : "THE LITTLE"}
-            <br />
-            COUNTERWEIGHT ↘
-          </div>
+        <div className="printmaker-hero-art">
           <Image
-            src="/art/counterweight-mascot.png"
-            alt="A purple counterweight character weighs a lavender stone against a small brass block."
-            width={1536}
-            height={1024}
-            priority
-            className="counter-mascot"
+            src="/art/printmaker.png"
+            alt="A violet printmaker holds a brass-handled ink roller and inspects a fresh cream proof sheet."
+            width={1280}
+            height={1280}
+            sizes="(max-width: 700px) 100vw, 50vw"
+            preload
+            className="printmaker-hero-image"
           />
-          <div className="counter-art-label counter-art-label-bottom">
-            MON HELD <span>↔</span> MON SHORT
-            <br />
-            <small>Shown separately</small>
-          </div>
         </div>
         <div className="counter-hero-rail" aria-label="Vault basics">
           <span>
