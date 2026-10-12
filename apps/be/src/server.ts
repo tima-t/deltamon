@@ -9,6 +9,7 @@ import { vaultRoutes } from "./routes/vault.js";
 import { marketRoutes } from "./routes/markets.js";
 import { perpRoutes } from "./routes/perp.js";
 import { automationRoutes } from "./routes/automation.js";
+import { accountingRoutes } from "./routes/accounting.js";
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({ logger: loggerOptions });
@@ -27,6 +28,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(marketRoutes, { prefix: "/api" });
   await app.register(perpRoutes, { prefix: "/api" });
   await app.register(automationRoutes, { prefix: "/api" });
+  await app.register(accountingRoutes, { prefix: "/api" });
 
   return app;
 }

@@ -3,6 +3,7 @@ export * from "./addresses.js";
 export * from "./deployments.js";
 export * from "./constants.js";
 export * from "./schemas.js";
+export * from "./accounting.js";
 export * from "./format.js";
 export * from "./abis/erc20.js";
 export * from "./abis/deltaMonVault.js";

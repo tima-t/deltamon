@@ -1,0 +1,142 @@
+import type { AccountingDaily, VaultAccountingHistory, VaultStats } from "@deltamon/shared";
+
+export type FundingView = "observed" | "settled";
+export const DAY_SECONDS = 86_400;
+
+export function historyMatchesVault(
+  history: VaultAccountingHistory,
+  stats: Pick<VaultStats, "vault" | "chainId" | "source"> | null,
+): boolean {
+  if (!stats) return true;
+  return (
+    stats.source === "onchain" &&
+    stats.vault?.toLowerCase() === history.vault?.toLowerCase() &&
+    stats.chainId === history.chainId
+  );
+}
+
+export function fundingValue(day: AccountingDaily, view: FundingView): number | null {
+  return view === "settled" ? day.fundingSettledUsd : day.fundingObservedUsd;
+}
+
+export function incomeValue(day: AccountingDaily, view: FundingView): number | null {
+  const funding = fundingValue(day, view);
+  return funding === null || day.stakingEstimatedUsd === null
+    ? null
+    : funding + day.stakingEstimatedUsd;
+}
+
+export interface CumulativeIncomePoint {
+  index: number;
+  value: number;
+  funding: number;
+  staking: number;
+  partial: boolean;
+}
+
+/** Sum recorded earned funding and estimated staking only; missing sources never become zero. */
+export function cumulativeIncome(days: AccountingDaily[]): (CumulativeIncomePoint | null)[] {
+  let funding = 0;
+  let staking = 0;
+  let partial = false;
+  return days.map((day, index) => {
+    const income = incomeValue(day, "observed");
+    if (income === null) {
+      partial = true;
+      return null;
+    }
+    funding += day.fundingObservedUsd!;
+    staking += day.stakingEstimatedUsd!;
+    partial ||= day.stakingCoveredSeconds < DAY_SECONDS || day.fundingObservedSeconds < DAY_SECONDS;
+    return { index, value: funding + staking, funding, staking, partial };
+  });
+}
+
+export function incomeRuns(points: (CumulativeIncomePoint | null)[]): CumulativeIncomePoint[][] {
+  const runs: CumulativeIncomePoint[][] = [];
+  let previousIndex = -2;
+  for (const point of points) {
+    if (!point) continue;
+    if (point.index !== previousIndex + 1) runs.push([]);
+    runs[runs.length - 1]!.push(point);
+    previousIndex = point.index;
+  }
+  return runs;
+}
+
+export function recordedReturn(day: AccountingDaily): number | null {
+  return day.shortBookFresh && day.pricePerShareUsd !== null && day.pricePerShareUsd > 0
+    ? day.vaultReturnPct
+    : null;
+}
+
+/** Separate paths preserve missing days and restarts after zero share supply. */
+export function returnRuns(days: AccountingDaily[]): { index: number; value: number }[][] {
+  const runs: { index: number; value: number }[][] = [];
+  let previousSegment: number | null = null;
+  let previousIndex = -2;
+  for (const [index, day] of days.entries()) {
+    const value = recordedReturn(day);
+    if (value === null || day.returnSegment === null) continue;
+    if (index !== previousIndex + 1 || day.returnSegment !== previousSegment) runs.push([]);
+    runs[runs.length - 1]!.push({ index, value });
+    previousSegment = day.returnSegment;
+    previousIndex = index;
+  }
+  return runs;
+}
+
+export function compositionSlices(history: VaultAccountingHistory) {
+  const c = history.composition;
+  if (!c) return null;
+  const slices = [
+    { id: "mon", label: "MON holdings", value: c.monHoldingsUsd },
+    { id: "short", label: "Short-account equity", value: c.shortEquityBookedUsd },
+    { id: "usd", label: "USD", value: c.idleUsdcUsd + c.idleAusdUsd },
+  ];
+  const total = slices.reduce((sum, slice) => sum + slice.value, 0);
+  // Pie area cannot represent a negative asset or a mismatched accounting total.
+  const chartable =
+    [c.idleUsdcUsd, c.idleAusdUsd].every((value) => Number.isFinite(value) && value >= 0) &&
+    slices.every((slice) => Number.isFinite(slice.value) && slice.value >= 0) &&
+    (!history.latest ||
+      Math.abs(total - history.latest.grossAssetsUsd) <= Math.max(0.02, total * 0.0001));
+  return { slices, total, chartable };
+}
+
+const money = (value: number, digits: number) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value);
+
+/** Small live-vault earnings must not disappear into a rounded $0. */
+export function historyUsd(value: number | null, signed = false): string {
+  if (value === null || !Number.isFinite(value)) return "—";
+  const absolute = Math.abs(value);
+  const digits = absolute > 0 && absolute < 0.01 ? 6 : absolute < 1 && absolute > 0 ? 4 : 2;
+  return `${value < 0 ? "−" : signed && value > 0 ? "+" : ""}${money(absolute, digits)}`;
+}
+
+export function historyPercent(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "—";
+  const digits = Math.abs(value) > 0 && Math.abs(value) < 0.01 ? 4 : 2;
+  return `${value < 0 ? "−" : value > 0 ? "+" : ""}${Math.abs(value).toFixed(digits)}%`;
+}
+
+export function historyDate(date: string): string {
+  return new Date(date).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    timeZone: "UTC",
+  });
+}
+
+export function coverageLabel(seconds: number): string {
+  if (seconds >= DAY_SECONDS) return "Full day";
+  if (seconds < 60) return `${Math.round(seconds)}s recorded`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m recorded`;
+  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m recorded`;
+}
