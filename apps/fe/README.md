@@ -17,8 +17,8 @@ Reown project ID to also offer WalletConnect QR wallets; an empty ID disables th
 
 ## Passkey wallets
 
-Set `NEXT_PUBLIC_PASSKEY_ENABLED=true` to show Mera passkey onboarding on `app.deltamon.xyz` or
-`localhost`. Other hosts cannot create or access DeltaMon passkeys. Keep the public flag off until a
+Set `NEXT_PUBLIC_PASSKEY_ENABLED=true` to show Mera passkey onboarding on `deltamonfe-production.up.railway.app`
+or `localhost`. Other hosts cannot create or access DeltaMon passkeys. Keep the public flag off until a
 small funded passkey deposit and exit have been checked end to end. Mera currently requires a
 PRF-capable passkey provider; the UI offers the existing wallet path when PRF is unavailable.
 

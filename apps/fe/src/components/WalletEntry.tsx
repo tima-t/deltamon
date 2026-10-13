@@ -233,8 +233,8 @@ export function WalletEntryProvider({ children }: { children: ReactNode }) {
                   </button>
                   {!available ? (
                     <p className="wallet-entry-availability">
-                      Passkey wallets are available on app.deltamon.xyz after launch, or on
-                      localhost when enabled.
+                      Passkey wallets are available on deltamonfe-production.up.railway.app after launch,
+                      or on localhost when enabled.
                     </p>
                   ) : null}
                 </div>
