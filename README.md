@@ -4,6 +4,18 @@ DeltaMon is a USDC vault on [Monad](https://monad.xyz) that holds MON and alloca
 
 Built for [**Monad Metropolis**](https://hackathon.monad.xyz/) (1 Sep – 13 Oct 2026), track _Onchain Finance & Trading_.
 
+**Live on Monad mainnet** (chain id 143):
+
+| Contract                    | Address                                                                                                                    |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `DeltaMonVault` (sdMON)     | [`0x9165D1698B7Bd11E702a36874c3047331B7fA213`](https://monadvision.com/address/0x9165D1698B7Bd11E702a36874c3047331B7fA213) |
+| `KuruSpotAdapter`           | [`0xCedB2Fb595a748e19172aa8B7261F6976C49f170`](https://monadvision.com/address/0xCedB2Fb595a748e19172aa8B7261F6976C49f170) |
+| `ChainlinkOracle` (MON/USD) | [`0xb606682137e747D8E79398870407E60A5C603611`](https://monadvision.com/address/0xb606682137e747D8E79398870407E60A5C603611) |
+
+Deployed at block 107,645,440. The oracle and swap adapter renounced ownership at deploy, so their
+feeds and markets are fixed for good; changing either means a new vault. Source of truth:
+[`packages/shared/src/deployments.ts`](packages/shared/src/deployments.ts).
+
 ## How it works
 
 ```
@@ -24,30 +36,36 @@ Details: [docs/STRATEGY.md](docs/STRATEGY.md) · Submission plan: [docs/SUBMISSI
 
 Turborepo + pnpm workspaces.
 
-| Path                         | What                                                                                  |
-| ---------------------------- | ------------------------------------------------------------------------------------- |
-| `apps/fe`                    | Next.js 16 + Tailwind 4 + wagmi 2 + RainbowKit. Vault dashboard and deposit flow      |
-| `apps/be`                    | Node.js (Fastify 5). API for vault stats and a keeper that calls `rebalance()`        |
-| `packages/contracts`         | Foundry. `DeltaVault`, `DeltaNeutralStrategy`, venue adapters, oracle adapters, tests |
-| `packages/shared`            | Chains, third-party addresses, ABIs, zod schemas shared by FE and BE                  |
-| `packages/typescript-config` | Base tsconfigs                                                                        |
+| Path                         | What                                                                               |
+| ---------------------------- | ---------------------------------------------------------------------------------- |
+| `apps/fe`                    | Next.js 16 + Tailwind 4 + wagmi 2 + RainbowKit. Vault dashboard and deposit flow   |
+| `apps/be`                    | Fastify 5. Vault stats API, accounting collector, keeper and automation pipeline   |
+| `packages/contracts`         | Foundry. `DeltaMonVault` (deployed), venue and oracle adapters, v2 strategy, tests |
+| `packages/shared`            | Chains, third-party addresses, ABIs, zod schemas shared by FE and BE               |
+| `packages/typescript-config` | Base tsconfigs                                                                     |
 
 ## Stack
 
 **On-chain (ours):** Solidity 0.8.28, Foundry, OpenZeppelin 5 (ERC-4626, AccessControl, Pausable, ReentrancyGuard).
 
-**On-chain (third-party, Monad mainnet):**
+**Integrations:**
 
-| Protocol         | Used for                                    | Address                                      |
-| ---------------- | ------------------------------------------- | -------------------------------------------- |
-| Kuru             | Spot swaps via CLOB router (`anyToAnySwap`) | `0xd651346d7c789536ebf06dc72aE3C8502cd695CC` |
-| aPriori          | Liquid staking (aprMON)                     | `0x0c65A0BC65a5D819235B71F554D210D3F80E0852` |
-| Perpl            | MON perpetual short (AUSD collateral)       | `0x34B6552d57a35a1D042CcAe1951BD1C370112a6F` |
-| Pyth             | MON/USD, USDC/USD pull oracle               | `0x2880aB155794e7179c9eE2e38200202908C17B43` |
-| Chainlink        | aprMON/MON, sMON/MON rate feeds             | see `packages/shared/src/addresses.ts`       |
-| Aave V3 / Morpho | candidate lending legs                      | see `packages/shared/src/addresses.ts`       |
+| Protocol         | Used for                                                       | Where                                                                                                                      |
+| ---------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Kuru             | Spot USDC ⇄ MON swaps via CLOB router (`anyToAnySwap`)         | [`0xd651346d7c789536ebf06dc72aE3C8502cd695CC`](https://monadvision.com/address/0xd651346d7c789536ebf06dc72aE3C8502cd695CC) |
+| Perpl            | Manager-run MON perpetual short, AUSD collateral               | [`0x34B6552d57a35a1D042CcAe1951BD1C370112a6F`](https://monadvision.com/address/0x34B6552d57a35a1D042CcAe1951BD1C370112a6F) |
+| Chainlink        | MON/USD price feed behind the deployed oracle                  | [`0xBcD78f76005B7515837af6b50c7C52BCf73822fb`](https://monadvision.com/address/0xBcD78f76005B7515837af6b50c7C52BCf73822fb) |
+| Monad staking    | Native MON delegation and rewards                              | precompile `0x0000000000000000000000000000000000001000`                                                                    |
+| Mera             | Passkey wallets — onboard and recover without a seed phrase    | `@category-labs/mera`, `apps/fe/src/lib/meraConnector.ts`                                                                  |
+| Aurora Intents   | Cross-chain USDC deposits from other EVM chains into the vault | server-side API, `apps/fe/src/app/api/crosschain/`                                                                         |
+| Pyth             | MON/USD, USDC/USD pull oracle — adapter built, not wired in v1 | [`0x2880aB155794e7179c9eE2e38200202908C17B43`](https://monadvision.com/address/0x2880aB155794e7179c9eE2e38200202908C17B43) |
+| aPriori          | Liquid staking (aprMON) — adapter built for v2, unused in v1   | `0x0c65A0BC65a5D819235B71F554D210D3F80E0852`                                                                               |
+| Aave V3 / Morpho | Candidate lending legs, not wired                              | see `packages/shared/src/addresses.ts`                                                                                     |
 
-Full address book for mainnet (143) and testnet (10143): [`packages/shared/src/addresses.ts`](packages/shared/src/addresses.ts).
+Kuru, Perpl, Chainlink and Monad staking are wired into the deployed v1 vault. Mera and Aurora
+Intents are frontend paths, each behind its own flag (`NEXT_PUBLIC_PASSKEY_ENABLED`,
+`AURORA_CROSSCHAIN_ENABLED`), both off by default. Full address book for mainnet (143) and testnet
+(10143): [`packages/shared/src/addresses.ts`](packages/shared/src/addresses.ts).
 
 **Off-chain:** TypeScript, viem, wagmi, RainbowKit, TanStack Query, Fastify, pino, zod, vitest, Turborepo.
 
@@ -87,18 +105,6 @@ Then copy the addresses from `packages/contracts/deployments/deltamon-<chainId>.
 The v1 vault targets **Monad mainnet** with a small deposit cap: the Monad testnet Kuru MON/USDC market has no liquidity and the testnet WMON address in the registry has no code, so a testnet deployment cannot swap.
 
 Monad networks: mainnet chain id 143, RPC `https://rpc.monad.xyz`, explorer [monadvision.com](https://monadvision.com). Testnet chain id 10143, RPC `https://testnet-rpc.monad.xyz`, explorer [testnet.monadexplorer.com](https://testnet.monadexplorer.com), faucet [faucet.monad.xyz](https://faucet.monad.xyz).
-
-## Status
-
-- [x] Monorepo, CI, shared address book
-- [x] **`DeltaMonVault`**: two roles, admin-directed Kuru swaps, native staking, Perpl collateral rails, redemption queue with a 36 h deadline, profit-only fee on a per-depositor basis — 33 unit tests + 5 mainnet fork tests
-- [x] `SdMonVault`: earlier variant that split every deposit 60/40 automatically, kept for reference
-- [x] `KuruSpotAdapter` (native-MON aware, direction derived from market params), Chainlink + Pyth oracle adapters
-- [x] Backend API + keeper loop, frontend dashboard + deposit / redeem flow (demo data until deployed)
-- [x] v2 `DeltaVault` + `DeltaNeutralStrategy` (hedged) with mock-venue tests, not wired yet
-- [ ] Capped mainnet deployment of v1, addresses into `packages/shared`
-- [ ] Perpl hedge leg (API-signed orders; confirm on-chain account flow with the Perpl team)
-- [ ] Demo video and project profile
 
 ## Risks
 
