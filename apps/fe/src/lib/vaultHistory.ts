@@ -15,6 +15,32 @@ export function historyMatchesVault(
   );
 }
 
+/**
+ * Whether a day carries an actual reading. A confirmed zero from a fully scanned day is a
+ * reading; a `0` that only means "this day was inside the scanned range" is not, which is why
+ * settled funding, fees and realised PnL count only when they moved.
+ */
+export function hasReading(day: AccountingDaily): boolean {
+  return (
+    day.snapshotAt !== null ||
+    day.fundingObservedUsd !== null ||
+    day.stakingEstimatedUsd !== null ||
+    Boolean(day.fundingSettledUsd) ||
+    Boolean(day.tradingFeesUsd) ||
+    Boolean(day.realisedTradingPnlUsd)
+  );
+}
+
+/**
+ * Drop the leading stretch of days with nothing recorded. A vault a few days old would otherwise
+ * draw its whole history into the last few pixels of a thirty-day axis. Trailing days stay: the
+ * gap between the last reading and today is information.
+ */
+export function trimToRecorded(days: AccountingDaily[]): AccountingDaily[] {
+  const first = days.findIndex(hasReading);
+  return first <= 0 ? days : days.slice(first);
+}
+
 export function fundingValue(day: AccountingDaily, view: FundingView): number | null {
   return view === "settled" ? day.fundingSettledUsd : day.fundingObservedUsd;
 }

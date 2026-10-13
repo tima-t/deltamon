@@ -13,6 +13,7 @@ import {
   historyUsd,
   historyPercent,
   strategyReturn,
+  trimToRecorded,
   incomeValue,
   cumulativeIncome,
   type FundingView,
@@ -225,7 +226,10 @@ export function VaultPerformance({ stats }: { stats: VaultStats | null }) {
   const history = mismatched ? null : (query.data ?? null);
   // Keep the recorded asset mix stable while switching periods, but never label old dates as
   // the newly requested period. Income readings wait for the matching response.
-  const days = query.isPlaceholderData ? [] : (history?.daily ?? []);
+  const allDays = query.isPlaceholderData ? [] : (history?.daily ?? []);
+  // Framing only: an empty run before the first reading would squeeze the record into the margin.
+  const days = trimToRecorded(allDays);
+  const trimmed = allDays.length - days.length;
   const selectedIndex = Math.max(
     0,
     selectedDate ? days.findIndex((day) => day.date === selectedDate) : days.length - 1,
@@ -346,6 +350,9 @@ export function VaultPerformance({ stats }: { stats: VaultStats | null }) {
               ? " The latest short report was stale; funding accrual may lag."
               : ""}
             {lastStrategy?.partial ? " Partial coverage; unrecorded income is excluded." : ""}
+            {trimmed > 0
+              ? ` The axis starts at the first recorded day; ${trimmed} earlier ${trimmed === 1 ? "day has" : "days have"} no readings.`
+              : ""}
           </p>
         </div>
         <CapitalComposition history={history} />
