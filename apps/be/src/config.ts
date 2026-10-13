@@ -126,6 +126,18 @@ const EnvSchema = z.object({
   ),
   ACCOUNTING_HISTORY_PAGES_PER_TICK: z.coerce.number().int().min(1).max(100).default(10),
   /**
+   * Blocks of vault Deposit history scanned per tick. Monad's RPC answers eth_getLogs over 100
+   * blocks at most, so this is the request budget divided by a hundred. The cursor is durable,
+   * so raising it only shortens the one-time backfill; once at chain head a tick costs a handful
+   * of requests. Thousands of requests per tick will be rate limited on a shared endpoint.
+   */
+  ACCOUNTING_DEPOSIT_BLOCKS_PER_TICK: z.coerce
+    .number()
+    .int()
+    .min(100)
+    .max(2_000_000)
+    .default(240_000),
+  /**
    * Signs the automation's vault transactions. Full admin power: it can swap, stake and fund perp
    * managers. Keep it off any machine that does not need to run the pipeline.
    */

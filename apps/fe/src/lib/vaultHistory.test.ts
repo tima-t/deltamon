@@ -15,6 +15,8 @@ import {
   incomeValue,
   recordedReturn,
   returnRuns,
+  strategyReturn,
+  strategyRuns,
 } from "./vaultHistory";
 
 function day(date: string, overrides: Partial<AccountingDaily> = {}): AccountingDaily {
@@ -59,6 +61,13 @@ const history = VaultAccountingHistorySchema.parse({
     shortBookedAt: "2026-10-11T12:00:00.000Z",
     shortBookFresh: true,
   },
+  deposits: {
+    totalDepositedUsd: 50,
+    complete: true,
+    syncedToBlock: "113000000",
+    depositCount: 2,
+    fromBlock: "107645440",
+  },
   perpl: {
     accountId: 1,
     marketId: 10,
@@ -72,6 +81,7 @@ const history = VaultAccountingHistorySchema.parse({
     fundingObserved: "perpl_settled_plus_open_accrual",
     tradingFees: "perpl_fills",
     staking: "estimated_from_recorded_balance_and_assumed_apy",
+    strategyReturn: "strategy_income_over_total_deposited",
   },
 });
 
@@ -191,5 +201,75 @@ describe("financial chart readings", () => {
     expect(historyUsd(0)).toBe("$0.00");
     expect(historyUsd(null)).toBe("—");
     expect(historyPercent(-0.004)).toBe("−0.0040%");
+  });
+});
+
+describe("strategy return over deposited capital", () => {
+  const earning = (date: string, funding: number | null, staking: number | null) =>
+    day(date, {
+      fundingObservedUsd: funding,
+      fundingObservedSeconds: funding === null ? 0 : 86_400,
+      stakingEstimatedUsd: staking,
+      stakingCoveredSeconds: staking === null ? 0 : 86_400,
+    });
+
+  it("reports income to date as a percentage of all USDC ever deposited", () => {
+    const points = strategyReturn([earning("2026-10-01", 0.3, 0.2), earning("2026-10-02", 0.3, 0.2)], 50);
+    // $0.50 then $1.00 of income on $50 contributed.
+    expect(points[0]?.value).toBeCloseTo(1, 10);
+    expect(points[1]?.value).toBeCloseTo(2, 10);
+    expect(points[1]?.incomeUsd).toBeCloseTo(1, 10);
+    expect(points.every((point) => point?.partial === false)).toBe(true);
+  });
+
+  it("counts a component that is recorded even when the other is unavailable", () => {
+    const points = strategyReturn([earning("2026-10-01", 0.5, null)], 50);
+    expect(points[0]?.value).toBeCloseTo(1, 10);
+    expect(points[0]?.partial).toBe(true);
+  });
+
+  it("holds the running total through a day with no recorded income at all", () => {
+    const points = strategyReturn(
+      [earning("2026-10-01", 0.5, null), earning("2026-10-02", null, null)],
+      50,
+    );
+    expect(points[1]?.value).toBeCloseTo(1, 10);
+    expect(points[1]?.partial).toBe(true);
+    expect(strategyRuns(points)).toHaveLength(1);
+  });
+
+  it("reads as unavailable until deposited capital is known, never dividing by zero", () => {
+    for (const deposited of [null, 0]) {
+      expect(strategyReturn([earning("2026-10-01", 0.5, 0.5)], deposited)).toEqual([null]);
+    }
+  });
+
+  it("leaves a gap before the first recorded income rather than drawing from zero", () => {
+    const points = strategyReturn(
+      [earning("2026-10-01", null, null), earning("2026-10-02", 0.5, 0.5)],
+      50,
+    );
+    expect(points[0]).toBeNull();
+    expect(points[1]?.value).toBeCloseTo(2, 10);
+  });
+
+  it("still reports a negative total rather than flooring a real funding loss at zero", () => {
+    const points = strategyReturn([earning("2026-10-01", -0.5, 0)], 50);
+    expect(points[0]?.value).toBeCloseTo(-1, 10);
+  });
+
+  it("follows the settled funding view when the panel switches to it", () => {
+    const settled = day("2026-10-01", {
+      fundingObservedUsd: 1,
+      fundingObservedSeconds: 86_400,
+      fundingSettledUsd: 0.25,
+      stakingEstimatedUsd: 0,
+      stakingCoveredSeconds: 86_400,
+    });
+    expect(strategyReturn([settled], 50, "settled")[0]?.value).toBeCloseTo(0.5, 10);
+  });
+
+  it("uses the recorded deposit total from the history envelope", () => {
+    expect(history.deposits.totalDepositedUsd).toBe(50);
   });
 });
