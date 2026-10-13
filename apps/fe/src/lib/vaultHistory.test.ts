@@ -19,6 +19,7 @@ import {
   strategyRuns,
   hasReading,
   trimToRecorded,
+  settledBefore,
 } from "./vaultHistory";
 
 function day(date: string, overrides: Partial<AccountingDaily> = {}): AccountingDaily {
@@ -285,30 +286,40 @@ describe("framing the recorded range", () => {
     expect(trimToRecorded(days).map((d) => d.date)).toEqual(["2026-10-11", "2026-10-12"]);
   });
 
-  it("keeps a settlement that predates the first snapshot", () => {
-    // A real venue payment on 30 Sept must not be framed out of the settled view.
+  it("does not let a backfilled settlement anchor the axis to days with nothing to plot", () => {
     const settled = day("2026-09-30", {
       pricePerShareUsd: null,
       snapshotAt: null,
       fundingSettledUsd: 0.0177,
     });
+    expect(hasReading(settled)).toBe(false);
     const days = [blank("2026-09-29"), settled, recorded("2026-10-11")];
-    expect(trimToRecorded(days).map((d) => d.date)).toEqual(["2026-09-30", "2026-10-11"]);
+    expect(trimToRecorded(days).map((d) => d.date)).toEqual(["2026-10-11"]);
+  });
+
+  it("reports the settled funding and fees the axis leaves out, rather than losing them", () => {
+    const days = [
+      day("2026-09-28", { pricePerShareUsd: null, snapshotAt: null, tradingFeesUsd: 0.0035 }),
+      day("2026-09-30", { pricePerShareUsd: null, snapshotAt: null, fundingSettledUsd: 0.0177 }),
+      recorded("2026-10-11"),
+    ];
+    expect(settledBefore(days)).toEqual({ funding: 0.0177, fees: 0.0035 });
+  });
+
+  it("says nothing about earlier days when they held no settlements or fees", () => {
+    expect(settledBefore([blank("2026-10-10"), recorded("2026-10-11")])).toBeNull();
+    // Nothing is trimmed at all, so there is nothing to report either.
+    expect(settledBefore([recorded("2026-10-11"), blank("2026-10-12")])).toBeNull();
   });
 
   it("does not treat a scanned-but-empty day as a reading", () => {
-    // fundingSettledUsd 0 means "scanned, nothing happened", not "something was recorded".
     const scanned = day("2026-09-20", {
       pricePerShareUsd: null,
       snapshotAt: null,
       fundingSettledUsd: 0,
       tradingFeesUsd: 0,
-      realisedTradingPnlUsd: 0,
     });
     expect(hasReading(scanned)).toBe(false);
-    expect(trimToRecorded([scanned, recorded("2026-10-11")]).map((d) => d.date)).toEqual([
-      "2026-10-11",
-    ]);
   });
 
   it("leaves a series that has no readings at all untouched", () => {

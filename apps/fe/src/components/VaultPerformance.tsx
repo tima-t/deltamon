@@ -14,6 +14,7 @@ import {
   historyPercent,
   strategyReturn,
   trimToRecorded,
+  settledBefore,
   incomeValue,
   cumulativeIncome,
   type FundingView,
@@ -230,6 +231,7 @@ export function VaultPerformance({ stats }: { stats: VaultStats | null }) {
   // Framing only: an empty run before the first reading would squeeze the record into the margin.
   const days = trimToRecorded(allDays);
   const trimmed = allDays.length - days.length;
+  const earlier = settledBefore(allDays);
   const selectedIndex = Math.max(
     0,
     selectedDate ? days.findIndex((day) => day.date === selectedDate) : days.length - 1,
@@ -351,7 +353,10 @@ export function VaultPerformance({ stats }: { stats: VaultStats | null }) {
               : ""}
             {lastStrategy?.partial ? " Partial coverage; unrecorded income is excluded." : ""}
             {trimmed > 0
-              ? ` The axis starts at the first recorded day; ${trimmed} earlier ${trimmed === 1 ? "day has" : "days have"} no readings.`
+              ? ` The axis starts at the first recorded day; ${trimmed} earlier ${trimmed === 1 ? "day has" : "days have"} nothing to plot.`
+              : ""}
+            {earlier
+              ? ` Before that, ${historyUsd(earlier.funding, true)} of funding settled and ${historyUsd(earlier.fees)} of fees were charged.`
               : ""}
           </p>
         </div>

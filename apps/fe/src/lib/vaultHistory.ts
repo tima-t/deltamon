@@ -16,29 +16,44 @@ export function historyMatchesVault(
 }
 
 /**
- * Whether a day carries an actual reading. A confirmed zero from a fully scanned day is a
- * reading; a `0` that only means "this day was inside the scanned range" is not, which is why
- * settled funding, fees and realised PnL count only when they moved.
+ * Whether a day carries an observation the charts draw: a vault snapshot, observed funding or a
+ * staking estimate. Venue settlements are deliberately excluded — a single backfilled payment
+ * weeks before collection began would otherwise anchor the axis to a stretch with nothing to
+ * plot, which is the whole problem this is here to avoid. What it hides is reported instead,
+ * see `settledBefore`.
  */
 export function hasReading(day: AccountingDaily): boolean {
   return (
     day.snapshotAt !== null ||
     day.fundingObservedUsd !== null ||
-    day.stakingEstimatedUsd !== null ||
-    Boolean(day.fundingSettledUsd) ||
-    Boolean(day.tradingFeesUsd) ||
-    Boolean(day.realisedTradingPnlUsd)
+    day.stakingEstimatedUsd !== null
   );
 }
 
 /**
- * Drop the leading stretch of days with nothing recorded. A vault a few days old would otherwise
+ * Drop the leading stretch of days with nothing to plot. A vault a few days old would otherwise
  * draw its whole history into the last few pixels of a thirty-day axis. Trailing days stay: the
  * gap between the last reading and today is information.
  */
 export function trimToRecorded(days: AccountingDaily[]): AccountingDaily[] {
   const first = days.findIndex(hasReading);
   return first <= 0 ? days : days.slice(first);
+}
+
+/**
+ * Settled funding and fees on the days the axis leaves out. Backfilled venue history can predate
+ * collection, and dropping those days from the plot must not drop them from the account.
+ */
+export function settledBefore(days: AccountingDaily[]): { funding: number; fees: number } | null {
+  const first = days.findIndex(hasReading);
+  if (first <= 0) return null;
+  let funding = 0;
+  let fees = 0;
+  for (const day of days.slice(0, first)) {
+    funding += day.fundingSettledUsd ?? 0;
+    fees += day.tradingFeesUsd ?? 0;
+  }
+  return funding === 0 && fees === 0 ? null : { funding, fees };
 }
 
 export function fundingValue(day: AccountingDaily, view: FundingView): number | null {
