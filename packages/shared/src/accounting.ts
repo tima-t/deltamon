@@ -77,27 +77,6 @@ export const VaultAccountingHistorySchema = z.object({
       shortBookFresh: z.boolean(),
     })
     .nullable(),
-  /**
-   * USDC ever paid into the vault, from its own Deposit logs. The denominator for strategy
-   * return. Null while the log scan is still catching up: a partial sum is not a total.
-   */
-  deposits: z
-    .object({
-      totalDepositedUsd: z.number().nullable(),
-      complete: z.boolean(),
-      syncedToBlock: z.string().nullable(),
-      depositCount: z.number().int().nullable(),
-      fromBlock: z.string().nullable(),
-    })
-    // Defaulted, not required: the two services do not deploy atomically, and a frontend that
-    // rejected an older backend's payload would blank the whole record rather than one reading.
-    .default({
-      totalDepositedUsd: null,
-      complete: false,
-      syncedToBlock: null,
-      depositCount: null,
-      fromBlock: null,
-    }),
   perpl: z.object({
     accountId: z.number().nullable(),
     marketId: z.number().nullable(),
@@ -111,8 +90,8 @@ export const VaultAccountingHistorySchema = z.object({
     fundingObserved: z.literal("perpl_settled_plus_open_accrual"),
     tradingFees: z.literal("perpl_fills"),
     staking: z.literal("estimated_from_recorded_balance_and_assumed_apy"),
-    /** Strategy return is income over contributed capital, not a change in book value. */
-    strategyReturn: z.literal("strategy_income_over_total_deposited").optional(),
+    /** Strategy return is income over the vault's own value, not a change in book value. */
+    strategyReturn: z.literal("strategy_income_over_vault_value").optional(),
   }),
   daily: z.array(AccountingDailySchema),
 });

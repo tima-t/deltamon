@@ -14,7 +14,7 @@ import { getAddress, isAddress, type Address } from "viem";
 
 const STORAGE_KEY = "deltamon.passkey.v1";
 const ACCOUNT_PATH = "m/44'/60'/0'/0/0";
-const PUBLIC_RP_ID = "app.deltamon.xyz";
+const PUBLIC_RP_ID = "deltamonfe-production.up.railway.app";
 
 export type PasskeyRecord = PasskeyCredentialMetadata & { address: Address };
 

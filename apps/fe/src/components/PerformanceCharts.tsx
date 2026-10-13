@@ -113,7 +113,7 @@ export function ReturnChart({
   const last = runs.at(-1)?.at(-1);
   const hasHistory = values.length > 0;
   const description = hasHistory
-    ? "Funding and estimated staking income earned to each date, as a percentage of all USDC ever deposited into the vault. It excludes price PnL and trading fees, so it is strategy income rather than a depositor's net return. Days with no recorded income are gaps rather than flat lines. Use the inspect-date slider below for individual readings."
+    ? "Funding and estimated staking income earned to each date, as a percentage of the vault's total value in USDC. It excludes price PnL and trading fees, so it is strategy income rather than a depositor's net return. Days with no recorded income are gaps rather than flat lines. Use the inspect-date slider below for individual readings."
     : "No recorded strategy-income readings in this period.";
   return (
     <div className="performance-chart-wrap performance-return-chart" ref={ref}>
@@ -214,7 +214,7 @@ export function ReturnChart({
         <p className="performance-chart-empty">
           A return line will appear
           <br />
-          as sdMON share values are recorded.
+          as funding and staking income are recorded.
         </p>
       )}
       {values.length === 1 && (
