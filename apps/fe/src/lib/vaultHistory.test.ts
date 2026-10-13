@@ -17,6 +17,9 @@ import {
   returnRuns,
   strategyReturn,
   strategyRuns,
+  hasReading,
+  trimToRecorded,
+  settledBefore,
 } from "./vaultHistory";
 
 function day(date: string, overrides: Partial<AccountingDaily> = {}): AccountingDaily {
@@ -265,5 +268,62 @@ describe("strategy return over deposited capital", () => {
   it("takes its denominator from a reading the collector already records", () => {
     // netAssetsUsd is one totalAssets() call in every snapshot: no deposit history is needed.
     expect(history.sources.strategyReturn).toBe("strategy_income_over_vault_value");
+  });
+});
+
+describe("framing the recorded range", () => {
+  const blank = (date: string) => day(date, { pricePerShareUsd: null, snapshotAt: null });
+  const recorded = (date: string) =>
+    day(date, { snapshotAt: `${date}T12:00:00.000Z`, fundingObservedUsd: 0.01 });
+
+  it("starts the axis at the first day with a reading", () => {
+    const days = [blank("2026-09-14"), blank("2026-09-15"), recorded("2026-10-11")];
+    expect(trimToRecorded(days).map((d) => d.date)).toEqual(["2026-10-11"]);
+  });
+
+  it("keeps trailing days with no reading, because the gap to today is information", () => {
+    const days = [blank("2026-10-10"), recorded("2026-10-11"), blank("2026-10-12")];
+    expect(trimToRecorded(days).map((d) => d.date)).toEqual(["2026-10-11", "2026-10-12"]);
+  });
+
+  it("does not let a backfilled settlement anchor the axis to days with nothing to plot", () => {
+    const settled = day("2026-09-30", {
+      pricePerShareUsd: null,
+      snapshotAt: null,
+      fundingSettledUsd: 0.0177,
+    });
+    expect(hasReading(settled)).toBe(false);
+    const days = [blank("2026-09-29"), settled, recorded("2026-10-11")];
+    expect(trimToRecorded(days).map((d) => d.date)).toEqual(["2026-10-11"]);
+  });
+
+  it("reports the settled funding and fees the axis leaves out, rather than losing them", () => {
+    const days = [
+      day("2026-09-28", { pricePerShareUsd: null, snapshotAt: null, tradingFeesUsd: 0.0035 }),
+      day("2026-09-30", { pricePerShareUsd: null, snapshotAt: null, fundingSettledUsd: 0.0177 }),
+      recorded("2026-10-11"),
+    ];
+    expect(settledBefore(days)).toEqual({ funding: 0.0177, fees: 0.0035 });
+  });
+
+  it("says nothing about earlier days when they held no settlements or fees", () => {
+    expect(settledBefore([blank("2026-10-10"), recorded("2026-10-11")])).toBeNull();
+    // Nothing is trimmed at all, so there is nothing to report either.
+    expect(settledBefore([recorded("2026-10-11"), blank("2026-10-12")])).toBeNull();
+  });
+
+  it("does not treat a scanned-but-empty day as a reading", () => {
+    const scanned = day("2026-09-20", {
+      pricePerShareUsd: null,
+      snapshotAt: null,
+      fundingSettledUsd: 0,
+      tradingFeesUsd: 0,
+    });
+    expect(hasReading(scanned)).toBe(false);
+  });
+
+  it("leaves a series that has no readings at all untouched", () => {
+    const days = [blank("2026-10-10"), blank("2026-10-11")];
+    expect(trimToRecorded(days)).toEqual(days);
   });
 });
