@@ -6,10 +6,10 @@ import {
   fundingValue,
   historyDate,
   historyUsd,
-  recordedReturn,
-  returnRuns,
   historyPercent,
+  strategyRuns,
   type FundingView,
+  type StrategyReturnPoint,
 } from "@/lib/vaultHistory";
 
 function useChartWidth() {
@@ -94,22 +94,27 @@ function chooseDay(
   onSelect(Math.max(0, Math.min(count - 1, Math.floor(((localX - left) / plotWidth) * count))));
 }
 
-export function ReturnChart({ days, selected, onSelect }: ChartProps) {
+export function ReturnChart({
+  days,
+  points,
+  selected,
+  onSelect,
+}: ChartProps & { points: (StrategyReturnPoint | null)[] }) {
   const { ref, width } = useChartWidth();
   const height = 266,
     left = 55,
     right = 32,
     plotWidth = width - left - right;
   const x = (index: number) => left + ((index + 0.5) / Math.max(1, days.length)) * plotWidth;
-  const runs = returnRuns(days);
+  const runs = strategyRuns(points);
   const values = runs.flat().map((point) => point.value);
   const { ticks, y } = scale(values, height);
-  const value = days[selected] ? recordedReturn(days[selected]!) : null;
+  const value = points[selected]?.value ?? null;
   const last = runs.at(-1)?.at(-1);
   const hasHistory = values.length > 0;
   const description = hasHistory
-    ? "Recorded percentage change in value per sdMON share within the selected period. This includes contract-valued holdings, the reported short book, and accrued fee liabilities. Missing readings and empty-vault restarts are separate paths. Use the inspect-date slider below for individual readings."
-    : "No recorded vault-return readings in this period.";
+    ? "Funding and estimated staking income earned to each date, as a percentage of all USDC ever deposited into the vault. It excludes price PnL and trading fees, so it is strategy income rather than a depositor's net return. Days with no recorded income are gaps rather than flat lines. Use the inspect-date slider below for individual readings."
+    : "No recorded strategy-income readings in this period.";
   return (
     <div className="performance-chart-wrap performance-return-chart" ref={ref}>
       <svg
@@ -120,6 +125,7 @@ export function ReturnChart({ days, selected, onSelect }: ChartProps) {
         aria-label={description}
       >
         <title>Cumulative vault return</title>
+        <desc>{description}</desc>
         {ticks.map((tick) => (
           <g key={tick}>
             <line

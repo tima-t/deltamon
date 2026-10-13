@@ -52,7 +52,30 @@ Individual streams and vault observations continue when another source fails.
 
 ## What the numbers mean
 
-**Vault return** compares recorded contract `pricePerShare()` values within the requested window.
+**Cumulative vault return**, the headline, is strategy income over contributed capital:
+
+```text
+return % = (observed funding + estimated staking, earned to date) / total USDC ever deposited x 100
+```
+
+It answers what the strategy has produced on the money paid in. It deliberately excludes price
+PnL and trading fees, so it is not a depositor's net return and is always labelled as strategy
+income. It is positive whenever cumulative income is positive; a genuinely negative cumulative
+funding total still reads negative, because flooring it at zero would report a loss as breakeven.
+A day missing one component still counts the other and is marked partial; a day missing both holds
+the running total rather than dropping to zero. The reading is unavailable until the deposit scan
+has finished, because dividing by a partial denominator overstates the return.
+
+**Total deposited** is the sum of `assets` across the vault's own `Deposit` logs. The contract
+keeps cost basis per holder and no running total, and summing `costBasis` needs the holder set,
+which is the same log scan by a longer route. Monad's RPC answers `eth_getLogs` over 100 blocks
+at most, so a scan from the deployment block is ~54,000 requests; the cursor and running sum live
+in Mongo rather than a container filesystem a redeploy wipes, each tick does
+`ACCOUNTING_DEPOSIT_BLOCKS_PER_TICK` blocks of work, and the total reads as unavailable until the
+scan has reached chain head once. A deployment record naming a different start block invalidates
+the stored sum instead of adding to it.
+
+**Book value per share** compares recorded contract `pricePerShare()` values within the requested window.
 Deposits do not count as income. Zero supply starts a new return segment, and stale short-book
 reports suppress the return reading. This is contract book value; it is not a depositor's
 personal return after their redemption fee. Virtual staking income never modifies this NAV.
@@ -111,14 +134,14 @@ days are `partial`. Intervals longer than three collection periods are gaps, not
 earnings. Storage failures return HTTP 503. Raw venue audit records stay server-side.
 
 The UI offers 7D/30D periods and synchronized pointer/keyboard date inspection. The headline
-and cumulative chart are labeled “Cumulative vault return,” measured by recorded change in
-value per sdMON share in percent, using the first
-valid observation within the selected window (or since the last empty-vault restart). Starting
-and latest share values are shown. This is contract book-value performance, not a wallet's
-personal return after its entry date and redemption fee. MON pricing and short-book reports
-can update asynchronously: the UI discloses the short-book timestamp and the effect of re-marks,
-and leaves stale-book return unavailable. Staking estimates never modify this series; actual
-staking rewards enter the contract share value when claimed.
+and cumulative chart are labeled "Cumulative vault return" and show strategy income to date over
+total deposited capital, following the panel's Observed/Settled funding switch. Total deposited and
+income earned are shown beneath it, and the caption states that price PnL and trading fees are
+excluded. Book value per share is a separate series and is not the headline: share value moves with
+MON price against an imperfect hedge, with short re-marks and with trading fees, and it only picks
+up staking rewards once they are claimed and funding once it settles, which is why it can fall on a
+day the strategy earned. Where book value is shown, the UI discloses the short-book timestamp and
+the effect of re-marks, and leaves stale-book readings unavailable.
 
 Daily income remains funding plus estimated staking, excluding price PnL and fees. Supporting
 USD subtotals sum only days where observed funding and estimated staking are both available;

@@ -12,7 +12,7 @@ import {
   historyMatchesVault,
   historyUsd,
   historyPercent,
-  recordedReturn,
+  strategyReturn,
   incomeValue,
   cumulativeIncome,
   type FundingView,
@@ -234,12 +234,10 @@ export function VaultPerformance({ stats }: { stats: VaultStats | null }) {
   const cumulative = cumulativeIncome(days);
   const lastIncome = cumulative.findLast((point) => point !== null);
   const lastReading = days.findLast((day) => day.snapshotAt !== null);
-  const lastReturn = lastReading ? recordedReturn(lastReading) : null;
-  const startingShareValue =
-    lastReturn !== null && lastReading?.pricePerShareUsd
-      ? lastReading.pricePerShareUsd / (1 + lastReturn / 100)
-      : null;
-  const returnCount = days.filter((day) => recordedReturn(day) !== null).length;
+  const deposited = history?.deposits.totalDepositedUsd ?? null;
+  const strategyPoints = strategyReturn(days, deposited, fundingView);
+  const lastStrategy = strategyPoints.findLast((point) => point !== null) ?? null;
+  const returnCount = strategyPoints.filter((point) => point !== null).length;
   const selectDay = (index: number) => setSelectedDate(days[index]?.date ?? null);
   const rate = history?.latest?.stakingApyBps;
   const message = mismatched
@@ -307,36 +305,46 @@ export function VaultPerformance({ stats }: { stats: VaultStats | null }) {
       <div className="performance-grid">
         <div className="performance-return">
           <h4 className="performance-kicker">01 / Cumulative vault return</h4>
-          <p className="performance-number" data-negative={lastReturn !== null && lastReturn < 0}>
-            {historyPercent(lastReturn)}
+          <p
+            className="performance-number"
+            data-negative={lastStrategy !== null && lastStrategy.value < 0}
+          >
+            {historyPercent(lastStrategy?.value ?? null)}
           </p>
           <p className="performance-caption">
             {query.isPending || query.isPlaceholderData ? (
               `Fetching the ${period}-day record`
+            ) : deposited === null ? (
+              "Awaiting the vault's deposit history"
             ) : (
               <>
-                Measured by change in value per sdMON share · {returnCount} recorded{" "}
+                Funding and staking income earned on deposited capital · {returnCount} recorded{" "}
                 {returnCount === 1 ? "day" : "days"}
               </>
             )}
           </p>
           <div className="performance-cumulative-sources">
             <span>
-              Starting recorded value <strong>{startingShareValue?.toFixed(6) ?? "—"} USDC</strong>
+              Total deposited <strong>{historyUsd(deposited)}</strong>
             </span>
             <span>
-              Recorded share value{" "}
-              <strong>{lastReading?.pricePerShareUsd?.toFixed(6) ?? "—"} USDC</strong>
+              Income earned <strong>{historyUsd(lastStrategy?.incomeUsd ?? null, true)}</strong>
             </span>
           </div>
-          <ReturnChart days={days} selected={selectedIndex} onSelect={selectDay} />
+          <ReturnChart
+            days={days}
+            points={strategyPoints}
+            selected={selectedIndex}
+            onSelect={selectDay}
+          />
           <p className="performance-chart-note">
+            {deposited === null
+              ? "The vault's Deposit log scan has not finished, so deposited capital is not yet known."
+              : "Funding plus estimated staking over all USDC deposited. Excludes price PnL and trading fees, so it is strategy income, not a depositor's net return."}
             {lastReading?.shortBookFresh === false
-              ? "Return unavailable: the recorded short report was stale."
-              : "Contract share value; staking rewards enter this value when claimed."}
-            {lastReading && history?.latest?.shortBookedAt
-              ? ` Short book: ${recordedAt(history.latest.shortBookedAt)}. Short re-marks can change this reading.`
+              ? " The latest short report was stale; funding accrual may lag."
               : ""}
+            {lastStrategy?.partial ? " Partial coverage; unrecorded income is excluded." : ""}
           </p>
         </div>
         <CapitalComposition history={history} />
@@ -413,10 +421,10 @@ export function VaultPerformance({ stats }: { stats: VaultStats | null }) {
         <dl>
           <div>
             <dt>Vault return</dt>
-            <dd data-negative={selected && (recordedReturn(selected) ?? 0) < 0}>
-              {historyPercent(selected ? recordedReturn(selected) : null)}
+            <dd data-negative={(strategyPoints[selectedIndex]?.value ?? 0) < 0}>
+              {historyPercent(strategyPoints[selectedIndex]?.value ?? null)}
             </dd>
-            <span>Change in recorded value per share</span>
+            <span>Income earned over deposited capital</span>
           </div>
           <div>
             <dt>Staking estimate</dt>
@@ -469,10 +477,9 @@ export function VaultPerformance({ stats }: { stats: VaultStats | null }) {
       <div className="performance-footnote">
         <span>UTC DAILY RECORD</span>
         <p>
-          The return chart tracks sdMON share value. Gaps are unavailable readings; empty-vault
-          restarts begin a new return segment. Hatched income bars cover part of a day. *Daily
-          combined income adds funding and estimated staking, excluding price gains/losses and fees;
-          it is separate from vault return.
+          The return chart tracks funding and staking income against deposited capital. Gaps are
+          days with no recorded income. Hatched income bars cover part of a day. *Daily combined
+          income adds funding and estimated staking, excluding price gains/losses and fees.
         </p>
       </div>
       <details className="performance-method">
@@ -484,12 +491,13 @@ export function VaultPerformance({ stats }: { stats: VaultStats | null }) {
           <div>
             <h5>Vault return</h5>
             <p>
-              Calculated as (latest recorded value per share / starting recorded value per share −
-              1) × 100 within the selected period. Deposits do not count as income. The contract
-              includes MON valuation, reported short equity and accrued fee liabilities; staking
-              rewards enter share value when claimed. MON pricing and short reports can update at
-              different times, so short re-marks can move this reading. Stale short reports leave
-              return unavailable. Your own return depends on your entry date and redemption fee.
+              Calculated as (funding plus estimated staking earned to date / all USDC ever deposited
+              into the vault) × 100. Deposits are capital, not income. It measures what the strategy
+              has produced on the money paid in, and excludes MON price gains and losses, short
+              re-marks and trading fees, so it is strategy income rather than a depositor&apos;s net
+              return. Your own return depends on your entry date and redemption fee. Book value per
+              share is a separate reading: it only picks up staking rewards once they are claimed
+              and funding once it settles, so it can fall on a day the strategy earned.
             </p>
           </div>
           <div>

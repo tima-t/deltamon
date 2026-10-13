@@ -52,6 +52,65 @@ export function cumulativeIncome(days: AccountingDaily[]): (CumulativeIncomePoin
   });
 }
 
+export interface StrategyReturnPoint {
+  index: number;
+  /** Income earned to this day as a percentage of all USDC ever deposited. */
+  value: number;
+  incomeUsd: number;
+  partial: boolean;
+}
+
+/**
+ * Strategy return: funding plus estimated staking earned to date over the capital depositors
+ * contributed. It answers "what has the strategy produced on the money paid in", which is a
+ * different question from the contract's book value per share, and it is the headline the vault
+ * page shows.
+ *
+ * It deliberately excludes price PnL and trading fees, so it is not a depositor's net return and
+ * must always be labelled as strategy income. It is positive whenever cumulative income is
+ * positive; a genuinely negative cumulative funding total still reads negative, because flooring
+ * it at zero would report a loss as breakeven.
+ */
+export function strategyReturn(
+  days: AccountingDaily[],
+  totalDepositedUsd: number | null,
+  view: FundingView = "observed",
+): (StrategyReturnPoint | null)[] {
+  if (!totalDepositedUsd || totalDepositedUsd <= 0) return days.map(() => null);
+  let income = 0;
+  let seen = false;
+  let partial = false;
+  return days.map((day, index) => {
+    const funding = fundingValue(day, view);
+    // Either component on its own is still real income; a missing one is excluded, not zeroed.
+    if (funding === null && day.stakingEstimatedUsd === null) {
+      if (seen) partial = true;
+      return seen ? { index, value: (income / totalDepositedUsd) * 100, incomeUsd: income, partial } : null;
+    }
+    seen = true;
+    income += (funding ?? 0) + (day.stakingEstimatedUsd ?? 0);
+    partial ||=
+      funding === null ||
+      day.stakingEstimatedUsd === null ||
+      day.fundingObservedSeconds < DAY_SECONDS ||
+      day.stakingCoveredSeconds < DAY_SECONDS;
+    return { index, value: (income / totalDepositedUsd) * 100, incomeUsd: income, partial };
+  });
+}
+
+/** Contiguous paths, so a day with no reading at all leaves a gap rather than a straight line. */
+export function strategyRuns(points: (StrategyReturnPoint | null)[]): StrategyReturnPoint[][] {
+  const runs: StrategyReturnPoint[][] = [];
+  let previousIndex = -2;
+  for (const point of points) {
+    if (!point) continue;
+    if (point.index !== previousIndex + 1) runs.push([]);
+    runs[runs.length - 1]!.push(point);
+    previousIndex = point.index;
+  }
+  return runs;
+}
+
 export function incomeRuns(points: (CumulativeIncomePoint | null)[]): CumulativeIncomePoint[][] {
   const runs: CumulativeIncomePoint[][] = [];
   let previousIndex = -2;

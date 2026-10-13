@@ -10,12 +10,14 @@ import {
   resolvePerplBinding,
 } from "./accountingPerpl.js";
 import { accountingDaily } from "./accountingMath.js";
+import { collectDeposits, depositTotal } from "./accountingDeposits.js";
 import {
   HISTORY_STREAMS,
   accountingEvents,
   fundingObservations,
   latestVaultSnapshot,
   readBinding,
+  readDepositScan,
   readHistoryCursor,
   saveVaultSnapshot,
   vaultScope,
@@ -88,6 +90,13 @@ export class AccountingCollector {
         }
       })(),
       (async () => {
+        try {
+          await collectDeposits(scope, env.VAULT_ADDRESS as Address);
+        } catch (err) {
+          recordError("deposit history", err);
+        }
+      })(),
+      (async () => {
         if (!env.PERPL_API_KEY || !env.PERPL_API_KEY_SECRET) {
           this.errors.push("Perpl credentials are not configured");
           return;
@@ -128,6 +137,13 @@ export async function getAccountingHistory(
     status: "not_configured",
     latest: null,
     composition: null,
+    deposits: {
+      totalDepositedUsd: null,
+      complete: false,
+      syncedToBlock: null,
+      depositCount: null,
+      fromBlock: null,
+    },
     perpl: {
       accountId: null,
       marketId: null,
@@ -141,15 +157,17 @@ export async function getAccountingHistory(
       fundingObserved: "perpl_settled_plus_open_accrual",
       tradingFees: "perpl_fills",
       staking: "estimated_from_recorded_balance_and_assumed_apy",
+      strategyReturn: "strategy_income_over_total_deposited",
     },
     daily: [],
   };
   if (!mongoConfigured() || !env.VAULT_ADDRESS) return base;
   const scope = vaultScope(env.CHAIN_ID, env.VAULT_ADDRESS);
-  const [snapshots, latest, binding] = await Promise.all([
+  const [snapshots, latest, binding, depositScan] = await Promise.all([
     vaultSnapshots(scope, from, to),
     latestVaultSnapshot(scope),
     readBinding(scope),
+    readDepositScan(scope),
   ]);
   const observations = binding ? await fundingObservations(binding.scope, from, to) : [];
   const eventFrom = observations[0]?.at && observations[0].at < from ? observations[0].at : from;
@@ -186,6 +204,7 @@ export async function getAccountingHistory(
           shortBookFresh: latest.shortBookFresh,
         }
       : null,
+    deposits: depositTotal(depositScan, latest?.assetDecimals ?? 6),
     perpl: {
       accountId: binding?.accountId ?? null,
       marketId: binding?.marketId ?? null,
