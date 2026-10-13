@@ -42,18 +42,6 @@ export interface PerplBinding {
   historyFrom: string | null;
 }
 
-export interface DepositScan {
-  _id: string;
-  scope: string;
-  /** Deployment block this sum started from; a different one invalidates the running total. */
-  fromBlock: string;
-  syncedTo: string;
-  depositedRaw: string;
-  depositCount: number;
-  /** True once the scan has reached chain head at least once. */
-  complete: boolean;
-}
-
 export interface FundingObservation {
   _id: string;
   scope: string;
@@ -120,18 +108,6 @@ export async function saveHistoryCursor(cursor: HistoryCursor): Promise<void> {
   await (
     await collection<HistoryCursor>(collections.accountingState)
   ).updateOne({ _id: cursor._id }, { $set: cursor }, { upsert: true });
-}
-
-export async function readDepositScan(scope: string): Promise<DepositScan | null> {
-  return (await collection<DepositScan>(collections.accountingState)).findOne({
-    _id: `deposits:${scope}`,
-  });
-}
-
-export async function saveDepositScan(scan: DepositScan): Promise<void> {
-  await (
-    await collection<DepositScan>(collections.accountingState)
-  ).updateOne({ _id: scan._id }, { $set: scan }, { upsert: true });
 }
 
 export async function saveEvents(events: AccountingEvent[]): Promise<void> {

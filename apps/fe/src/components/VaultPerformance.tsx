@@ -234,8 +234,9 @@ export function VaultPerformance({ stats }: { stats: VaultStats | null }) {
   const cumulative = cumulativeIncome(days);
   const lastIncome = cumulative.findLast((point) => point !== null);
   const lastReading = days.findLast((day) => day.snapshotAt !== null);
-  const deposited = history?.deposits.totalDepositedUsd ?? null;
-  const strategyPoints = strategyReturn(days, deposited, fundingView);
+  // The vault's own value, already read on-chain in every snapshot. No deposit history needed.
+  const vaultValue = history?.latest?.netAssetsUsd ?? null;
+  const strategyPoints = strategyReturn(days, vaultValue, fundingView);
   const lastStrategy = strategyPoints.findLast((point) => point !== null) ?? null;
   const returnCount = strategyPoints.filter((point) => point !== null).length;
   const selectDay = (index: number) => setSelectedDate(days[index]?.date ?? null);
@@ -314,18 +315,18 @@ export function VaultPerformance({ stats }: { stats: VaultStats | null }) {
           <p className="performance-caption">
             {query.isPending || query.isPlaceholderData ? (
               `Fetching the ${period}-day record`
-            ) : deposited === null ? (
-              "Awaiting the vault's deposit history"
+            ) : vaultValue === null ? (
+              "Awaiting the first recorded vault reading"
             ) : (
               <>
-                Funding and staking income earned on deposited capital · {returnCount} recorded{" "}
+                Funding and staking income earned on vault value · {returnCount} recorded{" "}
                 {returnCount === 1 ? "day" : "days"}
               </>
             )}
           </p>
           <div className="performance-cumulative-sources">
             <span>
-              Total deposited <strong>{historyUsd(deposited)}</strong>
+              Vault value <strong>{historyUsd(vaultValue)}</strong>
             </span>
             <span>
               Income earned <strong>{historyUsd(lastStrategy?.incomeUsd ?? null, true)}</strong>
@@ -338,9 +339,9 @@ export function VaultPerformance({ stats }: { stats: VaultStats | null }) {
             onSelect={selectDay}
           />
           <p className="performance-chart-note">
-            {deposited === null
-              ? "The vault's Deposit log scan has not finished, so deposited capital is not yet known."
-              : "Funding plus estimated staking over all USDC deposited. Excludes price PnL and trading fees, so it is strategy income, not a depositor's net return."}
+            {vaultValue === null
+              ? "No vault reading has been recorded yet."
+              : "Funding plus estimated staking over the vault's USDC value. Excludes price PnL and trading fees, so it is strategy income, not a depositor's net return."}
             {lastReading?.shortBookFresh === false
               ? " The latest short report was stale; funding accrual may lag."
               : ""}
@@ -491,9 +492,9 @@ export function VaultPerformance({ stats }: { stats: VaultStats | null }) {
           <div>
             <h5>Vault return</h5>
             <p>
-              Calculated as (funding plus estimated staking earned to date / all USDC ever deposited
-              into the vault) × 100. Deposits are capital, not income. It measures what the strategy
-              has produced on the money paid in, and excludes MON price gains and losses, short
+              Calculated as (funding plus estimated staking earned to date / the vault&apos;s total
+              value in USDC) × 100. Deposits are capital, not income. It measures what the strategy
+              has produced on the money at work, and excludes MON price gains and losses, short
               re-marks and trading fees, so it is strategy income rather than a depositor&apos;s net
               return. Your own return depends on your entry date and redemption fee. Book value per
               share is a separate reading: it only picks up staking rewards once they are claimed

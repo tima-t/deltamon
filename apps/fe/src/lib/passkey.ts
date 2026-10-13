@@ -14,7 +14,7 @@ import { getAddress, isAddress, type Address } from "viem";
 
 const STORAGE_KEY = "deltamon.passkey.v1";
 const ACCOUNT_PATH = "m/44'/60'/0'/0/0";
-const PUBLIC_RP_ID = "app.deltamon.xyz";
+const PUBLIC_RP_ID = "deltamonfe-production.up.railway.app";
 
 export type PasskeyRecord = PasskeyCredentialMetadata & { address: Address };
 
@@ -25,7 +25,7 @@ export function passkeyEnabled(): boolean {
 
 function rpId(): string {
   if (!passkeyEnabled()) {
-    throw new Error("Passkey wallets are available only at app.deltamon.xyz or localhost.");
+    throw new Error(`Passkey wallets are available only at ${PUBLIC_RP_ID} or localhost.`);
   }
   if (!window.isSecureContext) throw new Error("Passkeys require HTTPS or localhost.");
   return window.location.hostname;
@@ -54,7 +54,7 @@ export function passkeyError(error: unknown): string {
   if (isMeraError(error)) {
     if (error.code === "PRF_UNAVAILABLE") return "This passkey provider does not support the feature needed for a wallet. Try a supported provider or connect an existing wallet.";
     if (error.code === "PASSKEY_OPERATION_FAILED") return "The passkey prompt was cancelled or could not finish. Try again or connect an existing wallet.";
-    if (error.code === "CRYPTO_UNAVAILABLE") return "Passkeys need a secure HTTPS connection. Open DeltaMon at app.deltamon.xyz.";
+    if (error.code === "CRYPTO_UNAVAILABLE") return `Passkeys need a secure HTTPS connection. Open DeltaMon at ${PUBLIC_RP_ID}.`;
   }
   return error instanceof Error ? error.message : "The passkey request could not finish.";
 }

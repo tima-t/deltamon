@@ -55,25 +55,20 @@ Individual streams and vault observations continue when another source fails.
 **Cumulative vault return**, the headline, is strategy income over contributed capital:
 
 ```text
-return % = (observed funding + estimated staking, earned to date) / total USDC ever deposited x 100
+return % = (observed funding + estimated staking, earned to date) / vault value in USDC x 100
 ```
 
-It answers what the strategy has produced on the money paid in. It deliberately excludes price
+It answers what the strategy has produced on the money at work. It deliberately excludes price
 PnL and trading fees, so it is not a depositor's net return and is always labelled as strategy
 income. It is positive whenever cumulative income is positive; a genuinely negative cumulative
 funding total still reads negative, because flooring it at zero would report a loss as breakeven.
 A day missing one component still counts the other and is marked partial; a day missing both holds
-the running total rather than dropping to zero. The reading is unavailable until the deposit scan
-has finished, because dividing by a partial denominator overstates the return.
+the running total rather than dropping to zero. The reading is unavailable until a vault
+snapshot exists, because there is nothing to divide by.
 
-**Total deposited** is the sum of `assets` across the vault's own `Deposit` logs. The contract
-keeps cost basis per holder and no running total, and summing `costBasis` needs the holder set,
-which is the same log scan by a longer route. Monad's RPC answers `eth_getLogs` over 100 blocks
-at most, so a scan from the deployment block is ~54,000 requests; the cursor and running sum live
-in Mongo rather than a container filesystem a redeploy wipes, each tick does
-`ACCOUNTING_DEPOSIT_BLOCKS_PER_TICK` blocks of work, and the total reads as unavailable until the
-scan has reached chain head once. A deployment record naming a different start block invalidates
-the stored sum instead of adding to it.
+**Vault value**, the denominator, is `totalAssets()` — one contract read the collector already
+records in every snapshot as `netAssetsUsd`. No deposit history, holder set or explorer index is
+involved: the amounts are on-chain and current.
 
 **Book value per share** compares recorded contract `pricePerShare()` values within the requested window.
 Deposits do not count as income. Zero supply starts a new return segment, and stale short-book
@@ -135,7 +130,7 @@ earnings. Storage failures return HTTP 503. Raw venue audit records stay server-
 
 The UI offers 7D/30D periods and synchronized pointer/keyboard date inspection. The headline
 and cumulative chart are labeled "Cumulative vault return" and show strategy income to date over
-total deposited capital, following the panel's Observed/Settled funding switch. Total deposited and
+the vault's value, following the panel's Observed/Settled funding switch. Vault value and
 income earned are shown beneath it, and the caption states that price PnL and trading fees are
 excluded. Book value per share is a separate series and is not the headline: share value moves with
 MON price against an imperfect hedge, with short re-marks and with trading fees, and it only picks

@@ -61,13 +61,6 @@ const history = VaultAccountingHistorySchema.parse({
     shortBookedAt: "2026-10-11T12:00:00.000Z",
     shortBookFresh: true,
   },
-  deposits: {
-    totalDepositedUsd: 50,
-    complete: true,
-    syncedToBlock: "113000000",
-    depositCount: 2,
-    fromBlock: "107645440",
-  },
   perpl: {
     accountId: 1,
     marketId: 10,
@@ -81,7 +74,7 @@ const history = VaultAccountingHistorySchema.parse({
     fundingObserved: "perpl_settled_plus_open_accrual",
     tradingFees: "perpl_fills",
     staking: "estimated_from_recorded_balance_and_assumed_apy",
-    strategyReturn: "strategy_income_over_total_deposited",
+    strategyReturn: "strategy_income_over_vault_value",
   },
 });
 
@@ -213,9 +206,9 @@ describe("strategy return over deposited capital", () => {
       stakingCoveredSeconds: staking === null ? 0 : 86_400,
     });
 
-  it("reports income to date as a percentage of all USDC ever deposited", () => {
+  it("reports income to date as a percentage of the vault's value", () => {
     const points = strategyReturn([earning("2026-10-01", 0.3, 0.2), earning("2026-10-02", 0.3, 0.2)], 50);
-    // $0.50 then $1.00 of income on $50 contributed.
+    // $0.50 then $1.00 of income on a $50 vault.
     expect(points[0]?.value).toBeCloseTo(1, 10);
     expect(points[1]?.value).toBeCloseTo(2, 10);
     expect(points[1]?.incomeUsd).toBeCloseTo(1, 10);
@@ -238,9 +231,9 @@ describe("strategy return over deposited capital", () => {
     expect(strategyRuns(points)).toHaveLength(1);
   });
 
-  it("reads as unavailable until deposited capital is known, never dividing by zero", () => {
-    for (const deposited of [null, 0]) {
-      expect(strategyReturn([earning("2026-10-01", 0.5, 0.5)], deposited)).toEqual([null]);
+  it("reads as unavailable until vault value is known, never dividing by zero", () => {
+    for (const capital of [null, 0]) {
+      expect(strategyReturn([earning("2026-10-01", 0.5, 0.5)], capital)).toEqual([null]);
     }
   });
 
@@ -269,7 +262,8 @@ describe("strategy return over deposited capital", () => {
     expect(strategyReturn([settled], 50, "settled")[0]?.value).toBeCloseTo(0.5, 10);
   });
 
-  it("uses the recorded deposit total from the history envelope", () => {
-    expect(history.deposits.totalDepositedUsd).toBe(50);
+  it("takes its denominator from a reading the collector already records", () => {
+    // netAssetsUsd is one totalAssets() call in every snapshot: no deposit history is needed.
+    expect(history.sources.strategyReturn).toBe("strategy_income_over_vault_value");
   });
 });

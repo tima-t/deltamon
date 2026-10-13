@@ -54,17 +54,17 @@ export function cumulativeIncome(days: AccountingDaily[]): (CumulativeIncomePoin
 
 export interface StrategyReturnPoint {
   index: number;
-  /** Income earned to this day as a percentage of all USDC ever deposited. */
+  /** Income earned to this day as a percentage of the vault's total USDC value. */
   value: number;
   incomeUsd: number;
   partial: boolean;
 }
 
 /**
- * Strategy return: funding plus estimated staking earned to date over the capital depositors
- * contributed. It answers "what has the strategy produced on the money paid in", which is a
- * different question from the contract's book value per share, and it is the headline the vault
- * page shows.
+ * Strategy return: funding plus estimated staking earned to date over the vault's own value,
+ * which is one `totalAssets()` read the collector already records. It answers "what has the
+ * strategy produced on the money at work", a different question from the contract's book value
+ * per share, and it is the headline the vault page shows.
  *
  * It deliberately excludes price PnL and trading fees, so it is not a depositor's net return and
  * must always be labelled as strategy income. It is positive whenever cumulative income is
@@ -73,10 +73,10 @@ export interface StrategyReturnPoint {
  */
 export function strategyReturn(
   days: AccountingDaily[],
-  totalDepositedUsd: number | null,
+  capitalUsd: number | null,
   view: FundingView = "observed",
 ): (StrategyReturnPoint | null)[] {
-  if (!totalDepositedUsd || totalDepositedUsd <= 0) return days.map(() => null);
+  if (!capitalUsd || capitalUsd <= 0) return days.map(() => null);
   let income = 0;
   let seen = false;
   let partial = false;
@@ -85,7 +85,7 @@ export function strategyReturn(
     // Either component on its own is still real income; a missing one is excluded, not zeroed.
     if (funding === null && day.stakingEstimatedUsd === null) {
       if (seen) partial = true;
-      return seen ? { index, value: (income / totalDepositedUsd) * 100, incomeUsd: income, partial } : null;
+      return seen ? { index, value: (income / capitalUsd) * 100, incomeUsd: income, partial } : null;
     }
     seen = true;
     income += (funding ?? 0) + (day.stakingEstimatedUsd ?? 0);
@@ -94,7 +94,7 @@ export function strategyReturn(
       day.stakingEstimatedUsd === null ||
       day.fundingObservedSeconds < DAY_SECONDS ||
       day.stakingCoveredSeconds < DAY_SECONDS;
-    return { index, value: (income / totalDepositedUsd) * 100, incomeUsd: income, partial };
+    return { index, value: (income / capitalUsd) * 100, incomeUsd: income, partial };
   });
 }
 
